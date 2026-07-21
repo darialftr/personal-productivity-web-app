@@ -203,10 +203,8 @@ async function registerUser(
   password,
   firstName
 ) {
-  const redirectUrl = new URL(
-    "index.html",
-    window.location.href
-  ).href;
+  const redirectUrl =
+  "https://darialftr.github.io/personal-productivity-web-app/index.html";
 
   const { data, error } =
     await supabaseClient.auth.signUp({
@@ -268,10 +266,8 @@ async function handleForgotPassword() {
     return;
   }
 
-  const redirectUrl = new URL(
-    "auth.html",
-    window.location.href
-  ).href;
+  const redirectUrl =
+  "https://darialftr.github.io/personal-productivity-web-app/auth.html";
 
   setLoadingState(true);
 
