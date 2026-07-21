@@ -1,0 +1,599 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+  <script>
+    const savedIteraProfile = localStorage.getItem("itera_profile");
+
+    if (!savedIteraProfile) {
+      window.location.replace("onboarding.html");
+    }
+  </script>
+
+  <meta charset="UTF-8">
+
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+  >
+
+  <meta
+    name="description"
+    content="Configurează-ți orarul săptămânal în Itera."
+  >
+
+  <meta name="theme-color" content="#efa4c1">
+
+  <title>Orarul meu — Itera</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+  <link
+    href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Manrope:wght@400;500;600;700;800&display=swap"
+    rel="stylesheet"
+  >
+
+  <link rel="stylesheet" href="schedule.css">
+</head>
+
+<body>
+  <div class="app-layout">
+
+    <!-- SIDEBAR PC -->
+    <aside class="sidebar">
+      <a class="brand" href="index.html">
+        <div class="brand-mark">i</div>
+
+        <div>
+          <p class="brand-name">Itera</p>
+          <p class="brand-subtitle">study beautifully</p>
+        </div>
+      </a>
+
+      <nav class="sidebar-navigation">
+        <a class="nav-item" href="index.html">
+          <span class="nav-icon">⌂</span>
+          <span>Acasă</span>
+        </a>
+
+        <a class="nav-item active" href="schedule.html">
+          <span class="nav-icon">▦</span>
+          <span>Orar</span>
+        </a>
+
+        <a class="nav-item" href="index.html#calendar">
+          <span class="nav-icon">□</span>
+          <span>Calendar</span>
+        </a>
+
+        <a class="nav-item" href="index.html#tasks">
+          <span class="nav-icon">✓</span>
+          <span>Task-uri</span>
+        </a>
+
+        <button class="nav-item disabled-navigation" type="button">
+          <span class="nav-icon">◇</span>
+          <span>Materii</span>
+        </button>
+
+        <button class="nav-item disabled-navigation" type="button">
+          <span class="nav-icon">☆</span>
+          <span>Note</span>
+        </button>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="profile-miniature">
+          <div class="profile-avatar" id="sidebarAvatar">D</div>
+
+          <div>
+            <strong id="sidebarName">Daria</strong>
+            <span id="sidebarGrade">Clasa a XII-a</span>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- MAIN -->
+    <main class="main-content">
+
+      <header class="page-header">
+        <div class="header-text">
+          <a class="mobile-back-link" href="index.html">
+            ← Acasă
+          </a>
+
+          <p class="eyebrow">Planificare săptămânală</p>
+
+          <h1>Orarul meu</h1>
+
+          <p class="page-description">
+            Adaugă orele, meditațiile și activitățile care se repetă în fiecare săptămână.
+          </p>
+        </div>
+
+        <div class="header-actions">
+          <button
+            type="button"
+            class="secondary-button"
+            id="clearScheduleButton"
+          >
+            Resetează
+          </button>
+
+          <button
+            type="button"
+            class="primary-button"
+            id="addScheduleItemButton"
+          >
+            <span>＋</span>
+            Adaugă activitate
+          </button>
+        </div>
+      </header>
+
+      <!-- SUMMARY -->
+      <section class="summary-row">
+        <article class="summary-card">
+          <div class="summary-icon pink">▦</div>
+
+          <div>
+            <span>Activități săptămânale</span>
+            <strong id="weeklyActivitiesCount">0</strong>
+          </div>
+        </article>
+
+        <article class="summary-card">
+          <div class="summary-icon lilac">◷</div>
+
+          <div>
+            <span>Ore planificate</span>
+            <strong id="weeklyHoursCount">0h</strong>
+          </div>
+        </article>
+
+        <article class="summary-card">
+          <div class="summary-icon green">♡</div>
+
+          <div>
+            <span>Cea mai plină zi</span>
+            <strong id="busiestDayLabel">—</strong>
+          </div>
+        </article>
+      </section>
+
+      <!-- MOBILE DAY SELECTOR -->
+      <section class="mobile-day-selector" aria-label="Selectează ziua">
+        <button
+          type="button"
+          class="mobile-day-button active"
+          data-mobile-day="monday"
+        >
+          <span>Lu</span>
+          <small>Luni</small>
+        </button>
+
+        <button
+          type="button"
+          class="mobile-day-button"
+          data-mobile-day="tuesday"
+        >
+          <span>Ma</span>
+          <small>Marți</small>
+        </button>
+
+        <button
+          type="button"
+          class="mobile-day-button"
+          data-mobile-day="wednesday"
+        >
+          <span>Mi</span>
+          <small>Miercuri</small>
+        </button>
+
+        <button
+          type="button"
+          class="mobile-day-button"
+          data-mobile-day="thursday"
+        >
+          <span>Jo</span>
+          <small>Joi</small>
+        </button>
+
+        <button
+          type="button"
+          class="mobile-day-button"
+          data-mobile-day="friday"
+        >
+          <span>Vi</span>
+          <small>Vineri</small>
+        </button>
+
+        <button
+          type="button"
+          class="mobile-day-button"
+          data-mobile-day="saturday"
+        >
+          <span>Sâ</span>
+          <small>Sâmbătă</small>
+        </button>
+
+        <button
+          type="button"
+          class="mobile-day-button"
+          data-mobile-day="sunday"
+        >
+          <span>Du</span>
+          <small>Duminică</small>
+        </button>
+      </section>
+
+      <!-- DESKTOP WEEK VIEW -->
+      <section class="week-planner-card">
+        <div class="week-planner-header">
+          <div>
+            <p class="card-kicker">Săptămâna obișnuită</p>
+            <h2>Program săptămânal</h2>
+          </div>
+
+          <div class="legend">
+            <span>
+              <i class="legend-dot class-dot"></i>
+              Școală
+            </span>
+
+            <span>
+              <i class="legend-dot tutoring-dot"></i>
+              Meditație
+            </span>
+
+            <span>
+              <i class="legend-dot personal-dot"></i>
+              Personal
+            </span>
+          </div>
+        </div>
+
+        <div class="desktop-week-grid" id="desktopWeekGrid">
+          <!-- Generat din JavaScript -->
+        </div>
+      </section>
+
+      <!-- MOBILE DAY VIEW -->
+      <section class="mobile-day-view">
+        <div class="mobile-day-heading">
+          <div>
+            <p class="card-kicker">Programul zilei</p>
+            <h2 id="mobileSelectedDayTitle">Luni</h2>
+          </div>
+
+          <button
+            type="button"
+            class="round-add-button"
+            id="mobileAddScheduleButton"
+            aria-label="Adaugă activitate"
+          >
+            ＋
+          </button>
+        </div>
+
+        <div class="mobile-schedule-list" id="mobileScheduleList">
+          <!-- Generat din JavaScript -->
+        </div>
+      </section>
+
+      <section class="schedule-tip">
+        <div class="tip-icon">✿</div>
+
+        <div>
+          <strong>Un mic sfat</strong>
+
+          <p>
+            Adaugă aici doar activitățile care se repetă săptămânal.
+            Testele, temele și evenimentele unice vor rămâne în calendar.
+          </p>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- MOBILE NAV -->
+  <nav class="mobile-navigation">
+    <a href="index.html">
+      <span>⌂</span>
+      <small>Acasă</small>
+    </a>
+
+    <a class="active" href="schedule.html">
+      <span>▦</span>
+      <small>Orar</small>
+    </a>
+
+    <button type="button" id="mobileMainAddButton">
+      ＋
+    </button>
+
+    <a href="index.html#calendar">
+      <span>□</span>
+      <small>Calendar</small>
+    </a>
+
+    <a href="index.html#tasks">
+      <span>✓</span>
+      <small>Task-uri</small>
+    </a>
+  </nav>
+
+  <!-- ADD / EDIT MODAL -->
+  <div
+    class="modal-overlay"
+    id="scheduleModal"
+    aria-hidden="true"
+  >
+    <div class="modal-card">
+      <div class="modal-header">
+        <div>
+          <p class="card-kicker" id="modalKicker">
+            Activitate săptămânală
+          </p>
+
+          <h2 id="scheduleModalTitle">
+            Adaugă în orar
+          </h2>
+        </div>
+
+        <button
+          type="button"
+          class="modal-close-button"
+          id="closeScheduleModal"
+          aria-label="Închide"
+        >
+          ×
+        </button>
+      </div>
+
+      <form id="scheduleForm" novalidate>
+        <input type="hidden" id="editingScheduleId">
+
+        <div class="form-grid">
+          <label class="form-field full-field">
+            <span>Titlu</span>
+
+            <input
+              id="scheduleTitle"
+              type="text"
+              placeholder="Ex: Matematică"
+              maxlength="80"
+              required
+            >
+          </label>
+
+          <label class="form-field">
+            <span>Tip activitate</span>
+
+            <select id="scheduleType">
+              <option value="class">Oră la școală</option>
+              <option value="tutoring">Meditație</option>
+              <option value="study">Studiu individual</option>
+              <option value="personal">Activitate personală</option>
+              <option value="other">Altceva</option>
+            </select>
+          </label>
+
+          <label class="form-field">
+            <span>Materie</span>
+
+            <select id="scheduleSubject">
+              <option value="">Fără materie</option>
+            </select>
+          </label>
+
+          <label class="form-field">
+            <span>Ziua</span>
+
+            <select id="scheduleDay">
+              <option value="monday">Luni</option>
+              <option value="tuesday">Marți</option>
+              <option value="wednesday">Miercuri</option>
+              <option value="thursday">Joi</option>
+              <option value="friday">Vineri</option>
+              <option value="saturday">Sâmbătă</option>
+              <option value="sunday">Duminică</option>
+            </select>
+          </label>
+
+          <label class="form-field">
+            <span>Culoare</span>
+
+            <select id="scheduleColor">
+              <option value="pink">Roz</option>
+              <option value="lilac">Mov pastel</option>
+              <option value="blue">Albastru pastel</option>
+              <option value="green">Verde pastel</option>
+              <option value="peach">Piersică</option>
+              <option value="yellow">Galben pastel</option>
+            </select>
+          </label>
+
+          <label class="form-field">
+            <span>Ora de început</span>
+
+            <input
+              id="scheduleStartTime"
+              type="time"
+              value="08:00"
+              required
+            >
+          </label>
+
+          <label class="form-field">
+            <span>Ora de final</span>
+
+            <input
+              id="scheduleEndTime"
+              type="time"
+              value="08:50"
+              required
+            >
+          </label>
+
+          <label class="form-field full-field">
+            <span>Profesor, sală sau locație</span>
+
+            <input
+              id="scheduleLocation"
+              type="text"
+              placeholder="Opțional"
+              maxlength="80"
+            >
+          </label>
+
+          <label class="form-field full-field">
+            <span>Notițe</span>
+
+            <textarea
+              id="scheduleNotes"
+              rows="3"
+              placeholder="Orice detaliu pe care vrei să îl reții..."
+              maxlength="300"
+            ></textarea>
+          </label>
+        </div>
+
+        <p class="form-error" id="scheduleFormError"></p>
+
+        <div class="modal-actions">
+          <button
+            type="button"
+            class="danger-button hidden"
+            id="deleteScheduleButton"
+          >
+            Șterge
+          </button>
+
+          <div class="modal-actions-right">
+            <button
+              type="button"
+              class="secondary-button"
+              id="cancelScheduleButton"
+            >
+              Anulează
+            </button>
+
+            <button
+              type="submit"
+              class="primary-button"
+              id="saveScheduleButton"
+            >
+              Salvează
+            </button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- CONFIRM RESET MODAL -->
+  <div
+    class="modal-overlay"
+    id="resetModal"
+    aria-hidden="true"
+  >
+    <div class="modal-card confirmation-card">
+      <div class="confirmation-icon">!</div>
+
+      <h2>Resetezi tot orarul?</h2>
+
+      <p>
+        Toate activitățile săptămânale adăugate vor fi șterse.
+        Această acțiune nu poate fi anulată.
+      </p>
+
+      <div class="confirmation-actions">
+        <button
+          type="button"
+          class="secondary-button"
+          id="cancelResetButton"
+        >
+          Păstrează orarul
+        </button>
+
+        <button
+          type="button"
+          class="danger-filled-button"
+          id="confirmResetButton"
+        >
+          Da, șterge tot
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ITEM ACTIONS MODAL -->
+  <div
+    class="modal-overlay"
+    id="itemActionsModal"
+    aria-hidden="true"
+  >
+    <div class="modal-card action-card">
+      <button
+        type="button"
+        class="modal-close-button action-close"
+        id="closeItemActionsModal"
+      >
+        ×
+      </button>
+
+      <div
+        class="action-color-preview pink"
+        id="actionColorPreview"
+      >
+        M
+      </div>
+
+      <p class="card-kicker" id="actionTypeLabel">
+        Oră la școală
+      </p>
+
+      <h2 id="actionItemTitle">Matematică</h2>
+
+      <p id="actionItemDetails">
+        Luni · 08:00–08:50
+      </p>
+
+      <div class="action-buttons">
+        <button
+          type="button"
+          class="primary-button"
+          id="editSelectedItemButton"
+        >
+          Editează
+        </button>
+
+        <button
+          type="button"
+          class="secondary-button"
+          id="duplicateSelectedItemButton"
+        >
+          Duplică
+        </button>
+
+        <button
+          type="button"
+          class="danger-button"
+          id="deleteSelectedItemButton"
+        >
+          Șterge
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast">
+    <span id="toastIcon">✓</span>
+    <p id="toastMessage">Activitatea a fost salvată.</p>
+  </div>
+
+  <script src="schedule.js"></script>
+</body>
+</html>
