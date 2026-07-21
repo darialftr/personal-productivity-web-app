@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+  <script>
+    const savedIteraProfile = localStorage.getItem("itera_profile");
+
+    if (!savedIteraProfile) {
+      window.location.replace("onboarding.html");
+    }
+  </script>
+
+  <meta charset="UTF-8">
+
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+  >
+
+  <meta
+    name="description"
+    content="Organizează-ți temele, proiectele și sesiunile de studiu în Itera."
+  >
+
+  <meta name="theme-color" content="#ee9fbd">
+
+  <title>Task-uri — Itera</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+  <link
+    href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Manrope:wght@400;500;600;700;800&display=swap"
+    rel="stylesheet"
+  >
+
+  <link rel="stylesheet" href="tasks.css">
+</head>
+
+<body>
+  <div class="app-layout">
+
+    <!-- SIDEBAR -->
+    <aside class="sidebar">
+      <a class="brand" href="index.html">
+        <div class="brand-mark">i</div>
+
+        <div>
+          <p class="brand-name">Itera</p>
+          <p class="brand-subtitle">study beautifully</p>
+        </div>
+      </a>
+
+      <nav class="sidebar-navigation">
+        <a class="nav-item" href="index.html">
+          <span class="nav-icon">⌂</span>
+          <span>Acasă</span>
+        </a>
+
+        <a class="nav-item" href="schedule.html">
+          <span class="nav-icon">▦</span>
+          <span>Orar</span>
+        </a>
+
+        <a class="nav-item" href="index.html#calendar">
+          <span class="nav-icon">□</span>
+          <span>Calendar</span>
+        </a>
+
+        <a class="nav-item active" href="tasks.html">
+          <span class="nav-icon">✓</span>
+          <span>Task-uri</span>
+        </a>
+
+        <button class="nav-item disabled-navigation" type="button">
+          <span class="nav-icon">◇</span>
+          <span>Materii</span>
+        </button>
+
+        <button class="nav-item disabled-navigation" type="button">
+          <span class="nav-icon">☆</span>
+          <span>Note</span>
+        </button>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="profile-miniature">
+          <div class="profile-avatar" id="sidebarAvatar">D</div>
+
+          <div>
+            <strong id="sidebarName">Daria</strong>
+            <span id="sidebarGrade">Clasa a XII-a</span>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- MAIN -->
+    <main class="main-content">
+      <header class="page-header">
+        <div>
+          <a class="mobile-back-link" href="index.html">
+            ← Acasă
+          </a>
+
+          <p class="eyebrow">Organizare academică</p>
+
+          <h1>Homework & Tasks</h1>
+
+          <p class="page-description">
+            Păstrează într-un singur loc temele, proiectele, testele,
+            sesiunile de studiu și lucrurile importante.
+          </p>
+        </div>
+
+        <button
+          type="button"
+          class="primary-button"
+          id="addTaskButton"
+        >
+          <span>＋</span>
+          Adaugă task
+        </button>
+      </header>
+
+      <!-- SUMMARY -->
+      <section class="summary-grid">
+        <article class="summary-card">
+          <div class="summary-icon pink">✓</div>
+
+          <div>
+            <span>De făcut</span>
+            <strong id="openTasksCount">0</strong>
+          </div>
+        </article>
+
+        <article class="summary-card">
+          <div class="summary-icon lilac">◷</div>
+
+          <div>
+            <span>Pentru astăzi</span>
+            <strong id="todayTasksCount">0</strong>
+          </div>
+        </article>
+
+        <article class="summary-card">
+          <div class="summary-icon peach">!</div>
+
+          <div>
+            <span>Prioritate mare</span>
+            <strong id="highPriorityCount">0</strong>
+          </div>
+        </article>
+
+        <article class="summary-card">
+          <div class="summary-icon green">♡</div>
+
+          <div>
+            <span>Finalizate</span>
+            <strong id="completedTasksCount">0</strong>
+          </div>
+        </article>
+      </section>
+
+      <!-- TOOLBAR -->
+      <section class="toolbar-card">
+        <div class="search-wrapper">
+          <span>⌕</span>
+
+          <input
+            id="taskSearchInput"
+            type="search"
+            placeholder="Caută un task..."
+            autocomplete="off"
+          >
+        </div>
+
+        <div class="filter-scroll">
+          <button
+            type="button"
+            class="filter-button active"
+            data-filter="all"
+          >
+            Toate
+          </button>
+
+          <button
+            type="button"
+            class="filter-button"
+            data-filter="homework"
+          >
+            Teme
+          </button>
+
+          <button
+            type="button"
+            class="filter-button"
+            data-filter="study"
+          >
+            Învățat
+          </button>
+
+          <button
+            type="button"
+            class="filter-button"
+            data-filter="test"
+          >
+            Teste
+          </button>
+
+          <button
+            type="button"
+            class="filter-button"
+            data-filter="project"
+          >
+            Proiecte
+          </button>
+
+          <button
+            type="button"
+            class="filter-button"
+            data-filter="personal"
+          >
+            Personale
+          </button>
+
+          <button
+            type="button"
+            class="filter-button"
+            data-filter="completed"
+          >
+            Finalizate
+          </button>
+        </div>
+      </section>
+
+      <!-- TASK CONTENT -->
+      <section class="tasks-layout">
+        <div class="tasks-main-card">
+          <div class="section-heading">
+            <div>
+              <p class="card-kicker">Lista ta</p>
+              <h2 id="taskListTitle">Toate task-urile</h2>
+            </div>
+
+            <select id="taskSortSelect" aria-label="Sortează task-urile">
+              <option value="deadline">După deadline</option>
+              <option value="priority">După prioritate</option>
+              <option value="progress">După progres</option>
+              <option value="created">Cele mai noi</option>
+            </select>
+          </div>
+
+          <div class="task-list" id="taskList">
+            <!-- Generat din JavaScript -->
+          </div>
+        </div>
+
+        <aside class="tasks-sidebar">
+          <article class="progress-card">
+            <p class="card-kicker">Progres general</p>
+
+            <h2>Săptămâna ta</h2>
+
+            <div class="progress-circle" id="progressCircle">
+              <div>
+                <strong id="weeklyProgressValue">0%</strong>
+                <span>finalizat</span>
+              </div>
+            </div>
+
+            <p id="weeklyProgressMessage">
+              Adaugă primul task pentru a începe.
+            </p>
+          </article>
+
+          <article class="focus-suggestion-card">
+            <div class="suggestion-icon">✿</div>
+
+            <p class="card-kicker">Recomandare</p>
+
+            <h2 id="focusSuggestionTitle">
+              Totul este sub control
+            </h2>
+
+            <p id="focusSuggestionText">
+              Nu ai încă task-uri urgente.
+            </p>
+
+            <button
+              type="button"
+              class="secondary-button full-width"
+              id="suggestionActionButton"
+            >
+              Adaugă un task
+            </button>
+          </article>
+        </aside>
+      </section>
+    </main>
+  </div>
+
+  <!-- MOBILE NAVIGATION -->
+  <nav class="mobile-navigation">
+    <a href="index.html">
+      <span>⌂</span>
+      <small>Acasă</small>
+    </a>
+
+    <a href="schedule.html">
+      <span>▦</span>
+      <small>Orar</small>
+    </a>
+
+    <button
+      type="button"
+      class="mobile-main-add-button"
+      id="mobileAddTaskButton"
+      aria-label="Adaugă task"
+    >
+      ＋
+    </button>
+
+    <a href="index.html#calendar">
+      <span>□</span>
+      <small>Calendar</small>
+    </a>
+
+    <a class="active" href="tasks.html">
+      <span>✓</span>
+      <small>Task-uri</small>
+    </a>
+  </nav>
+
+  <!-- ADD / EDIT TASK MODAL -->
+  <div
+    class="modal-overlay"
+    id="taskModal"
+    aria-hidden="true"
+  >
+    <div class="modal-card">
+      <div class="modal-header">
+        <div>
+          <p class="card-kicker" id="taskModalKicker">
+            Task nou
+          </p>
+
+          <h2 id="taskModalTitle">
+            Adaugă un task
+          </h2>
+        </div>
+
+        <button
+          type="button"
+          class="modal-close-button"
+          id="closeTaskModalButton"
+          aria-label="Închide"
+        >
+          ×
+        </button>
+      </div>
+
+      <form id="taskForm" novalidate>
+        <input type="hidden" id="editingTaskId">
+
+        <div class="form-grid">
+          <label class="form-field full-field">
+            <span>Titlul task-ului</span>
+
+            <input
+              id="taskTitle"
+              type="text"
+              placeholder="Ex: Exercițiile 1–10 la matematică"
+              maxlength="120"
+              required
+            >
+          </label>
+
+          <label class="form-field">
+            <span>Tip</span>
+
+            <select id="taskType">
+              <option value="homework">Temă</option>
+              <option value="study">Învățat</option>
+              <option value="test">Test</option>
+              <option value="project">Proiect</option>
+              <option value="personal">Personal</option>
+              <option value="reminder">Reminder</option>
+            </select>
+          </label>
+
+          <label class="form-field">
+            <span>Materie</span>
+
+            <select id="taskSubject">
+              <option value="">Fără materie</option>
+            </select>
+          </label>
+
+          <label class="form-field">
+            <span>Deadline</span>
+
+            <input
+              id="taskDeadline"
+              type="date"
+              required
+            >
+          </label>
+
+          <label class="form-field">
+            <span>Ora</span>
+
+            <input
+              id="taskDeadlineTime"
+              type="time"
+            >
+          </label>
+
+          <label class="form-field">
+            <span>Prioritate</span>
+
+            <select id="taskPriority">
+              <option value="low">Mică</option>
+              <option value="medium" selected>Medie</option>
+              <option value="high">Mare</option>
+            </select>
+          </label>
+
+          <label class="form-field">
+            <span>Dificultate</span>
+
+            <select id="taskDifficulty">
+              <option value="very-easy">Foarte ușor</option>
+              <option value="easy">Ușor</option>
+              <option value="medium" selected>Mediu</option>
+              <option value="hard">Greu</option>
+              <option value="very-hard">Foarte greu</option>
+            </select>
+          </label>
+
+          <label class="form-field">
+            <span>Timp estimat</span>
+
+            <select id="taskEstimatedMinutes">
+              <option value="15">15 minute</option>
+              <option value="30">30 minute</option>
+              <option value="45">45 minute</option>
+              <option value="60" selected>1 oră</option>
+              <option value="90">1 oră și 30 minute</option>
+              <option value="120">2 ore</option>
+              <option value="180">3 ore</option>
+              <option value="240">4 ore</option>
+            </select>
+          </label>
+
+          <label class="form-field">
+            <span>Progres</span>
+
+            <div class="progress-field">
+              <input
+                id="taskProgress"
+                type="range"
+                min="0"
+                max="100"
+                step="10"
+                value="0"
+              >
+
+              <strong id="taskProgressValue">0%</strong>
+            </div>
+          </label>
+
+          <label class="form-field full-field">
+            <span>Notițe</span>
+
+            <textarea
+              id="taskNotes"
+              rows="4"
+              maxlength="500"
+              placeholder="Adaugă detalii, capitole, pagini sau instrucțiuni..."
+            ></textarea>
+          </label>
+        </div>
+
+        <p class="form-error" id="taskFormError"></p>
+
+        <div class="modal-actions">
+          <button
+            type="button"
+            class="danger-button hidden"
+            id="deleteTaskButton"
+          >
+            Șterge
+          </button>
+
+          <div class="modal-actions-right">
+            <button
+              type="button"
+              class="secondary-button"
+              id="cancelTaskButton"
+            >
+              Anulează
+            </button>
+
+            <button
+              type="submit"
+              class="primary-button"
+              id="saveTaskButton"
+            >
+              Salvează
+            </button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- DELETE CONFIRMATION -->
+  <div
+    class="modal-overlay"
+    id="deleteConfirmationModal"
+    aria-hidden="true"
+  >
+    <div class="modal-card confirmation-card">
+      <div class="confirmation-icon">!</div>
+
+      <h2>Ștergi acest task?</h2>
+
+      <p>
+        Task-ul va fi eliminat definitiv din lista ta.
+      </p>
+
+      <div class="confirmation-actions">
+        <button
+          type="button"
+          class="secondary-button"
+          id="cancelTaskDeletionButton"
+        >
+          Păstrează task-ul
+        </button>
+
+        <button
+          type="button"
+          class="danger-filled-button"
+          id="confirmTaskDeletionButton"
+        >
+          Da, șterge
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast">
+    <span id="toastIcon">✓</span>
+    <p id="toastMessage">Task-ul a fost salvat.</p>
+  </div>
+
+  <script src="tasks.js"></script>
+</body>
+</html>
