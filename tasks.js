@@ -1,8 +1,5 @@
 "use strict";
 
-const TASKS_STORAGE_KEY = "itera_tasks";
-const PROFILE_STORAGE_KEY = "itera_profile";
-
 const typeLabels = {
   homework: "Temă",
   study: "Învățat",
@@ -26,42 +23,103 @@ const difficultyLabels = {
   "very-hard": "Foarte greu"
 };
 
-let profile = loadProfile();
-let tasks = loadTasks();
+let currentUser = null;
+let profile = null;
+let subjects = [];
+let tasks = [];
 
 let activeFilter = "all";
 let searchQuery = "";
 let taskPendingDeletionId = null;
 let toastTimeout = null;
+let isSaving = false;
 
 initializePage();
 
-function initializePage() {
-  renderProfile();
-  populateSubjectSelect();
-  setDefaultDeadline();
+async function initializePage() {
   initializeEvents();
-  renderEverything();
+  setDefaultDeadline();
+  renderLoadingState();
+
+  try {
+    const session = await getCurrentSession();
+
+    if (!session) {
+      window.location.replace("auth.html");
+      return;
+    }
+
+    currentUser = session.user;
+
+    await Promise.all([
+      loadProfile(),
+      loadSubjects(),
+      loadTasks()
+    ]);
+
+    renderProfile();
+    populateSubjectSelect();
+    renderEverything();
+  } catch (error) {
+    console.error("Eroare la inițializarea paginii:", error);
+
+    renderPageError(
+      "Datele nu au putut fi încărcate. Reîncarcă pagina."
+    );
+  }
+}
+
+/* AUTH */
+
+async function getCurrentSession() {
+  const {
+    data: { session },
+    error
+  } = await supabaseClient.auth.getSession();
+
+  if (error) {
+    throw error;
+  }
+
+  return session;
 }
 
 /* PROFILE */
 
-function loadProfile() {
-  try {
-    return (
-      JSON.parse(
-        localStorage.getItem(PROFILE_STORAGE_KEY)
-      ) || {}
-    );
-  } catch (error) {
-    console.error("Profilul nu a putut fi încărcat:", error);
-    return {};
+async function loadProfile() {
+  const { data, error } = await supabaseClient
+    .from("profiles")
+    .select(
+      `
+        id,
+        first_name,
+        grade,
+        university,
+        onboarding_completed
+      `
+    )
+    .eq("id", currentUser.id)
+    .maybeSingle();
+
+  if (error) {
+    throw error;
   }
+
+  profile = data || {
+    id: currentUser.id,
+    first_name:
+      currentUser.user_metadata?.first_name || "Itera",
+    grade: ""
+  };
 }
 
 function renderProfile() {
-  const firstName = profile.firstName || "Daria";
-  const gradeLevel = profile.gradeLevel || "12";
+  const firstName =
+    profile?.first_name ||
+    currentUser?.user_metadata?.first_name ||
+    "Itera";
+
+  const grade = profile?.grade || "";
 
   document.getElementById(
     "sidebarName"
@@ -74,21 +132,67 @@ function renderProfile() {
 
   document.getElementById(
     "sidebarGrade"
-  ).textContent =
-    gradeLevel === "other"
-      ? "Elev"
-      : `Clasa a ${toRomanNumeral(Number(gradeLevel))}-a`;
+  ).textContent = formatGrade(grade);
 }
 
-function toRomanNumeral(number) {
-  const numerals = {
-    9: "IX",
-    10: "X",
-    11: "XI",
-    12: "XII"
+function formatGrade(grade) {
+  if (!grade) {
+    return "Cont Itera";
+  }
+
+  const normalizedGrade = String(grade)
+    .trim()
+    .toLowerCase();
+
+  const gradeMap = {
+    "9": "Clasa a IX-a",
+    "9th": "Clasa a IX-a",
+    ix: "Clasa a IX-a",
+
+    "10": "Clasa a X-a",
+    "10th": "Clasa a X-a",
+    x: "Clasa a X-a",
+
+    "11": "Clasa a XI-a",
+    "11th": "Clasa a XI-a",
+    xi: "Clasa a XI-a",
+
+    "12": "Clasa a XII-a",
+    "12th": "Clasa a XII-a",
+    xii: "Clasa a XII-a"
   };
 
-  return numerals[number] || String(number);
+  return gradeMap[normalizedGrade] || grade;
+}
+
+/* SUBJECTS */
+
+async function loadSubjects() {
+  const { data, error } = await supabaseClient
+    .from("subjects")
+    .select(
+      `
+        id,
+        name,
+        color,
+        icon,
+        position
+      `
+    )
+    .eq("user_id", currentUser.id)
+    .eq("is_active", true)
+    .order("position", {
+      ascending: true
+    })
+    .order("name", {
+      ascending: true
+    });
+
+  if (error) {
+    throw error;
+  }
+
+  subjects = data || [];
 }
 
 function populateSubjectSelect() {
@@ -96,48 +200,104 @@ function populateSubjectSelect() {
     "taskSubject"
   );
 
-  const subjects = Array.isArray(profile.subjects)
-    ? profile.subjects
-    : [];
+  subjectSelect.innerHTML = `
+    <option value="">
+      Fără materie
+    </option>
+  `;
 
   subjects.forEach((subject) => {
     const option = document.createElement("option");
 
-    option.value = subject;
-    option.textContent = subject;
+    option.value = subject.id;
+    option.textContent = subject.name;
 
     subjectSelect.appendChild(option);
   });
 }
 
-/* STORAGE */
+/* TASKS */
 
-function loadTasks() {
-  try {
-    const storedTasks = localStorage.getItem(
-      TASKS_STORAGE_KEY
-    );
+async function loadTasks() {
+  const { data, error } = await supabaseClient
+    .from("tasks")
+    .select(
+      `
+        id,
+        user_id,
+        subject_id,
+        title,
+        task_type,
+        deadline_date,
+        deadline_time,
+        priority,
+        difficulty,
+        estimated_minutes,
+        progress,
+        notes,
+        completed,
+        completed_at,
+        created_at,
+        updated_at,
+        subjects (
+          id,
+          name,
+          color,
+          icon
+        )
+      `
+    )
+    .eq("user_id", currentUser.id)
+    .order("created_at", {
+      ascending: false
+    });
 
-    if (!storedTasks) {
-      return [];
-    }
-
-    const parsedTasks = JSON.parse(storedTasks);
-
-    return Array.isArray(parsedTasks)
-      ? parsedTasks
-      : [];
-  } catch (error) {
-    console.error("Task-urile nu au putut fi citite:", error);
-    return [];
+  if (error) {
+    throw error;
   }
+
+  tasks = (data || []).map(normalizeTask);
 }
 
-function saveTasks() {
-  localStorage.setItem(
-    TASKS_STORAGE_KEY,
-    JSON.stringify(tasks)
-  );
+function normalizeTask(task) {
+  return {
+    id: task.id,
+    userId: task.user_id,
+    subjectId: task.subject_id,
+
+    title: task.title,
+    type: task.task_type,
+
+    deadline: task.deadline_date,
+    deadlineTime: normalizeTime(task.deadline_time),
+
+    priority: task.priority,
+    difficulty: task.difficulty,
+
+    estimatedMinutes:
+      Number(task.estimated_minutes) || 0,
+
+    progress:
+      Number(task.progress) || 0,
+
+    notes: task.notes || "",
+    completed: Boolean(task.completed),
+
+    completedAt: task.completed_at,
+    createdAt: task.created_at,
+    updatedAt: task.updated_at,
+
+    subject: task.subjects?.name || "",
+    subjectData: task.subjects || null
+  };
+}
+
+function normalizeTime(timeValue) {
+  if (!timeValue) {
+    return "";
+  }
+
+  return String(timeValue).slice(0, 5);
 }
 
 /* EVENTS */
@@ -145,15 +305,24 @@ function saveTasks() {
 function initializeEvents() {
   document
     .getElementById("addTaskButton")
-    .addEventListener("click", openCreateTaskModal);
+    .addEventListener(
+      "click",
+      openCreateTaskModal
+    );
 
   document
     .getElementById("mobileAddTaskButton")
-    .addEventListener("click", openCreateTaskModal);
+    .addEventListener(
+      "click",
+      openCreateTaskModal
+    );
 
   document
     .getElementById("suggestionActionButton")
-    .addEventListener("click", handleSuggestionAction);
+    .addEventListener(
+      "click",
+      handleSuggestionAction
+    );
 
   document
     .getElementById("closeTaskModalButton")
@@ -169,11 +338,17 @@ function initializeEvents() {
 
   document
     .getElementById("taskForm")
-    .addEventListener("submit", handleTaskSubmit);
+    .addEventListener(
+      "submit",
+      handleTaskSubmit
+    );
 
   document
     .getElementById("taskProgress")
-    .addEventListener("input", updateProgressInputLabel);
+    .addEventListener(
+      "input",
+      updateProgressInputLabel
+    );
 
   document
     .getElementById("taskSearchInput")
@@ -206,11 +381,17 @@ function initializeEvents() {
 
   document
     .getElementById("taskSortSelect")
-    .addEventListener("change", renderTaskList);
+    .addEventListener(
+      "change",
+      renderTaskList
+    );
 
   document
     .getElementById("deleteTaskButton")
-    .addEventListener("click", requestEditingTaskDeletion);
+    .addEventListener(
+      "click",
+      requestEditingTaskDeletion
+    );
 
   document
     .getElementById("cancelTaskDeletionButton")
@@ -221,28 +402,55 @@ function initializeEvents() {
 
   document
     .getElementById("confirmTaskDeletionButton")
-    .addEventListener("click", confirmTaskDeletion);
+    .addEventListener(
+      "click",
+      confirmTaskDeletion
+    );
 
   document
     .querySelectorAll(".modal-overlay")
     .forEach((overlay) => {
-      overlay.addEventListener("click", (event) => {
-        if (event.target === overlay) {
-          closeModal(overlay.id);
+      overlay.addEventListener(
+        "click",
+        (event) => {
+          if (event.target === overlay) {
+            closeModal(overlay.id);
+          }
         }
-      });
+      );
     });
 
-  document.addEventListener("keydown", (event) => {
-    if (event.key !== "Escape") {
+  document.addEventListener(
+    "keydown",
+    (event) => {
+      if (event.key !== "Escape") {
+        return;
+      }
+
+      document
+        .querySelectorAll(
+          ".modal-overlay.visible"
+        )
+        .forEach((modal) => {
+          closeModal(modal.id);
+        });
+    }
+  );
+
+  window.addEventListener("focus", async () => {
+    if (!currentUser) {
       return;
     }
 
-    document
-      .querySelectorAll(".modal-overlay.visible")
-      .forEach((modal) => {
-        closeModal(modal.id);
-      });
+    try {
+      await loadTasks();
+      renderEverything();
+    } catch (error) {
+      console.error(
+        "Task-urile nu au putut fi reîmprospătate:",
+        error
+      );
+    }
   });
 }
 
@@ -250,6 +458,10 @@ function initializeEvents() {
 
 function openModal(modalId) {
   const modal = document.getElementById(modalId);
+
+  if (!modal) {
+    return;
+  }
 
   modal.classList.add("visible");
   modal.setAttribute("aria-hidden", "false");
@@ -260,16 +472,26 @@ function openModal(modalId) {
 function closeModal(modalId) {
   const modal = document.getElementById(modalId);
 
+  if (!modal) {
+    return;
+  }
+
   modal.classList.remove("visible");
   modal.setAttribute("aria-hidden", "true");
 
-  if (!document.querySelector(".modal-overlay.visible")) {
+  if (
+    !document.querySelector(
+      ".modal-overlay.visible"
+    )
+  ) {
     document.body.style.overflow = "";
   }
 }
 
 function openCreateTaskModal() {
-  const form = document.getElementById("taskForm");
+  const form = document.getElementById(
+    "taskForm"
+  );
 
   form.reset();
 
@@ -322,13 +544,16 @@ function openCreateTaskModal() {
   openModal("taskModal");
 
   setTimeout(() => {
-    document.getElementById("taskTitle").focus();
+    document.getElementById(
+      "taskTitle"
+    ).focus();
   }, 180);
 }
 
 function openEditTaskModal(taskId) {
   const task = tasks.find(
-    (currentTask) => currentTask.id === taskId
+    (currentTask) =>
+      currentTask.id === taskId
   );
 
   if (!task) {
@@ -349,11 +574,11 @@ function openEditTaskModal(taskId) {
 
   document.getElementById(
     "taskSubject"
-  ).value = task.subject || "";
+  ).value = task.subjectId || "";
 
   document.getElementById(
     "taskDeadline"
-  ).value = task.deadline;
+  ).value = task.deadline || "";
 
   document.getElementById(
     "taskDeadlineTime"
@@ -369,7 +594,9 @@ function openEditTaskModal(taskId) {
 
   document.getElementById(
     "taskEstimatedMinutes"
-  ).value = String(task.estimatedMinutes);
+  ).value = String(
+    task.estimatedMinutes
+  );
 
   document.getElementById(
     "taskProgress"
@@ -407,15 +634,17 @@ function openEditTaskModal(taskId) {
 }
 
 function setDefaultDeadline() {
-  const deadlineInput = document.getElementById(
-    "taskDeadline"
-  );
+  const deadlineInput =
+    document.getElementById("taskDeadline");
 
   const tomorrow = new Date();
 
-  tomorrow.setDate(tomorrow.getDate() + 1);
+  tomorrow.setDate(
+    tomorrow.getDate() + 1
+  );
 
-  deadlineInput.value = toDateInputValue(tomorrow);
+  deadlineInput.value =
+    toDateInputValue(tomorrow);
 }
 
 function updateProgressInputLabel() {
@@ -428,10 +657,14 @@ function updateProgressInputLabel() {
   ).textContent = `${value}%`;
 }
 
-/* FORM */
+/* CREATE / UPDATE */
 
-function handleTaskSubmit(event) {
+async function handleTaskSubmit(event) {
   event.preventDefault();
+
+  if (isSaving) {
+    return;
+  }
 
   const title = document
     .getElementById("taskTitle")
@@ -443,45 +676,67 @@ function handleTaskSubmit(event) {
   ).value;
 
   if (!title) {
-    showFormError("Scrie titlul task-ului.");
+    showFormError(
+      "Scrie titlul task-ului."
+    );
     return;
   }
 
   if (!deadline) {
-    showFormError("Alege deadline-ul task-ului.");
+    showFormError(
+      "Alege deadline-ul task-ului."
+    );
+    return;
+  }
+
+  if (!currentUser) {
+    showFormError(
+      "Sesiunea a expirat. Autentifică-te din nou."
+    );
     return;
   }
 
   const progress = Number(
-    document.getElementById("taskProgress").value
+    document.getElementById(
+      "taskProgress"
+    ).value
   );
 
+  const completed = progress === 100;
+
   const taskData = {
+    user_id: currentUser.id,
+
+    subject_id:
+      document.getElementById(
+        "taskSubject"
+      ).value || null,
+
     title,
 
-    type: document.getElementById(
-      "taskType"
-    ).value,
+    task_type:
+      document.getElementById(
+        "taskType"
+      ).value,
 
-    subject: document.getElementById(
-      "taskSubject"
-    ).value,
+    deadline_date: deadline,
 
-    deadline,
+    deadline_time:
+      document.getElementById(
+        "taskDeadlineTime"
+      ).value || null,
 
-    deadlineTime: document.getElementById(
-      "taskDeadlineTime"
-    ).value,
+    priority:
+      document.getElementById(
+        "taskPriority"
+      ).value,
 
-    priority: document.getElementById(
-      "taskPriority"
-    ).value,
+    difficulty:
+      document.getElementById(
+        "taskDifficulty"
+      ).value,
 
-    difficulty: document.getElementById(
-      "taskDifficulty"
-    ).value,
-
-    estimatedMinutes: Number(
+    estimated_minutes: Number(
       document.getElementById(
         "taskEstimatedMinutes"
       ).value
@@ -489,52 +744,113 @@ function handleTaskSubmit(event) {
 
     progress,
 
-    notes: document
-      .getElementById("taskNotes")
-      .value
-      .trim(),
+    notes:
+      document
+        .getElementById("taskNotes")
+        .value
+        .trim() || null,
 
-    completed: progress === 100
+    completed,
+
+    completed_at:
+      completed
+        ? new Date().toISOString()
+        : null
   };
 
-  const editingTaskId = document.getElementById(
-    "editingTaskId"
-  ).value;
+  const editingTaskId =
+    document.getElementById(
+      "editingTaskId"
+    ).value;
 
-  if (editingTaskId) {
-    tasks = tasks.map((task) => {
-      if (task.id !== editingTaskId) {
-        return task;
-      }
+  setSaveButtonLoading(true);
+  showFormError("");
 
-      return {
-        ...task,
-        ...taskData,
-        updatedAt: new Date().toISOString()
-      };
-    });
+  try {
+    if (editingTaskId) {
+      await updateTask(
+        editingTaskId,
+        taskData
+      );
 
-    showToast(
-      "Task-ul a fost actualizat.",
-      "✓"
+      showToast(
+        "Task-ul a fost actualizat.",
+        "✓"
+      );
+    } else {
+      await createTask(taskData);
+
+      showToast(
+        "Task-ul a fost adăugat.",
+        "＋"
+      );
+    }
+
+    await loadTasks();
+    renderEverything();
+
+    closeModal("taskModal");
+  } catch (error) {
+    console.error(
+      "Task-ul nu a putut fi salvat:",
+      error
     );
-  } else {
-    tasks.push({
-      id: createId(),
-      ...taskData,
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    });
 
-    showToast(
-      "Task-ul a fost adăugat.",
-      "＋"
+    showFormError(
+      translateDatabaseError(error)
     );
+  } finally {
+    setSaveButtonLoading(false);
+  }
+}
+
+async function createTask(taskData) {
+  const { error } = await supabaseClient
+    .from("tasks")
+    .insert(taskData);
+
+  if (error) {
+    throw error;
+  }
+}
+
+async function updateTask(
+  taskId,
+  taskData
+) {
+  const { error } = await supabaseClient
+    .from("tasks")
+    .update(taskData)
+    .eq("id", taskId)
+    .eq("user_id", currentUser.id);
+
+  if (error) {
+    throw error;
+  }
+}
+
+function setSaveButtonLoading(loading) {
+  isSaving = loading;
+
+  const button = document.getElementById(
+    "saveTaskButton"
+  );
+
+  button.disabled = loading;
+
+  if (loading) {
+    button.textContent = "Se salvează...";
+    return;
   }
 
-  saveTasks();
-  renderEverything();
-  closeModal("taskModal");
+  const editingTaskId =
+    document.getElementById(
+      "editingTaskId"
+    ).value;
+
+  button.textContent = editingTaskId
+    ? "Salvează modificările"
+    : "Salvează";
 }
 
 function showFormError(message) {
@@ -546,73 +862,175 @@ function showFormError(message) {
 /* DELETE */
 
 function requestEditingTaskDeletion() {
-  const editingTaskId = document.getElementById(
-    "editingTaskId"
-  ).value;
+  const editingTaskId =
+    document.getElementById(
+      "editingTaskId"
+    ).value;
 
   if (!editingTaskId) {
     return;
   }
 
-  taskPendingDeletionId = editingTaskId;
+  taskPendingDeletionId =
+    editingTaskId;
 
   closeModal("taskModal");
-  openModal("deleteConfirmationModal");
+  openModal(
+    "deleteConfirmationModal"
+  );
 }
 
-function confirmTaskDeletion() {
+async function confirmTaskDeletion() {
   if (!taskPendingDeletionId) {
     return;
   }
 
-  tasks = tasks.filter(
-    (task) => task.id !== taskPendingDeletionId
-  );
+  const deleteButton =
+    document.getElementById(
+      "confirmTaskDeletionButton"
+    );
 
-  taskPendingDeletionId = null;
+  deleteButton.disabled = true;
+  deleteButton.textContent =
+    "Se șterge...";
 
-  saveTasks();
-  renderEverything();
+  try {
+    const { error } = await supabaseClient
+      .from("tasks")
+      .delete()
+      .eq(
+        "id",
+        taskPendingDeletionId
+      )
+      .eq(
+        "user_id",
+        currentUser.id
+      );
 
-  closeModal("deleteConfirmationModal");
+    if (error) {
+      throw error;
+    }
 
-  showToast(
-    "Task-ul a fost șters.",
-    "×"
-  );
+    taskPendingDeletionId = null;
+
+    await loadTasks();
+    renderEverything();
+
+    closeModal(
+      "deleteConfirmationModal"
+    );
+
+    showToast(
+      "Task-ul a fost șters.",
+      "×"
+    );
+  } catch (error) {
+    console.error(
+      "Task-ul nu a putut fi șters:",
+      error
+    );
+
+    showToast(
+      "Task-ul nu a putut fi șters.",
+      "!"
+    );
+  } finally {
+    deleteButton.disabled = false;
+    deleteButton.textContent =
+      "Da, șterge";
+  }
 }
 
 /* COMPLETE */
 
-function toggleTaskCompletion(taskId) {
-  tasks = tasks.map((task) => {
-    if (task.id !== taskId) {
-      return task;
+async function toggleTaskCompletion(
+  taskId
+) {
+  const task = tasks.find(
+    (currentTask) =>
+      currentTask.id === taskId
+  );
+
+  if (!task) {
+    return;
+  }
+
+  const newCompletedState =
+    !task.completed;
+
+  const previousTasks = [...tasks];
+
+  tasks = tasks.map(
+    (currentTask) => {
+      if (currentTask.id !== taskId) {
+        return currentTask;
+      }
+
+      return {
+        ...currentTask,
+
+        completed:
+          newCompletedState,
+
+        progress:
+          newCompletedState
+            ? 100
+            : 0,
+
+        completedAt:
+          newCompletedState
+            ? new Date().toISOString()
+            : null
+      };
     }
+  );
 
-    const newCompletedState = !task.completed;
-
-    return {
-      ...task,
-      completed: newCompletedState,
-      progress: newCompletedState ? 100 : 0,
-      updatedAt: new Date().toISOString()
-    };
-  });
-
-  saveTasks();
   renderEverything();
 
-  const changedTask = tasks.find(
-    (task) => task.id === taskId
-  );
+  try {
+    const { error } = await supabaseClient
+      .from("tasks")
+      .update({
+        completed:
+          newCompletedState,
 
-  showToast(
-    changedTask?.completed
-      ? "Task finalizat. Bravo!"
-      : "Task-ul a fost redeschis.",
-    changedTask?.completed ? "✓" : "↺"
-  );
+        progress:
+          newCompletedState
+            ? 100
+            : 0,
+
+        completed_at:
+          newCompletedState
+            ? new Date().toISOString()
+            : null
+      })
+      .eq("id", taskId)
+      .eq("user_id", currentUser.id);
+
+    if (error) {
+      throw error;
+    }
+
+    showToast(
+      newCompletedState
+        ? "Task finalizat. Bravo!"
+        : "Task-ul a fost redeschis.",
+      newCompletedState ? "✓" : "↺"
+    );
+  } catch (error) {
+    console.error(
+      "Statusul task-ului nu a putut fi schimbat:",
+      error
+    );
+
+    tasks = previousTasks;
+    renderEverything();
+
+    showToast(
+      "Modificarea nu a putut fi salvată.",
+      "!"
+    );
+  }
 }
 
 /* FILTERING */
@@ -621,43 +1039,52 @@ function getFilteredTasks() {
   let filteredTasks = [...tasks];
 
   if (activeFilter === "completed") {
-    filteredTasks = filteredTasks.filter(
-      (task) => task.completed
-    );
-  } else if (activeFilter !== "all") {
-    filteredTasks = filteredTasks.filter(
-      (task) =>
-        task.type === activeFilter &&
-        !task.completed
-    );
+    filteredTasks =
+      filteredTasks.filter(
+        (task) => task.completed
+      );
+  } else if (
+    activeFilter !== "all"
+  ) {
+    filteredTasks =
+      filteredTasks.filter(
+        (task) =>
+          task.type === activeFilter &&
+          !task.completed
+      );
   } else {
-    filteredTasks = filteredTasks.filter(
-      (task) => !task.completed
-    );
+    filteredTasks =
+      filteredTasks.filter(
+        (task) => !task.completed
+      );
   }
 
   if (searchQuery) {
-    filteredTasks = filteredTasks.filter((task) => {
-      const searchableText = [
-        task.title,
-        task.subject,
-        task.notes,
-        typeLabels[task.type]
-      ]
-        .join(" ")
-        .toLowerCase();
+    filteredTasks =
+      filteredTasks.filter((task) => {
+        const searchableText = [
+          task.title,
+          task.subject,
+          task.notes,
+          typeLabels[task.type]
+        ]
+          .join(" ")
+          .toLowerCase();
 
-      return searchableText.includes(searchQuery);
-    });
+        return searchableText.includes(
+          searchQuery
+        );
+      });
   }
 
   return sortTasks(filteredTasks);
 }
 
 function sortTasks(taskArray) {
-  const sortMode = document.getElementById(
-    "taskSortSelect"
-  ).value;
+  const sortMode =
+    document.getElementById(
+      "taskSortSelect"
+    ).value;
 
   const sortedTasks = [...taskArray];
 
@@ -670,27 +1097,55 @@ function sortTasks(taskArray) {
 
     sortedTasks.sort(
       (firstTask, secondTask) =>
-        priorityWeight[secondTask.priority] -
-        priorityWeight[firstTask.priority]
+        priorityWeight[
+          secondTask.priority
+        ] -
+        priorityWeight[
+          firstTask.priority
+        ]
     );
-  } else if (sortMode === "progress") {
+  } else if (
+    sortMode === "progress"
+  ) {
     sortedTasks.sort(
       (firstTask, secondTask) =>
-        secondTask.progress - firstTask.progress
+        secondTask.progress -
+        firstTask.progress
     );
-  } else if (sortMode === "created") {
+  } else if (
+    sortMode === "created"
+  ) {
     sortedTasks.sort(
       (firstTask, secondTask) =>
-        new Date(secondTask.createdAt) -
-        new Date(firstTask.createdAt)
+        new Date(
+          secondTask.createdAt
+        ) -
+        new Date(
+          firstTask.createdAt
+        )
     );
   } else {
-    sortedTasks.sort((firstTask, secondTask) => {
-      const firstDate = getTaskDeadlineDate(firstTask);
-      const secondDate = getTaskDeadlineDate(secondTask);
+    sortedTasks.sort(
+      (
+        firstTask,
+        secondTask
+      ) => {
+        const firstDate =
+          getTaskDeadlineDate(
+            firstTask
+          );
 
-      return firstDate - secondDate;
-    });
+        const secondDate =
+          getTaskDeadlineDate(
+            secondTask
+          );
+
+        return (
+          firstDate -
+          secondDate
+        );
+      }
+    );
   }
 
   return sortedTasks;
@@ -705,24 +1160,81 @@ function renderEverything() {
   renderSuggestion();
 }
 
+function renderLoadingState() {
+  document.getElementById(
+    "taskList"
+  ).innerHTML = `
+    <p class="empty-message">
+      Se încarcă task-urile...
+    </p>
+  `;
+}
+
+function renderPageError(message) {
+  document.getElementById(
+    "taskList"
+  ).innerHTML = `
+    <div class="empty-state">
+      <div>
+        <div class="empty-state-icon">
+          !
+        </div>
+
+        <h3>
+          Nu am putut încărca pagina
+        </h3>
+
+        <p>
+          ${escapeHtml(message)}
+        </p>
+
+        <button
+          type="button"
+          class="primary-button"
+          id="reloadTasksButton"
+        >
+          Reîncarcă
+        </button>
+      </div>
+    </div>
+  `;
+
+  document
+    .getElementById(
+      "reloadTasksButton"
+    )
+    .addEventListener(
+      "click",
+      () => {
+        window.location.reload();
+      }
+    );
+}
+
 function renderSummary() {
   const openTasks = tasks.filter(
     (task) => !task.completed
   );
 
-  const completedTasks = tasks.filter(
-    (task) => task.completed
-  );
+  const completedTasks =
+    tasks.filter(
+      (task) => task.completed
+    );
 
-  const todayValue = toDateInputValue(new Date());
+  const todayValue =
+    toDateInputValue(new Date());
 
-  const todayTasks = openTasks.filter(
-    (task) => task.deadline === todayValue
-  );
+  const todayTasks =
+    openTasks.filter(
+      (task) =>
+        task.deadline === todayValue
+    );
 
-  const highPriorityTasks = openTasks.filter(
-    (task) => task.priority === "high"
-  );
+  const highPriorityTasks =
+    openTasks.filter(
+      (task) =>
+        task.priority === "high"
+    );
 
   document.getElementById(
     "openTasksCount"
@@ -734,29 +1246,39 @@ function renderSummary() {
 
   document.getElementById(
     "highPriorityCount"
-  ).textContent = highPriorityTasks.length;
+  ).textContent =
+    highPriorityTasks.length;
 
   document.getElementById(
     "completedTasksCount"
-  ).textContent = completedTasks.length;
+  ).textContent =
+    completedTasks.length;
 }
 
 function renderTaskList() {
-  const taskList = document.getElementById(
-    "taskList"
-  );
+  const taskList =
+    document.getElementById(
+      "taskList"
+    );
 
-  const filteredTasks = getFilteredTasks();
+  const filteredTasks =
+    getFilteredTasks();
 
   updateTaskListTitle();
 
-  if (filteredTasks.length === 0) {
+  if (
+    filteredTasks.length === 0
+  ) {
     taskList.innerHTML = `
       <div class="empty-state">
         <div>
-          <div class="empty-state-icon">✿</div>
+          <div class="empty-state-icon">
+            ✿
+          </div>
 
-          <h3>Nu există task-uri aici</h3>
+          <h3>
+            Nu există task-uri aici
+          </h3>
 
           <p>
             Adaugă un task nou sau schimbă filtrul selectat.
@@ -774,55 +1296,84 @@ function renderTaskList() {
     `;
 
     document
-      .getElementById("emptyStateAddButton")
-      .addEventListener("click", openCreateTaskModal);
+      .getElementById(
+        "emptyStateAddButton"
+      )
+      .addEventListener(
+        "click",
+        openCreateTaskModal
+      );
 
     return;
   }
 
-  taskList.innerHTML = filteredTasks
-    .map(createTaskMarkup)
-    .join("");
+  taskList.innerHTML =
+    filteredTasks
+      .map(createTaskMarkup)
+      .join("");
 
   taskList
-    .querySelectorAll("[data-complete-task]")
+    .querySelectorAll(
+      "[data-complete-task]"
+    )
     .forEach((button) => {
-      button.addEventListener("click", () => {
-        toggleTaskCompletion(
-          button.dataset.completeTask
-        );
-      });
+      button.addEventListener(
+        "click",
+        () => {
+          toggleTaskCompletion(
+            button.dataset
+              .completeTask
+          );
+        }
+      );
     });
 
   taskList
-    .querySelectorAll("[data-edit-task]")
+    .querySelectorAll(
+      "[data-edit-task]"
+    )
     .forEach((button) => {
-      button.addEventListener("click", () => {
-        openEditTaskModal(
-          button.dataset.editTask
-        );
-      });
+      button.addEventListener(
+        "click",
+        () => {
+          openEditTaskModal(
+            button.dataset
+              .editTask
+          );
+        }
+      );
     });
 }
 
 function createTaskMarkup(task) {
   const overdue =
     !task.completed &&
-    getTaskDeadlineDate(task) < startOfToday();
+    task.deadline &&
+    getTaskDeadlineDate(task) <
+      startOfToday();
 
-  const deadlineLabel = formatDeadline(task);
-  const progress = Number(task.progress) || 0;
+  const deadlineLabel =
+    formatDeadline(task);
+
+  const progress =
+    Number(task.progress) || 0;
 
   return `
     <article
       class="task-card
-        ${task.completed ? "completed" : ""}
-        ${overdue ? "overdue" : ""}"
+        ${task.completed
+          ? "completed"
+          : ""}
+        ${overdue
+          ? "overdue"
+          : ""}"
     >
       <button
         type="button"
         class="task-complete-button
-          ${task.completed ? "checked" : ""}"
+          ${task.completed
+            ? "checked"
+            : ""}"
         data-complete-task="${task.id}"
         aria-label="${
           task.completed
@@ -835,10 +1386,18 @@ function createTaskMarkup(task) {
 
       <div class="task-card-content">
         <div class="task-title-row">
-          <h3>${escapeHtml(task.title)}</h3>
+          <h3>
+            ${escapeHtml(task.title)}
+          </h3>
 
-          <span class="task-type-tag ${task.type}">
-            ${escapeHtml(typeLabels[task.type] || "Task")}
+          <span
+            class="task-type-tag
+              ${escapeHtml(task.type)}"
+          >
+            ${escapeHtml(
+              typeLabels[task.type] ||
+              "Task"
+            )}
           </span>
         </div>
 
@@ -847,19 +1406,30 @@ function createTaskMarkup(task) {
             task.subject
               ? `
                 <span class="meta-pill">
-                  ◇ ${escapeHtml(task.subject)}
+                  ◇ ${escapeHtml(
+                    task.subject
+                  )}
                 </span>
               `
               : ""
           }
 
-          <span class="meta-pill ${overdue ? "overdue" : ""}">
+          <span
+            class="meta-pill
+              ${overdue
+                ? "overdue"
+                : ""}"
+          >
             ${overdue ? "!" : "□"}
-            ${escapeHtml(deadlineLabel)}
+            ${escapeHtml(
+              deadlineLabel
+            )}
           </span>
 
           <span class="meta-pill">
-            ◷ ${formatDuration(task.estimatedMinutes)}
+            ◷ ${formatDuration(
+              task.estimatedMinutes
+            )}
           </span>
 
           <span
@@ -870,11 +1440,21 @@ function createTaskMarkup(task) {
                   : ""
               }"
           >
-            ${escapeHtml(priorityLabels[task.priority])}
+            ${escapeHtml(
+              priorityLabels[
+                task.priority
+              ] ||
+              "Prioritate medie"
+            )}
           </span>
 
           <span class="meta-pill">
-            ${escapeHtml(difficultyLabels[task.difficulty])}
+            ${escapeHtml(
+              difficultyLabels[
+                task.difficulty
+              ] ||
+              "Mediu"
+            )}
           </span>
         </div>
 
@@ -882,7 +1462,9 @@ function createTaskMarkup(task) {
           task.notes
             ? `
               <p class="task-notes">
-                ${escapeHtml(task.notes)}
+                ${escapeHtml(
+                  task.notes
+                )}
               </p>
             `
             : ""
@@ -891,7 +1473,10 @@ function createTaskMarkup(task) {
         <div class="task-progress-area">
           <div class="task-progress-header">
             <span>Progres</span>
-            <strong>${progress}%</strong>
+
+            <strong>
+              ${progress}%
+            </strong>
           </div>
 
           <div class="task-progress-track">
@@ -929,7 +1514,8 @@ function updateTaskListTitle() {
   document.getElementById(
     "taskListTitle"
   ).textContent =
-    labels[activeFilter] || "Task-uri";
+    labels[activeFilter] ||
+    "Task-uri";
 }
 
 function renderWeeklyProgress() {
@@ -944,15 +1530,21 @@ function renderWeeklyProgress() {
     return;
   }
 
-  const completedCount = tasks.filter(
-    (task) => task.completed
-  ).length;
+  const completedCount =
+    tasks.filter(
+      (task) => task.completed
+    ).length;
 
   const percentage = Math.round(
-    (completedCount / tasks.length) * 100
+    (
+      completedCount /
+      tasks.length
+    ) * 100
   );
 
-  updateProgressCircle(percentage);
+  updateProgressCircle(
+    percentage
+  );
 
   let message =
     "Ai început bine. Continuă în același ritm.";
@@ -976,54 +1568,75 @@ function renderWeeklyProgress() {
   ).textContent = message;
 }
 
-function updateProgressCircle(percentage) {
-  const degrees = percentage * 3.6;
+function updateProgressCircle(
+  percentage
+) {
+  const degrees =
+    percentage * 3.6;
 
-  const circle = document.getElementById(
-    "progressCircle"
-  );
+  const circle =
+    document.getElementById(
+      "progressCircle"
+    );
 
   circle.style.background = `
     conic-gradient(
-      var(--primary-dark) ${degrees}deg,
-      #f5e4eb ${degrees}deg
+      var(--primary-dark)
+        ${degrees}deg,
+      #f5e4eb
+        ${degrees}deg
     )
   `;
 
   document.getElementById(
     "weeklyProgressValue"
-  ).textContent = `${percentage}%`;
+  ).textContent =
+    `${percentage}%`;
 }
 
 function renderSuggestion() {
   const openTasks = tasks
-    .filter((task) => !task.completed)
-    .sort((firstTask, secondTask) => {
-      return (
-        getTaskDeadlineDate(firstTask) -
-        getTaskDeadlineDate(secondTask)
-      );
-    });
+    .filter(
+      (task) => !task.completed
+    )
+    .sort(
+      (
+        firstTask,
+        secondTask
+      ) =>
+        getTaskDeadlineDate(
+          firstTask
+        ) -
+        getTaskDeadlineDate(
+          secondTask
+        )
+    );
 
-  const title = document.getElementById(
-    "focusSuggestionTitle"
-  );
+  const title =
+    document.getElementById(
+      "focusSuggestionTitle"
+    );
 
-  const text = document.getElementById(
-    "focusSuggestionText"
-  );
+  const text =
+    document.getElementById(
+      "focusSuggestionText"
+    );
 
-  const button = document.getElementById(
-    "suggestionActionButton"
-  );
+  const button =
+    document.getElementById(
+      "suggestionActionButton"
+    );
 
   if (openTasks.length === 0) {
-    title.textContent = "Totul este sub control";
+    title.textContent =
+      "Totul este sub control";
 
     text.textContent =
       "Nu ai încă task-uri urgente.";
 
-    button.textContent = "Adaugă un task";
+    button.textContent =
+      "Adaugă un task";
+
     button.dataset.action = "add";
 
     return;
@@ -1031,26 +1644,37 @@ function renderSuggestion() {
 
   const suggestedTask =
     openTasks.find(
-      (task) => task.priority === "high"
+      (task) =>
+        task.priority === "high"
     ) || openTasks[0];
 
-  title.textContent = suggestedTask.title;
+  title.textContent =
+    suggestedTask.title;
 
   text.textContent =
     `Acesta este task-ul pe care ar fi bine ` +
     `să îl începi următorul. Deadline: ` +
-    `${formatDeadline(suggestedTask)}.`;
+    `${formatDeadline(
+      suggestedTask
+    )}.`;
 
-  button.textContent = "Deschide task-ul";
-  button.dataset.action = suggestedTask.id;
+  button.textContent =
+    "Deschide task-ul";
+
+  button.dataset.action =
+    suggestedTask.id;
 }
 
 function handleSuggestionAction() {
-  const action = document.getElementById(
-    "suggestionActionButton"
-  ).dataset.action;
+  const action =
+    document.getElementById(
+      "suggestionActionButton"
+    ).dataset.action;
 
-  if (!action || action === "add") {
+  if (
+    !action ||
+    action === "add"
+  ) {
     openCreateTaskModal();
     return;
   }
@@ -1061,9 +1685,18 @@ function handleSuggestionAction() {
 /* DATE HELPERS */
 
 function getTaskDeadlineDate(task) {
-  const time = task.deadlineTime || "23:59";
+  if (!task.deadline) {
+    return new Date(
+      "9999-12-31T23:59:00"
+    );
+  }
 
-  return new Date(`${task.deadline}T${time}:00`);
+  const time =
+    task.deadlineTime || "23:59";
+
+  return new Date(
+    `${task.deadline}T${time}:00`
+  );
 }
 
 function startOfToday() {
@@ -1075,6 +1708,10 @@ function startOfToday() {
 }
 
 function formatDeadline(task) {
+  if (!task.deadline) {
+    return "Fără deadline";
+  }
+
   const taskDate = new Date(
     `${task.deadline}T12:00:00`
   );
@@ -1082,31 +1719,43 @@ function formatDeadline(task) {
   const today = startOfToday();
 
   const tomorrow = new Date(today);
-  tomorrow.setDate(tomorrow.getDate() + 1);
+
+  tomorrow.setDate(
+    tomorrow.getDate() + 1
+  );
 
   const taskDay = new Date(taskDate);
+
   taskDay.setHours(0, 0, 0, 0);
 
   let dateText;
 
-  if (taskDay.getTime() === today.getTime()) {
+  if (
+    taskDay.getTime() ===
+    today.getTime()
+  ) {
     dateText = "Astăzi";
   } else if (
-    taskDay.getTime() === tomorrow.getTime()
+    taskDay.getTime() ===
+    tomorrow.getTime()
   ) {
     dateText = "Mâine";
   } else {
-    dateText = new Intl.DateTimeFormat(
-      "ro-RO",
-      {
-        day: "numeric",
-        month: "short"
-      }
-    ).format(taskDate);
+    dateText =
+      new Intl.DateTimeFormat(
+        "ro-RO",
+        {
+          day: "numeric",
+          month: "short"
+        }
+      ).format(taskDate);
   }
 
   if (task.deadlineTime) {
-    return `${dateText}, ${task.deadlineTime}`;
+    return (
+      `${dateText}, ` +
+      `${task.deadlineTime}`
+    );
   }
 
   return dateText;
@@ -1114,6 +1763,7 @@ function formatDeadline(task) {
 
 function toDateInputValue(date) {
   const year = date.getFullYear();
+
   const month = String(
     date.getMonth() + 1
   ).padStart(2, "0");
@@ -1126,7 +1776,8 @@ function toDateInputValue(date) {
 }
 
 function formatDuration(minutes) {
-  const numericMinutes = Number(minutes) || 0;
+  const numericMinutes =
+    Number(minutes) || 0;
 
   if (numericMinutes < 60) {
     return `${numericMinutes} min`;
@@ -1143,19 +1794,78 @@ function formatDuration(minutes) {
     return `${hours}h`;
   }
 
-  return `${hours}h ${remainingMinutes}m`;
+  return (
+    `${hours}h ` +
+    `${remainingMinutes}m`
+  );
 }
 
-/* UTILITIES */
+/* ERRORS */
 
-function createId() {
-  return `${Date.now()}-${Math.random()
-    .toString(16)
-    .slice(2)}`;
+function translateDatabaseError(error) {
+  const message =
+    String(
+      error?.message || ""
+    ).toLowerCase();
+
+  if (
+    message.includes(
+      "row-level security"
+    )
+  ) {
+    return (
+      "Nu ai permisiunea de a salva acest task. " +
+      "Autentifică-te din nou."
+    );
+  }
+
+  if (
+    message.includes(
+      "foreign key"
+    )
+  ) {
+    return (
+      "Materia selectată nu mai există. " +
+      "Alege altă materie."
+    );
+  }
+
+  if (
+    message.includes(
+      "duplicate"
+    )
+  ) {
+    return (
+      "Acest task există deja."
+    );
+  }
+
+  if (
+    message.includes(
+      "failed to fetch"
+    )
+  ) {
+    return (
+      "Nu există conexiune la internet."
+    );
+  }
+
+  return (
+    error?.message ||
+    "Task-ul nu a putut fi salvat."
+  );
 }
 
-function showToast(message, icon = "✓") {
-  const toast = document.getElementById("toast");
+/* TOAST */
+
+function showToast(
+  message,
+  icon = "✓"
+) {
+  const toast =
+    document.getElementById(
+      "toast"
+    );
 
   document.getElementById(
     "toastMessage"
@@ -1165,17 +1875,29 @@ function showToast(message, icon = "✓") {
     "toastIcon"
   ).textContent = icon;
 
-  toast.classList.add("visible");
+  toast.classList.add(
+    "visible"
+  );
 
   clearTimeout(toastTimeout);
 
-  toastTimeout = setTimeout(() => {
-    toast.classList.remove("visible");
-  }, 2600);
+  toastTimeout = setTimeout(
+    () => {
+      toast.classList.remove(
+        "visible"
+      );
+    },
+    2600
+  );
 }
 
+/* SECURITY */
+
 function escapeHtml(value) {
-  if (value === null || value === undefined) {
+  if (
+    value === null ||
+    value === undefined
+  ) {
     return "";
   }
 
