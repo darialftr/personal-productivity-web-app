@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+  <meta charset="UTF-8">
+
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+  >
+
+  <meta
+    name="description"
+    content="Configurează-ți spațiul personal în Itera."
+  >
+
+  <meta name="theme-color" content="#f3a9c5">
+
+  <title>Configurează Itera</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+  <link
+    href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Manrope:wght@400;500;600;700;800&display=swap"
+    rel="stylesheet"
+  >
+
+  <link rel="stylesheet" href="onboarding.css">
+</head>
+
+<body>
+  <div class="onboarding-page">
+
+    <aside class="visual-panel">
+      <div class="visual-decoration decoration-one"></div>
+      <div class="visual-decoration decoration-two"></div>
+
+      <div class="brand">
+        <div class="brand-mark">i</div>
+
+        <div>
+          <p class="brand-name">Itera</p>
+          <p class="brand-subtitle">study beautifully</p>
+        </div>
+      </div>
+
+      <div class="visual-content">
+        <span class="visual-badge">Spațiul tău personal</span>
+
+        <h1>
+          Un an școlar mai calm începe aici.
+        </h1>
+
+        <p>
+          Configurează-ți materiile, programul și obiectivele.
+          Itera îți va organiza apoi fiecare zi.
+        </p>
+
+        <div class="preview-card">
+          <div class="preview-card-top">
+            <div>
+              <span>Marți</span>
+              <strong>Planul zilei</strong>
+            </div>
+
+            <div class="preview-date">15</div>
+          </div>
+
+          <div class="preview-item">
+            <div class="preview-icon pink">✓</div>
+
+            <div>
+              <strong>Homework la matematică</strong>
+              <span>45 minute</span>
+            </div>
+          </div>
+
+          <div class="preview-item">
+            <div class="preview-icon lilac">☆</div>
+
+            <div>
+              <strong>Recapitulare pentru test</strong>
+              <span>Biologie · 30 minute</span>
+            </div>
+          </div>
+
+          <button type="button" class="preview-button">
+            ▶ Start focus
+          </button>
+        </div>
+      </div>
+
+      <p class="visual-footer">
+        Creat pentru zile organizate și obiective mari.
+      </p>
+    </aside>
+
+    <main class="setup-panel">
+      <header class="mobile-brand">
+        <div class="brand-mark">i</div>
+
+        <div>
+          <p class="brand-name">Itera</p>
+          <p class="brand-subtitle">study beautifully</p>
+        </div>
+      </header>
+
+      <div class="progress-wrapper">
+        <div class="progress-info">
+          <span id="stepLabel">Pasul 1 din 5</span>
+          <span id="progressPercentage">20%</span>
+        </div>
+
+        <div class="progress-track">
+          <div class="progress-fill" id="progressFill"></div>
+        </div>
+      </div>
+
+      <form id="onboardingForm" novalidate>
+
+        <!-- STEP 1 -->
+        <section class="setup-step active-step" data-step="1">
+          <div class="step-heading">
+            <span class="step-icon">🌷</span>
+
+            <p class="eyebrow">Bine ai venit</p>
+
+            <h2>Cum te numești?</h2>
+
+            <p>
+              Numele va apărea pe dashboard și în mesajele tale zilnice.
+            </p>
+          </div>
+
+          <label class="form-field large-field">
+            <span>Prenume</span>
+
+            <input
+              id="firstName"
+              name="firstName"
+              type="text"
+              placeholder="Ex: Daria"
+              autocomplete="given-name"
+              maxlength="30"
+              required
+            >
+          </label>
+
+          <label class="form-field">
+            <span>Clasa în care vei fi</span>
+
+            <select id="gradeLevel" name="gradeLevel" required>
+              <option value="">Alege clasa</option>
+              <option value="9">Clasa a IX-a</option>
+              <option value="10">Clasa a X-a</option>
+              <option value="11">Clasa a XI-a</option>
+              <option value="12">Clasa a XII-a</option>
+              <option value="other">Alt nivel</option>
+            </select>
+          </label>
+        </section>
+
+        <!-- STEP 2 -->
+        <section class="setup-step" data-step="2">
+          <div class="step-heading">
+            <span class="step-icon">📚</span>
+
+            <p class="eyebrow">Materii</p>
+
+            <h2>Ce materii studiezi?</h2>
+
+            <p>
+              Selectează materiile pe care vrei să le organizezi în Itera.
+            </p>
+          </div>
+
+          <div class="subject-grid" id="subjectGrid">
+            <button
+              type="button"
+              class="subject-option selected"
+              data-subject="Limba română"
+            >
+              <span class="subject-icon subject-pink">R</span>
+              <strong>Limba română</strong>
+            </button>
+
+            <button
+              type="button"
+              class="subject-option selected"
+              data-subject="Matematică"
+            >
+              <span class="subject-icon subject-lilac">M</span>
+              <strong>Matematică</strong>
+            </button>
+
+            <button
+              type="button"
+              class="subject-option selected"
+              data-subject="Informatică"
+            >
+              <span class="subject-icon subject-blue">I</span>
+              <strong>Informatică</strong>
+            </button>
+
+            <button
+              type="button"
+              class="subject-option"
+              data-subject="Biologie"
+            >
+              <span class="subject-icon subject-green">B</span>
+              <strong>Biologie</strong>
+            </button>
+
+            <button
+              type="button"
+              class="subject-option"
+              data-subject="Fizică"
+            >
+              <span class="subject-icon subject-peach">F</span>
+              <strong>Fizică</strong>
+            </button>
+
+            <button
+              type="button"
+              class="subject-option"
+              data-subject="Chimie"
+            >
+              <span class="subject-icon subject-yellow">C</span>
+              <strong>Chimie</strong>
+            </button>
+
+            <button
+              type="button"
+              class="subject-option"
+              data-subject="Engleză"
+            >
+              <span class="subject-icon subject-blue">E</span>
+              <strong>Engleză</strong>
+            </button>
+
+            <button
+              type="button"
+              class="subject-option"
+              data-subject="Franceză"
+            >
+              <span class="subject-icon subject-pink">F</span>
+              <strong>Franceză</strong>
+            </button>
+
+            <button
+              type="button"
+              class="subject-option"
+              data-subject="Istorie"
+            >
+              <span class="subject-icon subject-peach">I</span>
+              <strong>Istorie</strong>
+            </button>
+
+            <button
+              type="button"
+              class="subject-option"
+              data-subject="Geografie"
+            >
+              <span class="subject-icon subject-green">G</span>
+              <strong>Geografie</strong>
+            </button>
+          </div>
+
+          <div class="custom-subject-row">
+            <input
+              id="customSubjectInput"
+              type="text"
+              placeholder="Adaugă altă materie"
+              maxlength="40"
+            >
+
+            <button
+              type="button"
+              id="addCustomSubjectButton"
+              class="secondary-action-button"
+            >
+              ＋ Adaugă
+            </button>
+          </div>
+        </section>
+
+        <!-- STEP 3 -->
+        <section class="setup-step" data-step="3">
+          <div class="step-heading">
+            <span class="step-icon">🗓️</span>
+
+            <p class="eyebrow">Program</p>
+
+            <h2>Cum arată săptămâna ta?</h2>
+
+            <p>
+              Programul complet va putea fi adăugat ulterior. Momentan alegem intervalele generale.
+            </p>
+          </div>
+
+          <div class="schedule-preferences">
+            <label class="form-field">
+              <span>La ce oră începe școala?</span>
+
+              <input
+                id="schoolStartTime"
+                type="time"
+                value="08:00"
+                required
+              >
+            </label>
+
+            <label class="form-field">
+              <span>La ce oră termini de obicei?</span>
+
+              <input
+                id="schoolEndTime"
+                type="time"
+                value="14:00"
+                required
+              >
+            </label>
+
+            <label class="form-field">
+              <span>Când preferi să studiezi?</span>
+
+              <select id="preferredStudyTime">
+                <option value="afternoon">
+                  După-amiaza
+                </option>
+
+                <option value="evening">
+                  Seara
+                </option>
+
+                <option value="morning">
+                  Dimineața
+                </option>
+
+                <option value="flexible">
+                  Diferă de la o zi la alta
+                </option>
+              </select>
+            </label>
+
+            <label class="form-field">
+              <span>Câte ore vrei să studiezi zilnic?</span>
+
+              <select id="dailyStudyGoal">
+                <option value="60">1 oră</option>
+                <option value="90">1h 30m</option>
+                <option value="120" selected>2 ore</option>
+                <option value="180">3 ore</option>
+                <option value="240">4 ore</option>
+              </select>
+            </label>
+          </div>
+
+          <div class="info-box">
+            <span>♡</span>
+
+            <p>
+              Vei putea introduce orarul exact pentru fiecare zi după ce termini configurarea.
+            </p>
+          </div>
+        </section>
+
+        <!-- STEP 4 -->
+        <section class="setup-step" data-step="4">
+          <div class="step-heading">
+            <span class="step-icon">🎓</span>
+
+            <p class="eyebrow">Obiective</p>
+
+            <h2>Pentru ce te pregătești?</h2>
+
+            <p>
+              Aceste informații ne ajută să personalizăm planul tău.
+            </p>
+          </div>
+
+          <div class="goal-options">
+            <button
+              type="button"
+              class="goal-option selected"
+              data-goal="school"
+            >
+              <span>📖</span>
+
+              <div>
+                <strong>Școală și teme</strong>
+                <small>
+                  Vreau să fiu mai organizată zilnic.
+                </small>
+              </div>
+
+              <span class="goal-check">✓</span>
+            </button>
+
+            <button
+              type="button"
+              class="goal-option selected"
+              data-goal="bac"
+            >
+              <span>✍️</span>
+
+              <div>
+                <strong>Bacalaureat</strong>
+                <small>
+                  Vreau să urmăresc progresul pentru Bac.
+                </small>
+              </div>
+
+              <span class="goal-check">✓</span>
+            </button>
+
+            <button
+              type="button"
+              class="goal-option selected"
+              data-goal="admission"
+            >
+              <span>🎓</span>
+
+              <div>
+                <strong>Admitere la facultate</strong>
+                <small>
+                  Vreau să organizez materiile și deadline-urile.
+                </small>
+              </div>
+
+              <span class="goal-check">✓</span>
+            </button>
+
+            <button
+              type="button"
+              class="goal-option"
+              data-goal="habits"
+            >
+              <span>🌷</span>
+
+              <div>
+                <strong>Obiceiuri și energie</strong>
+                <small>
+                  Vreau să urmăresc somnul, energia și rutina.
+                </small>
+              </div>
+
+              <span class="goal-check">✓</span>
+            </button>
+          </div>
+
+          <label class="form-field">
+            <span>Facultatea sau domeniul dorit</span>
+
+            <input
+              id="universityGoal"
+              type="text"
+              placeholder="Ex: Calculatoare și Tehnologia Informației"
+              maxlength="100"
+            >
+          </label>
+        </section>
+
+        <!-- STEP 5 -->
+        <section class="setup-step" data-step="5">
+          <div class="step-heading final-heading">
+            <span class="step-icon final-icon">✿</span>
+
+            <p class="eyebrow">Totul este pregătit</p>
+
+            <h2>Începem anul organizat.</h2>
+
+            <p>
+              Itera va crea acum spațiul tău personal.
+            </p>
+          </div>
+
+          <div class="setup-summary">
+            <div class="summary-profile">
+              <div class="summary-avatar" id="summaryAvatar">
+                D
+              </div>
+
+              <div>
+                <span>Profil</span>
+                <strong id="summaryName">Daria</strong>
+                <small id="summaryGrade">Clasa a XII-a</small>
+              </div>
+            </div>
+
+            <div class="summary-row">
+              <span>Materii selectate</span>
+              <strong id="summarySubjectsCount">3</strong>
+            </div>
+
+            <div class="summary-row">
+              <span>Obiectiv zilnic</span>
+              <strong id="summaryStudyGoal">2 ore</strong>
+            </div>
+
+            <div class="summary-row">
+              <span>Obiective principale</span>
+              <strong id="summaryGoalsCount">3</strong>
+            </div>
+          </div>
+
+          <div class="final-message">
+            <span>🌸</span>
+
+            <p>
+              Următorul pas va fi completarea orarului tău săptămânal.
+            </p>
+          </div>
+        </section>
+
+        <p class="form-error" id="formError" role="alert"></p>
+
+        <div class="form-navigation">
+          <button
+            type="button"
+            class="back-button hidden"
+            id="backButton"
+          >
+            Înapoi
+          </button>
+
+          <button
+            type="button"
+            class="continue-button"
+            id="continueButton"
+          >
+            Continuă
+            <span>→</span>
+          </button>
+        </div>
+      </form>
+    </main>
+  </div>
+
+  <div class="toast" id="toast">
+    <span>✓</span>
+    <p id="toastMessage">Materia a fost adăugată.</p>
+  </div>
+
+  <script src="onboarding.js"></script>
+</body>
+</html>
