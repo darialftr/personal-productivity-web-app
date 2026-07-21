@@ -453,7 +453,7 @@ function finishOnboarding() {
       JSON.stringify(profile)
     );
 
-    window.location.href = "index.html";
+    window.location.href = "schedule.html";
   } catch (error) {
     console.error("Profilul nu a putut fi salvat:", error);
 
