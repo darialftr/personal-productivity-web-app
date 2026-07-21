@@ -9,6 +9,7 @@
 
 const STORAGE_KEYS = {
   events: "itera_events",
+  tasks: "itera_tasks",
   energy: "itera_energy"
 };
 
@@ -161,6 +162,7 @@ const defaultEvents = [
 ];
 
 let events = loadEvents();
+let tasks = loadTasks();
 
 initializeApp();
 
@@ -173,6 +175,20 @@ function initializeApp() {
   initializeEventForm();
   initializeCalendarControls();
   initializeQuickActions();
+  window.addEventListener("focus", () => {
+  refreshStoredData();
+  renderAll();
+});
+
+document.addEventListener(
+  "visibilitychange",
+  () => {
+    if (!document.hidden) {
+      refreshStoredData();
+      renderAll();
+    }
+  }
+);
 
   renderAll();
 }
@@ -209,6 +225,85 @@ function saveEvents() {
     STORAGE_KEYS.events,
     JSON.stringify(events)
   );
+}
+function loadTasks() {
+  try {
+    const storedTasks = localStorage.getItem(
+      STORAGE_KEYS.tasks
+    );
+
+    if (!storedTasks) {
+      return [];
+    }
+
+    const parsedTasks = JSON.parse(storedTasks);
+
+    return Array.isArray(parsedTasks)
+      ? parsedTasks
+      : [];
+  } catch (error) {
+    console.error(
+      "Task-urile nu au putut fi încărcate:",
+      error
+    );
+
+    return [];
+  }
+}
+
+function saveTasks() {
+  localStorage.setItem(
+    STORAGE_KEYS.tasks,
+    JSON.stringify(tasks)
+  );
+}
+
+function convertTaskToCalendarItem(task) {
+  return {
+    id: task.id,
+    source: "task",
+
+    title: task.title,
+    type: task.type || "homework",
+    subject: task.subject || "",
+
+    date: task.deadline,
+    time: task.deadlineTime || "",
+
+    duration: Number(
+      task.estimatedMinutes || 0
+    ),
+
+    priority: task.priority || "medium",
+    notes: task.notes || "",
+
+    completed:
+      Boolean(task.completed) ||
+      Number(task.progress) === 100,
+
+    progress: Number(task.progress || 0)
+  };
+}
+
+function getAllCalendarItems() {
+  const calendarEvents = events.map((event) => ({
+    ...event,
+    source: "event"
+  }));
+
+  const calendarTasks = tasks
+    .filter((task) => task.deadline)
+    .map(convertTaskToCalendarItem);
+
+  return [
+    ...calendarEvents,
+    ...calendarTasks
+  ];
+}
+
+function refreshStoredData() {
+  events = loadEvents();
+  tasks = loadTasks();
 }
 
 function createId() {
@@ -429,20 +524,22 @@ function initializeQuickActions() {
   });
 
   const taskButtons = [
-    "addTaskButton",
-    "addTaskPageButton"
-  ];
+  "addTaskButton",
+  "addTaskPageButton"
+];
 
-  taskButtons.forEach((buttonId) => {
-    document
-      .getElementById(buttonId)
-      .addEventListener("click", () => {
-        prepareEventModal(
-          formatDateForInput(new Date()),
-          "homework"
-        );
-      });
+taskButtons.forEach((buttonId) => {
+  const button =
+    document.getElementById(buttonId);
+
+  if (!button) {
+    return;
+  }
+
+  button.addEventListener("click", () => {
+    window.location.href = "tasks.html";
   });
+});
 
   document
     .querySelectorAll("[data-quick-action]")
@@ -456,6 +553,13 @@ function initializeQuickActions() {
           startFocusSession();
           return;
         }
+        if (
+  action === "task" ||
+  action === "test"
+) {
+  window.location.href = "tasks.html";
+  return;
+}
 
         const typeMap = {
           task: "homework",
@@ -773,10 +877,14 @@ function renderAll() {
 }
 
 function getTodayEvents() {
-  const todayString = formatDateForInput(new Date());
+  const todayString = formatDateForInput(
+    new Date()
+  );
 
-  return events
-    .filter((event) => event.date === todayString)
+  return getAllCalendarItems()
+    .filter(
+      (item) => item.date === todayString
+    )
     .sort(sortEvents);
 }
 
@@ -909,18 +1017,19 @@ function renderAllTasks() {
     "allTasksList"
   );
 
-  const taskEvents = events
+  const taskItems = getAllCalendarItems()
     .filter(
-      (event) =>
-        event.type === "homework" ||
-        event.type === "test" ||
-        event.type === "project"
+      (item) =>
+        item.source === "task" ||
+        item.type === "homework" ||
+        item.type === "test" ||
+        item.type === "project"
     )
     .sort(sortEvents);
 
   renderTaskCollection(
     taskList,
-    taskEvents,
+    taskItems,
     "Nu ai adăugat încă niciun task."
   );
 }
@@ -955,6 +1064,7 @@ function renderTaskCollection(
           <button
             class="task-checkbox ${checkboxClass}"
             data-complete-event="${event.id}"
+data-item-source="${event.source || "event"}"
             aria-label="Marchează task-ul"
           >
             ${event.completed ? "✓" : ""}
@@ -984,29 +1094,62 @@ function renderTaskCollection(
     .querySelectorAll("[data-complete-event]")
     .forEach((button) => {
       button.addEventListener("click", () => {
-        toggleEventCompletion(
-          button.dataset.completeEvent
-        );
+        toggleItemCompletion(
+  button.dataset.completeEvent,
+  button.dataset.itemSource
+);
       });
     });
 }
 
-function toggleEventCompletion(eventId) {
-  events = events.map((event) => {
-    if (event.id !== eventId) {
-      return event;
-    }
+function toggleItemCompletion(
+  itemId,
+  itemSource
+) {
+  if (itemSource === "task") {
+    tasks = tasks.map((task) => {
+      if (task.id !== itemId) {
+        return task;
+      }
 
-    return {
-      ...event,
-      completed: !event.completed
-    };
-  });
+      const newCompletedState =
+        !task.completed;
 
-  saveEvents();
+      return {
+        ...task,
+
+        completed: newCompletedState,
+
+        progress: newCompletedState
+          ? 100
+          : 0,
+
+        updatedAt: new Date().toISOString()
+      };
+    });
+
+    saveTasks();
+  } else {
+    events = events.map((event) => {
+      if (event.id !== itemId) {
+        return event;
+      }
+
+      return {
+        ...event,
+        completed: !event.completed
+      };
+    });
+
+    saveEvents();
+  }
+
   renderAll();
 
-  showToast("Task-ul a fost actualizat.", "✓");
+  showToast(
+    "Task-ul a fost actualizat.",
+    "✓"
+  );
 }
 
 function renderUpcomingEvents() {
@@ -1016,14 +1159,15 @@ function renderUpcomingEvents() {
 
   const todayString = formatDateForInput(new Date());
 
-  const upcomingEvents = events
-    .filter(
-      (event) =>
-        event.date >= todayString &&
-        event.type !== "school"
-    )
-    .sort(sortEvents)
-    .slice(0, 4);
+  const upcomingEvents = getAllCalendarItems()
+  .filter(
+    (event) =>
+      event.date >= todayString &&
+      event.type !== "school" &&
+      !event.completed
+  )
+  .sort(sortEvents)
+  .slice(0, 4);
 
   if (upcomingEvents.length === 0) {
     upcomingList.innerHTML = `
@@ -1153,9 +1297,10 @@ function renderCalendar() {
       new Date(displayedYear, displayedMonth, day)
     );
 
-    const dateEvents = events.filter(
-      (event) => event.date === dateString
-    );
+    const dateEvents =
+  getAllCalendarItems().filter(
+    (item) => item.date === dateString
+  );
 
     const isToday =
       dateString === formatDateForInput(new Date());
@@ -1219,9 +1364,11 @@ function renderSelectedDateEvents() {
       selectedDateObject.getMonth()
     ].toLowerCase()}`;
 
-  const dateEvents = events
-    .filter((event) => event.date === selectedDate)
-    .sort(sortEvents);
+  const dateEvents = getAllCalendarItems()
+  .filter(
+    (item) => item.date === selectedDate
+  )
+  .sort(sortEvents);
 
   if (dateEvents.length === 0) {
     container.innerHTML = `
