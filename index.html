@@ -1,0 +1,661 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+  <meta charset="UTF-8">
+
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+  >
+
+  <meta
+    name="description"
+    content="Itera - aplicația ta personală pentru școală, studiu și organizare."
+  >
+
+  <meta name="theme-color" content="#f7b8cf">
+
+  <title>Itera — Study beautifully</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+  <link
+    href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Manrope:wght@400;500;600;700;800&display=swap"
+    rel="stylesheet"
+  >
+
+  <link rel="stylesheet" href="styles.css">
+</head>
+
+<body>
+  <div class="app-shell">
+
+    <!-- DESKTOP SIDEBAR -->
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark">i</div>
+
+        <div>
+          <p class="brand-name">Itera</p>
+          <p class="brand-subtitle">study beautifully</p>
+        </div>
+      </div>
+
+      <nav class="desktop-navigation" aria-label="Navigație principală">
+        <button class="nav-item active" data-page="home">
+          <span class="nav-icon">⌂</span>
+          <span>Acasă</span>
+        </button>
+
+        <button class="nav-item" data-page="calendar">
+          <span class="nav-icon">□</span>
+          <span>Calendar</span>
+        </button>
+
+        <button class="nav-item" data-page="tasks">
+          <span class="nav-icon">✓</span>
+          <span>Task-uri</span>
+        </button>
+
+        <button class="nav-item" data-page="subjects">
+          <span class="nav-icon">◇</span>
+          <span>Materii</span>
+        </button>
+
+        <button class="nav-item" data-page="grades">
+          <span class="nav-icon">☆</span>
+          <span>Note</span>
+        </button>
+
+        <button class="nav-item" data-page="university">
+          <span class="nav-icon">⌁</span>
+          <span>Admitere</span>
+        </button>
+      </nav>
+
+      <div class="sidebar-bottom">
+        <div class="mini-profile">
+          <div class="avatar">D</div>
+
+          <div class="mini-profile-text">
+            <strong>Daria</strong>
+            <span>Clasa a XII-a</span>
+          </div>
+
+          <button class="icon-button" aria-label="Deschide setările">
+            ⋯
+          </button>
+        </div>
+      </div>
+    </aside>
+
+    <!-- MAIN CONTENT -->
+    <main class="main-content">
+
+      <header class="topbar">
+        <div>
+          <p class="eyebrow" id="currentDateLabel">Astăzi</p>
+          <h1 id="greetingTitle">Bună dimineața, Daria 🌷</h1>
+        </div>
+
+        <div class="topbar-actions">
+          <button
+            class="icon-button notification-button"
+            aria-label="Notificări"
+          >
+            ♡
+            <span class="notification-dot"></span>
+          </button>
+
+          <button class="primary-small-button" id="openQuickAddButton">
+            <span>＋</span>
+            Adaugă
+          </button>
+        </div>
+      </header>
+
+      <!-- HOME PAGE -->
+      <section class="page-section active-page" id="homePage">
+
+        <section class="hero-grid">
+          <article class="focus-card">
+            <div class="focus-card-decoration decoration-one"></div>
+            <div class="focus-card-decoration decoration-two"></div>
+
+            <div class="focus-card-content">
+              <p class="card-kicker">Momentul tău de focus</p>
+
+              <h2>Hai să facem puțin progres astăzi.</h2>
+
+              <p class="focus-description">
+                Alege materia, pornește sesiunea și ocupă-te doar de următorul pas.
+              </p>
+
+              <div class="focus-settings">
+                <label>
+                  <span>Materie</span>
+
+                  <select id="focusSubject">
+                    <option value="Matematică">Matematică</option>
+                    <option value="Limba română">Limba română</option>
+                    <option value="Informatică">Informatică</option>
+                    <option value="Biologie">Biologie</option>
+                    <option value="Franceză">Franceză</option>
+                    <option value="Engleză">Engleză</option>
+                  </select>
+                </label>
+
+                <label>
+                  <span>Durată</span>
+
+                  <select id="focusDuration">
+                    <option value="25">25 minute</option>
+                    <option value="45" selected>45 minute</option>
+                    <option value="60">60 minute</option>
+                    <option value="90">90 minute</option>
+                  </select>
+                </label>
+              </div>
+
+              <button class="start-focus-button" id="startFocusButton">
+                <span class="start-icon">▶</span>
+
+                <span>
+                  <strong>Start focus</strong>
+                  <small id="focusButtonSubtitle">
+                    Matematică · 45 minute
+                  </small>
+                </span>
+              </button>
+            </div>
+          </article>
+
+          <article class="soft-card today-summary-card">
+            <div class="card-heading-row">
+              <div>
+                <p class="card-kicker">Astăzi</p>
+                <h2>Pe scurt</h2>
+              </div>
+
+              <span class="date-pill" id="todayNumber">21</span>
+            </div>
+
+            <div class="summary-stat">
+              <div class="summary-stat-icon blush">☼</div>
+
+              <div>
+                <span>Ore la școală</span>
+                <strong id="schoolClassesCount">4 materii</strong>
+              </div>
+            </div>
+
+            <div class="summary-stat">
+              <div class="summary-stat-icon lilac">✓</div>
+
+              <div>
+                <span>Task-uri rămase</span>
+                <strong id="remainingTasksCount">3 task-uri</strong>
+              </div>
+            </div>
+
+            <div class="summary-stat">
+              <div class="summary-stat-icon peach">◷</div>
+
+              <div>
+                <span>Timp estimat</span>
+                <strong id="estimatedWorkTime">1h 50m</strong>
+              </div>
+            </div>
+
+            <div class="energy-box">
+              <div>
+                <span>Nivelul tău de energie</span>
+                <strong id="energyValue">7/10</strong>
+              </div>
+
+              <input
+                id="energySlider"
+                type="range"
+                min="1"
+                max="10"
+                value="7"
+                aria-label="Nivelul de energie"
+              >
+            </div>
+          </article>
+        </section>
+
+        <section class="content-grid">
+
+          <article class="soft-card schedule-card">
+            <div class="card-heading-row">
+              <div>
+                <p class="card-kicker">Program</p>
+                <h2>Ce urmează</h2>
+              </div>
+
+              <button class="text-button" data-open-page="calendar">
+                Vezi calendarul
+              </button>
+            </div>
+
+            <div class="timeline" id="todayTimeline">
+              <!-- Generated by JavaScript -->
+            </div>
+          </article>
+
+          <article class="soft-card tasks-card">
+            <div class="card-heading-row">
+              <div>
+                <p class="card-kicker">Task-uri</p>
+                <h2>Pentru astăzi</h2>
+              </div>
+
+              <button class="round-add-button" id="addTaskButton">
+                ＋
+              </button>
+            </div>
+
+            <div class="task-list" id="todayTaskList">
+              <!-- Generated by JavaScript -->
+            </div>
+          </article>
+        </section>
+
+        <section class="bottom-grid">
+          <article class="soft-card upcoming-card">
+            <div class="card-heading-row">
+              <div>
+                <p class="card-kicker">În curând</p>
+                <h2>Următoarele deadline-uri</h2>
+              </div>
+            </div>
+
+            <div class="upcoming-list" id="upcomingList">
+              <!-- Generated by JavaScript -->
+            </div>
+          </article>
+
+          <article class="quote-card">
+            <div class="quote-flower">✿</div>
+
+            <p>
+              Nu trebuie să faci totul astăzi. Trebuie doar să faci următorul pas.
+            </p>
+
+            <span>Itera reminder</span>
+          </article>
+        </section>
+      </section>
+
+      <!-- CALENDAR PAGE -->
+      <section class="page-section" id="calendarPage">
+        <div class="page-title-row">
+          <div>
+            <p class="eyebrow">Planificare</p>
+            <h1>Calendarul tău</h1>
+          </div>
+
+          <button class="primary-button" id="addCalendarEventButton">
+            ＋ Adaugă eveniment
+          </button>
+        </div>
+
+        <div class="calendar-layout">
+          <article class="soft-card calendar-card">
+            <div class="calendar-header">
+              <button
+                class="calendar-arrow"
+                id="previousMonthButton"
+                aria-label="Luna anterioară"
+              >
+                ‹
+              </button>
+
+              <h2 id="calendarMonthTitle">Iulie 2026</h2>
+
+              <button
+                class="calendar-arrow"
+                id="nextMonthButton"
+                aria-label="Luna următoare"
+              >
+                ›
+              </button>
+            </div>
+
+            <div class="weekdays">
+              <span>Lu</span>
+              <span>Ma</span>
+              <span>Mi</span>
+              <span>Jo</span>
+              <span>Vi</span>
+              <span>Sâ</span>
+              <span>Du</span>
+            </div>
+
+            <div class="calendar-grid" id="calendarGrid">
+              <!-- Generated by JavaScript -->
+            </div>
+          </article>
+
+          <aside class="soft-card selected-day-card">
+            <div>
+              <p class="card-kicker">Ziua selectată</p>
+              <h2 id="selectedDateTitle">21 iulie</h2>
+            </div>
+
+            <div id="selectedDateEvents" class="selected-date-events">
+              <!-- Generated by JavaScript -->
+            </div>
+
+            <button class="secondary-button full-width" id="addSelectedDateEvent">
+              ＋ Adaugă în această zi
+            </button>
+          </aside>
+        </div>
+      </section>
+
+      <!-- TASKS PAGE -->
+      <section class="page-section" id="tasksPage">
+        <div class="page-title-row">
+          <div>
+            <p class="eyebrow">Organizare</p>
+            <h1>Task-urile tale</h1>
+          </div>
+
+          <button class="primary-button" id="addTaskPageButton">
+            ＋ Adaugă task
+          </button>
+        </div>
+
+        <article class="soft-card large-list-card">
+          <div class="task-filters">
+            <button class="filter-button active">Toate</button>
+            <button class="filter-button">Astăzi</button>
+            <button class="filter-button">Homework</button>
+            <button class="filter-button">Teste</button>
+            <button class="filter-button">Finalizate</button>
+          </div>
+
+          <div class="task-list expanded-task-list" id="allTasksList">
+            <!-- Generated by JavaScript -->
+          </div>
+        </article>
+      </section>
+
+      <!-- PLACEHOLDER PAGES -->
+      <section class="page-section empty-page" id="subjectsPage">
+        <div class="empty-state">
+          <div class="empty-state-icon">◇</div>
+          <p class="card-kicker">Materii</p>
+          <h1>Pagina de materii urmează.</h1>
+          <p>
+            Aici vom adăuga cărți, lecții, resurse, teste și progres pentru fiecare materie.
+          </p>
+        </div>
+      </section>
+
+      <section class="page-section empty-page" id="gradesPage">
+        <div class="empty-state">
+          <div class="empty-state-icon">☆</div>
+          <p class="card-kicker">Note</p>
+          <h1>Pagina de note urmează.</h1>
+          <p>
+            Va calcula automat mediile și te va ajuta să vezi ce note mai ai nevoie.
+          </p>
+        </div>
+      </section>
+
+      <section class="page-section empty-page" id="universityPage">
+        <div class="empty-state">
+          <div class="empty-state-icon">⌁</div>
+          <p class="card-kicker">Admitere</p>
+          <h1>Planul pentru facultate.</h1>
+          <p>
+            Aici vom urmări examenele, deadline-urile, materialele și progresul pentru admitere.
+          </p>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- MOBILE NAVIGATION -->
+  <nav class="mobile-navigation" aria-label="Navigație mobilă">
+    <button class="mobile-nav-item active" data-page="home">
+      <span>⌂</span>
+      <small>Acasă</small>
+    </button>
+
+    <button class="mobile-nav-item" data-page="calendar">
+      <span>□</span>
+      <small>Calendar</small>
+    </button>
+
+    <button
+      class="mobile-main-add-button"
+      id="mobileQuickAddButton"
+      aria-label="Adaugă"
+    >
+      ＋
+    </button>
+
+    <button class="mobile-nav-item" data-page="tasks">
+      <span>✓</span>
+      <small>Task-uri</small>
+    </button>
+
+    <button class="mobile-nav-item" data-page="subjects">
+      <span>◇</span>
+      <small>Materii</small>
+    </button>
+  </nav>
+
+  <!-- QUICK ADD MENU -->
+  <div class="modal-overlay" id="quickAddModal" aria-hidden="true">
+    <div class="modal-card quick-add-card">
+      <div class="modal-header">
+        <div>
+          <p class="card-kicker">Adăugare rapidă</p>
+          <h2>Ce dorești să adaugi?</h2>
+        </div>
+
+        <button
+          class="modal-close-button"
+          data-close-modal="quickAddModal"
+          aria-label="Închide"
+        >
+          ×
+        </button>
+      </div>
+
+      <div class="quick-add-grid">
+        <button class="quick-add-option" data-quick-action="task">
+          <span class="quick-add-icon pink">✓</span>
+          <strong>Homework</strong>
+          <small>Task cu deadline</small>
+        </button>
+
+        <button class="quick-add-option" data-quick-action="event">
+          <span class="quick-add-icon lilac">□</span>
+          <strong>Eveniment</strong>
+          <small>Adaugă în calendar</small>
+        </button>
+
+        <button class="quick-add-option" data-quick-action="test">
+          <span class="quick-add-icon peach">☆</span>
+          <strong>Test</strong>
+          <small>Test sau simulare</small>
+        </button>
+
+        <button class="quick-add-option" data-quick-action="study">
+          <span class="quick-add-icon green">▶</span>
+          <strong>Sesiune</strong>
+          <small>Pornește focus</small>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- EVENT MODAL -->
+  <div class="modal-overlay" id="eventModal" aria-hidden="true">
+    <div class="modal-card">
+      <div class="modal-header">
+        <div>
+          <p class="card-kicker">Calendar</p>
+          <h2>Adaugă un eveniment</h2>
+        </div>
+
+        <button
+          class="modal-close-button"
+          data-close-modal="eventModal"
+          aria-label="Închide"
+        >
+          ×
+        </button>
+      </div>
+
+      <form id="eventForm" class="form-layout">
+        <label class="form-field full-field">
+          <span>Titlu</span>
+
+          <input
+            id="eventTitle"
+            type="text"
+            placeholder="Ex: Test la matematică"
+            required
+          >
+        </label>
+
+        <label class="form-field">
+          <span>Tip</span>
+
+          <select id="eventType">
+            <option value="school">Școală</option>
+            <option value="homework">Homework</option>
+            <option value="test">Test</option>
+            <option value="project">Proiect</option>
+            <option value="tutoring">Meditație</option>
+            <option value="personal">Personal</option>
+            <option value="university">Admitere</option>
+          </select>
+        </label>
+
+        <label class="form-field">
+          <span>Materie</span>
+
+          <select id="eventSubject">
+            <option value="">Fără materie</option>
+            <option value="Matematică">Matematică</option>
+            <option value="Limba română">Limba română</option>
+            <option value="Informatică">Informatică</option>
+            <option value="Biologie">Biologie</option>
+            <option value="Franceză">Franceză</option>
+            <option value="Engleză">Engleză</option>
+          </select>
+        </label>
+
+        <label class="form-field">
+          <span>Data</span>
+          <input id="eventDate" type="date" required>
+        </label>
+
+        <label class="form-field">
+          <span>Ora</span>
+          <input id="eventTime" type="time">
+        </label>
+
+        <label class="form-field">
+          <span>Durată estimată</span>
+
+          <select id="eventDuration">
+            <option value="15">15 minute</option>
+            <option value="30">30 minute</option>
+            <option value="45" selected>45 minute</option>
+            <option value="60">1 oră</option>
+            <option value="90">1h 30m</option>
+            <option value="120">2 ore</option>
+          </select>
+        </label>
+
+        <label class="form-field">
+          <span>Prioritate</span>
+
+          <select id="eventPriority">
+            <option value="low">Scăzută</option>
+            <option value="medium" selected>Medie</option>
+            <option value="high">Ridicată</option>
+          </select>
+        </label>
+
+        <label class="form-field full-field">
+          <span>Notițe</span>
+
+          <textarea
+            id="eventNotes"
+            rows="3"
+            placeholder="Detalii opționale..."
+          ></textarea>
+        </label>
+
+        <div class="form-actions full-field">
+          <button
+            type="button"
+            class="secondary-button"
+            data-close-modal="eventModal"
+          >
+            Anulează
+          </button>
+
+          <button type="submit" class="primary-button">
+            Salvează evenimentul
+          </button>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- FOCUS TIMER MODAL -->
+  <div class="modal-overlay" id="focusModal" aria-hidden="true">
+    <div class="modal-card focus-modal-card">
+      <button
+        class="modal-close-button focus-close"
+        id="closeFocusModal"
+        aria-label="Închide"
+      >
+        ×
+      </button>
+
+      <div class="focus-flower">✿</div>
+
+      <p class="card-kicker">Focus session</p>
+
+      <h2 id="focusModalSubject">Matematică</h2>
+
+      <div class="focus-timer" id="focusTimer">45:00</div>
+
+      <p class="focus-message" id="focusMessage">
+        Ai nevoie doar de următorul pas.
+      </p>
+
+      <div class="focus-controls">
+        <button class="secondary-button" id="resetFocusButton">
+          Resetează
+        </button>
+
+        <button class="primary-button" id="pauseFocusButton">
+          Pauză
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" id="toast">
+    <span id="toastIcon">✓</span>
+    <p id="toastMessage">Salvat cu succes.</p>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
