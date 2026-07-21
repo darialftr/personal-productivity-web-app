@@ -251,6 +251,19 @@ function updateCurrentDate() {
   const todayNumber = document.getElementById(
     "todayNumber"
   );
+  let profileName = "Daria";
+
+try {
+  const savedProfile = JSON.parse(
+    localStorage.getItem("itera_profile")
+  );
+
+  if (savedProfile?.firstName) {
+    profileName = savedProfile.firstName;
+  }
+} catch (error) {
+  console.error("Profilul nu a putut fi citit:", error);
+}
 
   const hour = now.getHours();
 
@@ -268,7 +281,7 @@ function updateCurrentDate() {
     `${capitalizeFirstLetter(weekdayNames[now.getDay()])}, ` +
     `${now.getDate()} ${monthNames[now.getMonth()].toLowerCase()}`;
 
-  greetingTitle.textContent = `${greeting}, Daria 🌷`;
+  greetingTitle.textContent = `${greeting}, ${profileName} 🌷`;
   todayNumber.textContent = String(now.getDate());
 }
 
