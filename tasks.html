@@ -1,14 +1,6 @@
 <!DOCTYPE html>
 <html lang="ro">
 <head>
-  <script>
-    const savedIteraProfile = localStorage.getItem("itera_profile");
-
-    if (!savedIteraProfile) {
-      window.location.replace("onboarding.html");
-    }
-  </script>
-
   <meta charset="UTF-8">
 
   <meta
@@ -71,24 +63,43 @@
           <span>Task-uri</span>
         </a>
 
-        <button class="nav-item disabled-navigation" type="button">
+        <button
+          class="nav-item disabled-navigation"
+          type="button"
+        >
           <span class="nav-icon">◇</span>
           <span>Materii</span>
         </button>
 
-        <button class="nav-item disabled-navigation" type="button">
+        <button
+          class="nav-item disabled-navigation"
+          type="button"
+        >
           <span class="nav-icon">☆</span>
           <span>Note</span>
+        </button>
+
+        <button
+          class="nav-item disabled-navigation"
+          type="button"
+        >
+          <span class="nav-icon">⌁</span>
+          <span>Admitere</span>
         </button>
       </nav>
 
       <div class="sidebar-footer">
         <div class="profile-miniature">
-          <div class="profile-avatar" id="sidebarAvatar">D</div>
+          <div
+            class="profile-avatar"
+            id="sidebarAvatar"
+          >
+            I
+          </div>
 
           <div>
-            <strong id="sidebarName">Daria</strong>
-            <span id="sidebarGrade">Clasa a XII-a</span>
+            <strong id="sidebarName">Itera</strong>
+            <span id="sidebarGrade">Se încarcă...</span>
           </div>
         </div>
       </div>
@@ -98,17 +109,22 @@
     <main class="main-content">
       <header class="page-header">
         <div>
-          <a class="mobile-back-link" href="index.html">
+          <a
+            class="mobile-back-link"
+            href="index.html"
+          >
             ← Acasă
           </a>
 
-          <p class="eyebrow">Organizare academică</p>
+          <p class="eyebrow">
+            Organizare academică
+          </p>
 
           <h1>Homework & Tasks</h1>
 
           <p class="page-description">
-            Păstrează într-un singur loc temele, proiectele, testele,
-            sesiunile de studiu și lucrurile importante.
+            Păstrează într-un singur loc temele, proiectele,
+            testele, sesiunile de studiu și lucrurile importante.
           </p>
         </div>
 
@@ -239,31 +255,61 @@
           <div class="section-heading">
             <div>
               <p class="card-kicker">Lista ta</p>
-              <h2 id="taskListTitle">Toate task-urile</h2>
+
+              <h2 id="taskListTitle">
+                Task-uri active
+              </h2>
             </div>
 
-            <select id="taskSortSelect" aria-label="Sortează task-urile">
-              <option value="deadline">După deadline</option>
-              <option value="priority">După prioritate</option>
-              <option value="progress">După progres</option>
-              <option value="created">Cele mai noi</option>
+            <select
+              id="taskSortSelect"
+              aria-label="Sortează task-urile"
+            >
+              <option value="deadline">
+                După deadline
+              </option>
+
+              <option value="priority">
+                După prioritate
+              </option>
+
+              <option value="progress">
+                După progres
+              </option>
+
+              <option value="created">
+                Cele mai noi
+              </option>
             </select>
           </div>
 
-          <div class="task-list" id="taskList">
-            <!-- Generat din JavaScript -->
+          <div
+            class="task-list"
+            id="taskList"
+          >
+            <p class="empty-message">
+              Se încarcă task-urile...
+            </p>
           </div>
         </div>
 
         <aside class="tasks-sidebar">
           <article class="progress-card">
-            <p class="card-kicker">Progres general</p>
+            <p class="card-kicker">
+              Progres general
+            </p>
 
             <h2>Săptămâna ta</h2>
 
-            <div class="progress-circle" id="progressCircle">
+            <div
+              class="progress-circle"
+              id="progressCircle"
+            >
               <div>
-                <strong id="weeklyProgressValue">0%</strong>
+                <strong id="weeklyProgressValue">
+                  0%
+                </strong>
+
                 <span>finalizat</span>
               </div>
             </div>
@@ -276,7 +322,9 @@
           <article class="focus-suggestion-card">
             <div class="suggestion-icon">✿</div>
 
-            <p class="card-kicker">Recomandare</p>
+            <p class="card-kicker">
+              Recomandare
+            </p>
 
             <h2 id="focusSuggestionTitle">
               Totul este sub control
@@ -300,7 +348,10 @@
   </div>
 
   <!-- MOBILE NAVIGATION -->
-  <nav class="mobile-navigation">
+  <nav
+    class="mobile-navigation"
+    aria-label="Navigație mobilă"
+  >
     <a href="index.html">
       <span>⌂</span>
       <small>Acasă</small>
@@ -325,7 +376,10 @@
       <small>Calendar</small>
     </a>
 
-    <a class="active" href="tasks.html">
+    <a
+      class="active"
+      href="tasks.html"
+    >
       <span>✓</span>
       <small>Task-uri</small>
     </a>
@@ -340,7 +394,10 @@
     <div class="modal-card">
       <div class="modal-header">
         <div>
-          <p class="card-kicker" id="taskModalKicker">
+          <p
+            class="card-kicker"
+            id="taskModalKicker"
+          >
             Task nou
           </p>
 
@@ -360,7 +417,10 @@
       </div>
 
       <form id="taskForm" novalidate>
-        <input type="hidden" id="editingTaskId">
+        <input
+          type="hidden"
+          id="editingTaskId"
+        >
 
         <div class="form-grid">
           <label class="form-field full-field">
@@ -392,7 +452,9 @@
             <span>Materie</span>
 
             <select id="taskSubject">
-              <option value="">Fără materie</option>
+              <option value="">
+                Fără materie
+              </option>
             </select>
           </label>
 
@@ -420,7 +482,14 @@
 
             <select id="taskPriority">
               <option value="low">Mică</option>
-              <option value="medium" selected>Medie</option>
+
+              <option
+                value="medium"
+                selected
+              >
+                Medie
+              </option>
+
               <option value="high">Mare</option>
             </select>
           </label>
@@ -429,11 +498,28 @@
             <span>Dificultate</span>
 
             <select id="taskDifficulty">
-              <option value="very-easy">Foarte ușor</option>
-              <option value="easy">Ușor</option>
-              <option value="medium" selected>Mediu</option>
-              <option value="hard">Greu</option>
-              <option value="very-hard">Foarte greu</option>
+              <option value="very-easy">
+                Foarte ușor
+              </option>
+
+              <option value="easy">
+                Ușor
+              </option>
+
+              <option
+                value="medium"
+                selected
+              >
+                Mediu
+              </option>
+
+              <option value="hard">
+                Greu
+              </option>
+
+              <option value="very-hard">
+                Foarte greu
+              </option>
             </select>
           </label>
 
@@ -441,14 +527,40 @@
             <span>Timp estimat</span>
 
             <select id="taskEstimatedMinutes">
-              <option value="15">15 minute</option>
-              <option value="30">30 minute</option>
-              <option value="45">45 minute</option>
-              <option value="60" selected>1 oră</option>
-              <option value="90">1 oră și 30 minute</option>
-              <option value="120">2 ore</option>
-              <option value="180">3 ore</option>
-              <option value="240">4 ore</option>
+              <option value="15">
+                15 minute
+              </option>
+
+              <option value="30">
+                30 minute
+              </option>
+
+              <option value="45">
+                45 minute
+              </option>
+
+              <option
+                value="60"
+                selected
+              >
+                1 oră
+              </option>
+
+              <option value="90">
+                1 oră și 30 minute
+              </option>
+
+              <option value="120">
+                2 ore
+              </option>
+
+              <option value="180">
+                3 ore
+              </option>
+
+              <option value="240">
+                4 ore
+              </option>
             </select>
           </label>
 
@@ -465,7 +577,9 @@
                 value="0"
               >
 
-              <strong id="taskProgressValue">0%</strong>
+              <strong id="taskProgressValue">
+                0%
+              </strong>
             </div>
           </label>
 
@@ -481,7 +595,10 @@
           </label>
         </div>
 
-        <p class="form-error" id="taskFormError"></p>
+        <p
+          class="form-error"
+          id="taskFormError"
+        ></p>
 
         <div class="modal-actions">
           <button
@@ -549,14 +666,20 @@
     </div>
   </div>
 
-  <div class="toast" id="toast">
+  <div
+    class="toast"
+    id="toast"
+  >
     <span id="toastIcon">✓</span>
-    <p id="toastMessage">Task-ul a fost salvat.</p>
+
+    <p id="toastMessage">
+      Task-ul a fost salvat.
+    </p>
   </div>
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="supabase-config.js"></script>
+  <script src="supabase-config.js"></script>
   <script src="auth-guard.js"></script>
-<script src="tasks.js"></script>
+  <script src="tasks.js"></script>
 </body>
 </html>
