@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+  <meta charset="UTF-8">
+
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+  >
+
+  <title>Autentificare — Itera</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+  <link
+    href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Manrope:wght@400;500;600;700;800&display=swap"
+    rel="stylesheet"
+  >
+
+  <link rel="stylesheet" href="auth.css">
+</head>
+
+<body>
+  <main class="auth-page">
+    <section class="auth-brand-panel">
+      <div class="brand">
+        <div class="brand-mark">i</div>
+
+        <div>
+          <p class="brand-name">Itera</p>
+          <p class="brand-subtitle">study beautifully</p>
+        </div>
+      </div>
+
+      <div class="brand-message">
+        <p class="eyebrow">Spațiul tău personal</p>
+
+        <h1>
+          Organizează școala fără să te simți copleșită.
+        </h1>
+
+        <p>
+          Task-uri, calendar, orar și progres, într-un singur loc.
+        </p>
+      </div>
+    </section>
+
+    <section class="auth-form-panel">
+      <div class="auth-card">
+        <div class="auth-tabs">
+          <button
+            type="button"
+            class="auth-tab active"
+            id="loginTabButton"
+          >
+            Autentificare
+          </button>
+
+          <button
+            type="button"
+            class="auth-tab"
+            id="registerTabButton"
+          >
+            Creează cont
+          </button>
+        </div>
+
+        <div class="auth-heading">
+          <p class="eyebrow" id="authEyebrow">
+            Bine ai revenit
+          </p>
+
+          <h2 id="authTitle">
+            Intră în contul tău
+          </h2>
+
+          <p id="authDescription">
+            Continuă de unde ai rămas.
+          </p>
+        </div>
+
+        <form id="authForm" novalidate>
+          <label
+            class="form-field hidden"
+            id="firstNameField"
+          >
+            <span>Prenume</span>
+
+            <input
+              id="firstNameInput"
+              type="text"
+              placeholder="Ex: Daria"
+              maxlength="50"
+              autocomplete="given-name"
+            >
+          </label>
+
+          <label class="form-field">
+            <span>Email</span>
+
+            <input
+              id="emailInput"
+              type="email"
+              placeholder="numele@exemplu.ro"
+              autocomplete="email"
+              required
+            >
+          </label>
+
+          <label class="form-field">
+            <span>Parolă</span>
+
+            <div class="password-wrapper">
+              <input
+                id="passwordInput"
+                type="password"
+                placeholder="Minimum 8 caractere"
+                minlength="8"
+                autocomplete="current-password"
+                required
+              >
+
+              <button
+                type="button"
+                class="password-toggle"
+                id="passwordToggleButton"
+                aria-label="Afișează parola"
+              >
+                👁
+              </button>
+            </div>
+          </label>
+
+          <p class="form-message" id="formMessage"></p>
+
+          <button
+            type="submit"
+            class="primary-button"
+            id="authSubmitButton"
+          >
+            Autentificare
+          </button>
+        </form>
+
+        <button
+          type="button"
+          class="forgot-password-button"
+          id="forgotPasswordButton"
+        >
+          Ai uitat parola?
+        </button>
+      </div>
+    </section>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabase-config.js"></script>
+  <script src="auth.js"></script>
+</body>
+</html>
