@@ -203,17 +203,12 @@ async function registerUser(
   password,
   firstName
 ) {
-  const redirectUrl =
-  "https://darialftr.github.io/personal-productivity-web-app/index.html";
-
   const { data, error } =
     await supabaseClient.auth.signUp({
       email,
       password,
 
       options: {
-        emailRedirectTo: redirectUrl,
-
         data: {
           first_name: firstName
         }
@@ -236,7 +231,6 @@ async function registerUser(
 
   authForm.reset();
 }
-
 async function loginUser(email, password) {
   const { error } =
     await supabaseClient.auth.signInWithPassword({
