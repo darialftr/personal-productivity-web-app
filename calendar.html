@@ -1,0 +1,658 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+  <meta charset="UTF-8">
+
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+  >
+
+  <meta
+    name="description"
+    content="Calendarul academic Itera pentru task-uri, teste, proiecte și evenimente."
+  >
+
+  <meta name="theme-color" content="#ee9fbd">
+
+  <title>Calendar — Itera</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+
+  <link
+    href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Manrope:wght@400;500;600;700;800&display=swap"
+    rel="stylesheet"
+  >
+
+  <link rel="stylesheet" href="calendar.css">
+</head>
+
+<body>
+  <div class="app-layout">
+
+    <!-- SIDEBAR -->
+    <aside class="sidebar">
+      <a class="brand" href="index.html">
+        <div class="brand-mark">i</div>
+
+        <div>
+          <p class="brand-name">Itera</p>
+          <p class="brand-subtitle">study beautifully</p>
+        </div>
+      </a>
+
+      <nav class="sidebar-navigation">
+        <a class="nav-item" href="index.html">
+          <span class="nav-icon">⌂</span>
+          <span>Acasă</span>
+        </a>
+
+        <a class="nav-item" href="schedule.html">
+          <span class="nav-icon">▦</span>
+          <span>Orar</span>
+        </a>
+
+        <a class="nav-item active" href="calendar.html">
+          <span class="nav-icon">□</span>
+          <span>Calendar</span>
+        </a>
+
+        <a class="nav-item" href="tasks.html">
+          <span class="nav-icon">✓</span>
+          <span>Task-uri</span>
+        </a>
+
+        <a class="nav-item" href="subjects.html">
+          <span class="nav-icon">◇</span>
+          <span>Materii</span>
+        </a>
+
+        <a class="nav-item" href="grades.html">
+          <span class="nav-icon">☆</span>
+          <span>Note</span>
+        </a>
+
+        <a class="nav-item" href="admission.html">
+          <span class="nav-icon">⌁</span>
+          <span>Admitere</span>
+        </a>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="profile-miniature">
+          <div
+            class="profile-avatar"
+            id="sidebarAvatar"
+          >
+            I
+          </div>
+
+          <div>
+            <strong id="sidebarName">Itera</strong>
+            <span id="sidebarGrade">
+              Se încarcă...
+            </span>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- MAIN CONTENT -->
+    <main class="main-content">
+
+      <header class="page-header">
+        <div>
+          <a
+            class="mobile-back-link"
+            href="index.html"
+          >
+            ← Acasă
+          </a>
+
+          <p class="eyebrow">
+            Planificare academică
+          </p>
+
+          <h1>Calendarul meu</h1>
+
+          <p class="page-description">
+            Vezi într-un singur loc testele, temele,
+            proiectele și evenimentele importante.
+          </p>
+        </div>
+
+        <button
+          type="button"
+          class="primary-button"
+          id="addCalendarEventButton"
+        >
+          <span>＋</span>
+          Adaugă eveniment
+        </button>
+      </header>
+
+      <!-- SUMMARY -->
+      <section class="summary-grid">
+        <article class="summary-card">
+          <div class="summary-icon pink">
+            □
+          </div>
+
+          <div>
+            <span>Luna aceasta</span>
+            <strong id="monthlyEventsCount">
+              0
+            </strong>
+          </div>
+        </article>
+
+        <article class="summary-card">
+          <div class="summary-icon lilac">
+            ◷
+          </div>
+
+          <div>
+            <span>Săptămâna aceasta</span>
+            <strong id="weeklyEventsCount">
+              0
+            </strong>
+          </div>
+        </article>
+
+        <article class="summary-card">
+          <div class="summary-icon peach">
+            !
+          </div>
+
+          <div>
+            <span>Teste apropiate</span>
+            <strong id="upcomingTestsCount">
+              0
+            </strong>
+          </div>
+        </article>
+
+        <article class="summary-card">
+          <div class="summary-icon green">
+            ♡
+          </div>
+
+          <div>
+            <span>Astăzi</span>
+            <strong id="todayEventsCount">
+              0
+            </strong>
+          </div>
+        </article>
+      </section>
+
+      <!-- CALENDAR TOOLBAR -->
+      <section class="calendar-toolbar">
+        <div class="calendar-navigation">
+          <button
+            type="button"
+            class="icon-button"
+            id="previousMonthButton"
+            aria-label="Luna precedentă"
+          >
+            ‹
+          </button>
+
+          <div>
+            <p class="card-kicker">
+              Calendar lunar
+            </p>
+
+            <h2 id="calendarMonthTitle">
+              Iulie 2026
+            </h2>
+          </div>
+
+          <button
+            type="button"
+            class="icon-button"
+            id="nextMonthButton"
+            aria-label="Luna următoare"
+          >
+            ›
+          </button>
+        </div>
+
+        <div class="toolbar-actions">
+          <button
+            type="button"
+            class="secondary-button"
+            id="todayButton"
+          >
+            Astăzi
+          </button>
+
+          <select
+            id="calendarTypeFilter"
+            aria-label="Filtrează evenimentele"
+          >
+            <option value="all">
+              Toate
+            </option>
+
+            <option value="test">
+              Teste
+            </option>
+
+            <option value="homework">
+              Teme
+            </option>
+
+            <option value="project">
+              Proiecte
+            </option>
+
+            <option value="study">
+              Studiu
+            </option>
+
+            <option value="personal">
+              Personale
+            </option>
+
+            <option value="event">
+              Evenimente
+            </option>
+          </select>
+        </div>
+      </section>
+
+      <!-- CALENDAR -->
+      <section class="calendar-card">
+        <div class="calendar-weekdays">
+          <span>Luni</span>
+          <span>Marți</span>
+          <span>Miercuri</span>
+          <span>Joi</span>
+          <span>Vineri</span>
+          <span>Sâmbătă</span>
+          <span>Duminică</span>
+        </div>
+
+        <div
+          class="calendar-grid"
+          id="calendarGrid"
+        >
+          <p class="calendar-loading">
+            Se încarcă calendarul...
+          </p>
+        </div>
+      </section>
+
+      <!-- MOBILE UPCOMING -->
+      <section class="upcoming-card">
+        <div class="section-heading">
+          <div>
+            <p class="card-kicker">
+              În perioada următoare
+            </p>
+
+            <h2>Evenimente apropiate</h2>
+          </div>
+        </div>
+
+        <div
+          class="upcoming-list"
+          id="upcomingEventsList"
+        >
+          <p class="empty-message">
+            Nu ai evenimente apropiate.
+          </p>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- MOBILE NAV -->
+  <nav
+    class="mobile-navigation"
+    aria-label="Navigație mobilă"
+  >
+    <a href="index.html">
+      <span>⌂</span>
+      <small>Acasă</small>
+    </a>
+
+    <a href="schedule.html">
+      <span>▦</span>
+      <small>Orar</small>
+    </a>
+
+    <button
+      type="button"
+      class="mobile-main-add-button"
+      id="mobileAddCalendarButton"
+      aria-label="Adaugă eveniment"
+    >
+      ＋
+    </button>
+
+    <a
+      class="active"
+      href="calendar.html"
+    >
+      <span>□</span>
+      <small>Calendar</small>
+    </a>
+
+    <a href="tasks.html">
+      <span>✓</span>
+      <small>Task-uri</small>
+    </a>
+  </nav>
+
+  <!-- EVENT MODAL -->
+  <div
+    class="modal-overlay"
+    id="calendarEventModal"
+    aria-hidden="true"
+  >
+    <div class="modal-card">
+      <div class="modal-header">
+        <div>
+          <p
+            class="card-kicker"
+            id="eventModalKicker"
+          >
+            Eveniment nou
+          </p>
+
+          <h2 id="eventModalTitle">
+            Adaugă în calendar
+          </h2>
+        </div>
+
+        <button
+          type="button"
+          class="modal-close-button"
+          id="closeEventModalButton"
+          aria-label="Închide"
+        >
+          ×
+        </button>
+      </div>
+
+      <form id="calendarEventForm" novalidate>
+        <input
+          type="hidden"
+          id="editingEventId"
+        >
+
+        <div class="form-grid">
+          <label class="form-field full-field">
+            <span>Titlu</span>
+
+            <input
+              id="eventTitle"
+              type="text"
+              maxlength="120"
+              placeholder="Ex: Test la matematică"
+              required
+            >
+          </label>
+
+          <label class="form-field">
+            <span>Tip</span>
+
+            <select id="eventType">
+              <option value="event">
+                Eveniment
+              </option>
+
+              <option value="test">
+                Test
+              </option>
+
+              <option value="homework">
+                Temă
+              </option>
+
+              <option value="project">
+                Proiect
+              </option>
+
+              <option value="study">
+                Studiu
+              </option>
+
+              <option value="personal">
+                Personal
+              </option>
+
+              <option value="reminder">
+                Reminder
+              </option>
+            </select>
+          </label>
+
+          <label class="form-field">
+            <span>Materie</span>
+
+            <select id="eventSubject">
+              <option value="">
+                Fără materie
+              </option>
+            </select>
+          </label>
+
+          <label class="form-field">
+            <span>Data</span>
+
+            <input
+              id="eventDate"
+              type="date"
+              required
+            >
+          </label>
+
+          <label class="form-field">
+            <span>Culoare</span>
+
+            <select id="eventColor">
+              <option value="pink">
+                Roz
+              </option>
+
+              <option value="lilac">
+                Mov pastel
+              </option>
+
+              <option value="blue">
+                Albastru pastel
+              </option>
+
+              <option value="green">
+                Verde pastel
+              </option>
+
+              <option value="peach">
+                Piersică
+              </option>
+
+              <option value="yellow">
+                Galben pastel
+              </option>
+            </select>
+          </label>
+
+          <label class="form-field">
+            <span>Ora de început</span>
+
+            <input
+              id="eventStartTime"
+              type="time"
+            >
+          </label>
+
+          <label class="form-field">
+            <span>Ora de final</span>
+
+            <input
+              id="eventEndTime"
+              type="time"
+            >
+          </label>
+
+          <label class="form-field full-field">
+            <span>Locație</span>
+
+            <input
+              id="eventLocation"
+              type="text"
+              maxlength="100"
+              placeholder="Opțional"
+            >
+          </label>
+
+          <label class="form-field full-field">
+            <span>Notițe</span>
+
+            <textarea
+              id="eventNotes"
+              rows="4"
+              maxlength="500"
+              placeholder="Detalii, capitole, materiale sau alte informații..."
+            ></textarea>
+          </label>
+        </div>
+
+        <p
+          class="form-error"
+          id="eventFormError"
+        ></p>
+
+        <div class="modal-actions">
+          <button
+            type="button"
+            class="danger-button hidden"
+            id="deleteEventButton"
+          >
+            Șterge
+          </button>
+
+          <div class="modal-actions-right">
+            <button
+              type="button"
+              class="secondary-button"
+              id="cancelEventButton"
+            >
+              Anulează
+            </button>
+
+            <button
+              type="submit"
+              class="primary-button"
+              id="saveEventButton"
+            >
+              Salvează
+            </button>
+          </div>
+        </div>
+      </form>
+    </div>
+  </div>
+
+  <!-- DAY DETAILS MODAL -->
+  <div
+    class="modal-overlay"
+    id="dayDetailsModal"
+    aria-hidden="true"
+  >
+    <div class="modal-card day-details-card">
+      <div class="modal-header">
+        <div>
+          <p class="card-kicker">
+            Programul zilei
+          </p>
+
+          <h2 id="dayDetailsTitle">
+            22 iulie
+          </h2>
+        </div>
+
+        <button
+          type="button"
+          class="modal-close-button"
+          id="closeDayDetailsButton"
+          aria-label="Închide"
+        >
+          ×
+        </button>
+      </div>
+
+      <div
+        class="day-details-list"
+        id="dayDetailsList"
+      ></div>
+
+      <button
+        type="button"
+        class="primary-button full-width"
+        id="addEventForSelectedDayButton"
+      >
+        ＋ Adaugă în această zi
+      </button>
+    </div>
+  </div>
+
+  <!-- DELETE CONFIRMATION -->
+  <div
+    class="modal-overlay"
+    id="deleteEventConfirmationModal"
+    aria-hidden="true"
+  >
+    <div class="modal-card confirmation-card">
+      <div class="confirmation-icon">
+        !
+      </div>
+
+      <h2>Ștergi acest eveniment?</h2>
+
+      <p>
+        Evenimentul va fi eliminat definitiv din calendar.
+      </p>
+
+      <div class="confirmation-actions">
+        <button
+          type="button"
+          class="secondary-button"
+          id="cancelEventDeletionButton"
+        >
+          Păstrează evenimentul
+        </button>
+
+        <button
+          type="button"
+          class="danger-filled-button"
+          id="confirmEventDeletionButton"
+        >
+          Da, șterge
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- TOAST -->
+  <div
+    class="toast"
+    id="toast"
+  >
+    <span id="toastIcon">✓</span>
+
+    <p id="toastMessage">
+      Evenimentul a fost salvat.
+    </p>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabase-config.js"></script>
+  <script src="auth-guard.js"></script>
+  <script src="calendar.js"></script>
+</body>
+</html>
