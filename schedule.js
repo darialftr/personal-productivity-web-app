@@ -1,7 +1,6 @@
 "use strict";
 
 const SCHEDULE_STORAGE_KEY = "itera_schedule";
-const PROFILE_STORAGE_KEY = "itera_profile";
 
 const days = [
   {
@@ -56,8 +55,10 @@ const typeLabels = {
   other: "Altă activitate"
 };
 
-let profile = loadProfile();
-let scheduleItems = loadSchedule();
+let currentUser = null;
+let profile = null;
+let subjects = [];
+let scheduleItems = [];
 
 let selectedMobileDay = getCurrentDayId();
 let selectedActionItemId = null;
@@ -65,32 +66,92 @@ let toastTimeout = null;
 
 initializePage();
 
-function initializePage() {
-  renderProfile();
-  populateSubjectSelect();
-  initializeButtons();
-  initializeMobileDaySelector();
-  renderEverything();
+async function initializePage() {
+  try {
+    const session = await getCurrentSession();
+
+    if (!session) {
+      window.location.replace("auth.html");
+      return;
+    }
+
+    currentUser = session.user;
+
+    await Promise.all([
+      loadProfile(),
+      loadSubjects()
+    ]);
+
+    scheduleItems = loadSchedule();
+
+    renderProfile();
+    populateSubjectSelect();
+    initializeButtons();
+    initializeMobileDaySelector();
+    renderEverything();
+  } catch (error) {
+    console.error(
+      "Pagina de orar nu a putut fi inițializată:",
+      error
+    );
+
+    alert(
+      "Orarul nu a putut fi încărcat. Verifică consola."
+    );
+  }
+}
+
+/* AUTH */
+
+async function getCurrentSession() {
+  const {
+    data: { session },
+    error
+  } = await supabaseClient.auth.getSession();
+
+  if (error) {
+    throw error;
+  }
+
+  return session;
 }
 
 /* PROFILE */
 
-function loadProfile() {
-  try {
-    const savedProfile = JSON.parse(
-      localStorage.getItem(PROFILE_STORAGE_KEY)
-    );
+async function loadProfile() {
+  const { data, error } = await supabaseClient
+    .from("profiles")
+    .select(
+      `
+        id,
+        first_name,
+        grade,
+        university,
+        onboarding_completed
+      `
+    )
+    .eq("id", currentUser.id)
+    .maybeSingle();
 
-    return savedProfile || {};
-  } catch (error) {
-    console.error("Profilul nu a putut fi citit:", error);
-    return {};
+  if (error) {
+    throw error;
   }
+
+  profile = data || {
+    id: currentUser.id,
+    first_name:
+      currentUser.user_metadata?.first_name || "Itera",
+    grade: ""
+  };
 }
 
 function renderProfile() {
-  const firstName = profile.firstName || "Daria";
-  const gradeLevel = profile.gradeLevel || "12";
+  const firstName =
+    profile?.first_name ||
+    currentUser?.user_metadata?.first_name ||
+    "Itera";
+
+  const gradeLevel = profile?.grade || "";
 
   document.getElementById(
     "sidebarName"
@@ -104,9 +165,9 @@ function renderProfile() {
   document.getElementById(
     "sidebarGrade"
   ).textContent =
-    gradeLevel === "other"
-      ? "Elev"
-      : `Clasa a ${toRomanNumeral(Number(gradeLevel))}-a`;
+    gradeLevel && gradeLevel !== "other"
+      ? `Clasa a ${toRomanNumeral(Number(gradeLevel))}-a`
+      : "Elev";
 }
 
 function toRomanNumeral(number) {
@@ -122,20 +183,50 @@ function toRomanNumeral(number) {
 
 /* SUBJECTS */
 
+async function loadSubjects() {
+  const { data, error } = await supabaseClient
+    .from("subjects")
+    .select(
+      `
+        id,
+        name,
+        color,
+        icon,
+        position
+      `
+    )
+    .eq("user_id", currentUser.id)
+    .eq("is_active", true)
+    .order("position", {
+      ascending: true
+    })
+    .order("name", {
+      ascending: true
+    });
+
+  if (error) {
+    throw error;
+  }
+
+  subjects = data || [];
+}
+
 function populateSubjectSelect() {
   const select = document.getElementById(
     "scheduleSubject"
   );
 
-  const subjects = Array.isArray(profile.subjects)
-    ? profile.subjects
-    : [];
+  select.innerHTML = `
+    <option value="">
+      Fără materie
+    </option>
+  `;
 
   subjects.forEach((subject) => {
     const option = document.createElement("option");
 
-    option.value = subject;
-    option.textContent = subject;
+    option.value = subject.name;
+    option.textContent = subject.name;
 
     select.appendChild(option);
   });
@@ -174,10 +265,6 @@ function saveSchedule() {
 }
 
 function createStarterSchedule() {
-  const subjects = Array.isArray(profile.subjects)
-    ? profile.subjects
-    : [];
-
   if (subjects.length === 0) {
     return [];
   }
@@ -203,11 +290,11 @@ function createStarterSchedule() {
   ];
 
   subjects.slice(0, 6).forEach((subject, index) => {
-    starterItems.push({
-      id: createId(),
-      title: subject,
-      type: "class",
-      subject,
+  starterItems.push({
+    id: createId(),
+    title: subject.name,
+    type: "class",
+    subject: subject.name,
       day: starterDays[index],
       startTime: starterTimes[index][0],
       endTime: starterTimes[index][1],
