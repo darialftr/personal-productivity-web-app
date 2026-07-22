@@ -86,11 +86,14 @@ async function initializeCalendarPage() {
     currentUser = session.user;
 
     await Promise.all([
-      loadProfile(),
-      loadSubjects(),
-      loadCalendarEvents(),
-      loadTasks()
-    ]);
+  loadProfile(),
+  loadSubjects()
+]);
+
+await Promise.all([
+  loadCalendarEvents(),
+  loadTasks()
+]);
 
     renderProfile();
     populateSubjectSelect();
@@ -260,38 +263,32 @@ function populateSubjectSelect() {
 async function loadCalendarEvents() {
   const { data, error } = await supabaseClient
     .from("calendar_events")
-    .select(
-      `
-        id,
-        user_id,
-        subject_id,
-        title,
-        event_type,
-        event_date,
-        start_time,
-        end_time,
-        color,
-        location,
-        notes,
-        created_at,
-        updated_at,
-        subjects (
-          id,
-          name,
-          color,
-          icon
-        )
-      `
-    )
+    .select(`
+      id,
+      user_id,
+      subject_id,
+      title,
+      event_type,
+      event_date,
+      start_time,
+      end_time,
+      color,
+      location,
+      notes,
+      created_at,
+      updated_at
+    `)
     .eq("user_id", currentUser.id)
     .order("event_date", {
-      ascending: true
-    })
-    .order("start_time", {
       ascending: true
     });
 
   if (error) {
+    console.error(
+      "Eroare calendar_events:",
+      error
+    );
+
     throw error;
   }
 
@@ -301,6 +298,11 @@ async function loadCalendarEvents() {
 }
 
 function normalizeCalendarEvent(event) {
+  const subject = subjects.find(
+    (currentSubject) =>
+      currentSubject.id === event.subject_id
+  );
+
   return {
     id: event.id,
     source: "event",
@@ -309,7 +311,7 @@ function normalizeCalendarEvent(event) {
     type: event.event_type || "event",
 
     subjectId: event.subject_id,
-    subject: event.subjects?.name || "",
+    subject: subject?.name || "",
 
     date: event.event_date,
 
@@ -323,6 +325,7 @@ function normalizeCalendarEvent(event) {
 
     color:
       event.color ||
+      subject?.color ||
       typeColors[event.event_type] ||
       "pink",
 
@@ -339,67 +342,71 @@ function normalizeCalendarEvent(event) {
 async function loadTasks() {
   const { data, error } = await supabaseClient
     .from("tasks")
-    .select(
-      `
-        id,
-        user_id,
-        subject_id,
-        title,
-        task_type,
-        deadline_date,
-        deadline_time,
-        priority,
-        difficulty,
-        estimated_minutes,
-        progress,
-        notes,
-        completed,
-        subjects (
-          id,
-          name,
-          color,
-          icon
-        )
-      `
-    )
+    .select(`
+      id,
+      user_id,
+      subject_id,
+      title,
+      task_type,
+      deadline_date,
+      deadline_time,
+      priority,
+      difficulty,
+      estimated_minutes,
+      progress,
+      notes,
+      completed
+    `)
     .eq("user_id", currentUser.id)
     .not("deadline_date", "is", null);
 
   if (error) {
+    console.error(
+      "Eroare tasks pentru calendar:",
+      error
+    );
+
     throw error;
   }
 
-  tasks = (data || []).map((task) => ({
-    id: `task:${task.id}`,
-    sourceId: task.id,
-    source: "task",
+  tasks = (data || []).map((task) => {
+    const subject = subjects.find(
+      (currentSubject) =>
+        currentSubject.id === task.subject_id
+    );
 
-    title: task.title,
-    type: task.task_type || "homework",
+    return {
+      id: `task:${task.id}`,
+      sourceId: task.id,
+      source: "task",
 
-    subjectId: task.subject_id,
-    subject: task.subjects?.name || "",
+      title: task.title,
+      type: task.task_type || "homework",
 
-    date: task.deadline_date,
+      subjectId: task.subject_id,
+      subject: subject?.name || "",
 
-    startTime: normalizeTime(
-      task.deadline_time
-    ),
+      date: task.deadline_date,
 
-    endTime: "",
+      startTime: normalizeTime(
+        task.deadline_time
+      ),
 
-    color:
-      task.subjects?.color ||
-      typeColors[task.task_type] ||
-      "lilac",
+      endTime: "",
 
-    location: "",
-    notes: task.notes || "",
+      color:
+        subject?.color ||
+        typeColors[task.task_type] ||
+        "lilac",
 
-    priority: task.priority || "medium",
-    progress: Number(task.progress) || 0,
-    completed: Boolean(task.completed)
-  }));
+      location: "",
+      notes: task.notes || "",
+
+      priority: task.priority || "medium",
+      progress: Number(task.progress) || 0,
+      completed: Boolean(task.completed)
+    };
+  });
 }
 
 /* BUTTONS */
