@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Materie | Itera</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Playfair+Display:wght@600;700&display=swap"
+    rel="stylesheet"
+  />
+
+  <link rel="stylesheet" href="subject.css" />
+</head>
+
+<body>
+  <div class="app-layout">
+    <aside class="sidebar">
+      <a href="index.html" class="brand" aria-label="Itera">
+        <span class="brand-mark">I</span>
+        <span class="brand-name">Itera</span>
+      </a>
+
+      <nav class="sidebar-nav" aria-label="Navigare principală">
+        <a href="index.html" class="nav-item">
+          <span class="nav-icon">⌂</span>
+          <span>Acasă</span>
+        </a>
+
+        <a href="schedule.html" class="nav-item">
+          <span class="nav-icon">▦</span>
+          <span>Orar</span>
+        </a>
+
+        <a href="tasks.html" class="nav-item">
+          <span class="nav-icon">✓</span>
+          <span>Task-uri</span>
+        </a>
+
+        <a href="calendar.html" class="nav-item">
+          <span class="nav-icon">□</span>
+          <span>Calendar</span>
+        </a>
+
+        <a href="subjects.html" class="nav-item active">
+          <span class="nav-icon">◫</span>
+          <span>Materii</span>
+        </a>
+
+        <button class="nav-item nav-item-disabled" type="button">
+          <span class="nav-icon">★</span>
+          <span>Note</span>
+          <span class="coming-soon">Curând</span>
+        </button>
+
+        <button class="nav-item nav-item-disabled" type="button">
+          <span class="nav-icon">◎</span>
+          <span>Admitere</span>
+          <span class="coming-soon">Curând</span>
+        </button>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="user-card">
+          <div class="user-avatar" id="userAvatar">U</div>
+          <div class="user-details">
+            <strong id="userName">Utilizator</strong>
+            <span>Contul meu</span>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <main class="main-content">
+      <section class="state-card" id="loadingState">
+        <div class="loader"></div>
+        <div>
+          <strong>Încărcăm materia</strong>
+          <p>Va dura doar o clipă.</p>
+        </div>
+      </section>
+
+      <section class="state-card error-state hidden" id="errorState">
+        <div class="error-icon">!</div>
+        <div>
+          <strong>Nu am putut încărca materia</strong>
+          <p id="errorMessage">Încearcă din nou.</p>
+          <a class="secondary-button" href="subjects.html">Înapoi la materii</a>
+        </div>
+      </section>
+
+      <div class="subject-page hidden" id="subjectPage">
+        <header class="subject-header">
+          <div>
+            <a href="subjects.html" class="back-link">← Materii</a>
+
+            <div class="subject-heading">
+              <div class="subject-icon" id="subjectIcon">M</div>
+              <div>
+                <h1 id="subjectName">Materie</h1>
+                <p id="subjectTeacher" class="subject-teacher hidden"></p>
+              </div>
+            </div>
+          </div>
+
+          <button class="ghost-button" id="editSubjectButton" type="button">
+            ⋯
+          </button>
+        </header>
+
+        <section class="overview-strip">
+          <div class="overview-item">
+            <span>Media</span>
+            <strong id="subjectAverage">—</strong>
+          </div>
+
+          <div class="overview-divider"></div>
+
+          <div class="overview-item">
+            <span>Timp studiat</span>
+            <strong id="subjectStudyTime">0 min</strong>
+          </div>
+
+          <div class="overview-divider"></div>
+
+          <div class="overview-item">
+            <span>Task-uri active</span>
+            <strong id="activeTasksCount">0</strong>
+          </div>
+
+          <div class="overview-divider"></div>
+
+          <div class="overview-item">
+            <span>Următorul test</span>
+            <strong id="nextTestValue">—</strong>
+          </div>
+        </section>
+
+        <div class="content-grid">
+          <section class="panel grades-panel">
+            <div class="panel-header">
+              <div>
+                <p class="panel-kicker">Evaluare</p>
+                <h2>Note</h2>
+              </div>
+
+              <button class="small-primary-button" id="openGradeModalButton" type="button">
+                + Adaugă
+              </button>
+            </div>
+
+            <div class="grades-summary">
+              <strong id="largeAverage">—</strong>
+              <span>media curentă</span>
+            </div>
+
+            <div class="grades-list" id="gradesList"></div>
+
+            <p class="empty-copy hidden" id="gradesEmpty">
+              Nu ai adăugat încă nicio notă.
+            </p>
+          </section>
+
+          <section class="panel study-panel">
+            <div class="panel-header">
+              <div>
+                <p class="panel-kicker">Concentrare</p>
+                <h2>Studiază</h2>
+              </div>
+            </div>
+
+            <div class="timer-display" id="timerDisplay">00:00:00</div>
+            <p class="timer-caption" id="timerCaption">
+              Pornește o sesiune pentru această materie.
+            </p>
+
+            <div class="timer-actions">
+              <button class="timer-button" id="timerButton" type="button">
+                ▶ Începe sesiunea
+              </button>
+            </div>
+
+            <div class="study-meta">
+              <span>Sesiuni salvate</span>
+              <strong id="studySessionsCount">0</strong>
+            </div>
+          </section>
+
+          <section class="panel materials-panel">
+            <div class="panel-header">
+              <div>
+                <p class="panel-kicker">Bibliotecă</p>
+                <h2>Materiale</h2>
+              </div>
+            </div>
+
+            <div class="material-cards">
+              <button class="material-card" type="button" id="booksCard">
+                <span class="material-icon">▤</span>
+                <span>
+                  <strong>Cărți</strong>
+                  <small id="booksCount">0 fișiere</small>
+                </span>
+                <span class="material-arrow">→</span>
+              </button>
+
+              <button class="material-card" type="button" id="resourcesCard">
+                <span class="material-icon">⌁</span>
+                <span>
+                  <strong>Resurse</strong>
+                  <small id="resourcesCount">0 elemente</small>
+                </span>
+                <span class="material-arrow">→</span>
+              </button>
+            </div>
+
+            <div class="materials-preview" id="materialsPreview"></div>
+          </section>
+
+          <section class="panel activity-panel">
+            <div class="panel-header">
+              <div>
+                <p class="panel-kicker">De făcut</p>
+                <h2>Task-uri și teste</h2>
+              </div>
+
+              <a href="tasks.html" class="text-link">Vezi toate</a>
+            </div>
+
+            <div class="activity-list" id="activityList"></div>
+
+            <p class="empty-copy hidden" id="activityEmpty">
+              Nu ai nimic programat pentru această materie.
+            </p>
+          </section>
+
+          <section class="panel goals-panel">
+            <div class="panel-header">
+              <div>
+                <p class="panel-kicker">Direcție</p>
+                <h2>Obiective</h2>
+              </div>
+            </div>
+
+            <div class="goals-list" id="goalsList"></div>
+
+            <p class="empty-copy hidden" id="goalsEmpty">
+              Nu ai încă obiective pentru această materie.
+            </p>
+          </section>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <div class="modal-backdrop hidden" id="gradeModal">
+    <section class="modal" role="dialog" aria-modal="true" aria-labelledby="gradeModalTitle">
+      <div class="modal-header">
+        <div>
+          <p class="panel-kicker">Notă nouă</p>
+          <h2 id="gradeModalTitle">Adaugă o notă</h2>
+        </div>
+
+        <button class="icon-button" id="closeGradeModalButton" type="button">×</button>
+      </div>
+
+      <form id="gradeForm">
+        <label class="form-field">
+          <span>Nota</span>
+          <input
+            id="gradeInput"
+            type="number"
+            min="1"
+            max="10"
+            step="0.01"
+            inputmode="decimal"
+            placeholder="Exemplu: 9"
+            required
+          />
+        </label>
+
+        <label class="form-field">
+          <span>Descriere <small>(opțional)</small></span>
+          <input
+            id="gradeDescriptionInput"
+            type="text"
+            maxlength="120"
+            placeholder="Exemplu: Test capitolul 2"
+          />
+        </label>
+
+        <p class="form-error hidden" id="gradeFormError"></p>
+
+        <div class="modal-actions">
+          <button class="secondary-button" id="cancelGradeButton" type="button">
+            Renunță
+          </button>
+
+          <button class="primary-button" id="saveGradeButton" type="submit">
+            Salvează nota
+          </button>
+        </div>
+      </form>
+    </section>
+  </div>
+
+  <div class="toast hidden" id="toast" role="status"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="supabase-config.js"></script>
+  <script src="auth-guard.js"></script>
+  <script src="subject.js"></script>
+</body>
+</html>
