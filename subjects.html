@@ -2,244 +2,76 @@
 <html lang="ro">
 <head>
   <meta charset="UTF-8" />
-
-  <meta
-    name="viewport"
-    content="width=device-width, initial-scale=1.0"
-  />
-
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Materii | Itera</title>
-
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Playfair+Display:wght@600;700&display=swap" rel="stylesheet" />
   <link rel="stylesheet" href="subjects.css" />
 </head>
-
 <body>
   <div class="app-layout">
-
-    <!-- SIDEBAR -->
     <aside class="sidebar">
-      <a href="index.html" class="brand">
+      <a href="index.html" class="brand" aria-label="Itera">
         <span class="brand-mark">I</span>
         <span class="brand-name">Itera</span>
       </a>
-
-      <nav class="sidebar-nav">
-        <a href="index.html" class="nav-item">
-          <span class="nav-icon">⌂</span>
-          <span>Acasă</span>
-        </a>
-
-        <a href="schedule.html" class="nav-item">
-          <span class="nav-icon">▦</span>
-          <span>Orar</span>
-        </a>
-
-        <a href="tasks.html" class="nav-item">
-          <span class="nav-icon">✓</span>
-          <span>Task-uri</span>
-        </a>
-
-        <a href="calendar.html" class="nav-item">
-          <span class="nav-icon">□</span>
-          <span>Calendar</span>
-        </a>
-
-        <a href="subjects.html" class="nav-item active">
-          <span class="nav-icon">◫</span>
-          <span>Materii</span>
-        </a>
-
-        <button class="nav-item nav-item-disabled" type="button">
-          <span class="nav-icon">★</span>
-          <span>Note</span>
-          <span class="coming-soon">În curând</span>
-        </button>
-
-        <button class="nav-item nav-item-disabled" type="button">
-          <span class="nav-icon">◎</span>
-          <span>Admitere</span>
-          <span class="coming-soon">În curând</span>
-        </button>
+      <nav class="sidebar-nav" aria-label="Navigare principală">
+        <a href="index.html" class="nav-item"><span class="nav-icon">⌂</span><span>Acasă</span></a>
+        <a href="schedule.html" class="nav-item"><span class="nav-icon">▦</span><span>Orar</span></a>
+        <a href="tasks.html" class="nav-item"><span class="nav-icon">✓</span><span>Task-uri</span></a>
+        <a href="calendar.html" class="nav-item"><span class="nav-icon">□</span><span>Calendar</span></a>
+        <a href="subjects.html" class="nav-item active"><span class="nav-icon">◫</span><span>Materii</span></a>
+        <button class="nav-item nav-item-disabled" type="button"><span class="nav-icon">★</span><span>Note</span><span class="coming-soon">Curând</span></button>
+        <button class="nav-item nav-item-disabled" type="button"><span class="nav-icon">◎</span><span>Admitere</span><span class="coming-soon">Curând</span></button>
       </nav>
-
       <div class="sidebar-footer">
         <div class="user-card">
           <div class="user-avatar" id="userAvatar">U</div>
-
-          <div class="user-details">
-            <strong id="userName">Utilizator</strong>
-            <span>Contul meu</span>
-          </div>
+          <div class="user-details"><strong id="userName">Utilizator</strong><span>Contul meu</span></div>
         </div>
       </div>
     </aside>
 
-    <!-- MAIN CONTENT -->
     <main class="main-content">
-
       <header class="page-header">
-        <div>
-          <p class="eyebrow">Spațiul tău de învățare</p>
-          <h1>Materiile mele</h1>
-
-          <p class="page-description">
-            Vezi progresul, notele și timpul studiat pentru fiecare materie.
-          </p>
+        <div class="page-title-group">
+          <p class="eyebrow">Colecția ta</p>
+          <h1>Materii</h1>
+          <p class="page-description">Notele, timpul și progresul tău, într-un singur loc.</p>
         </div>
-
-        <button class="primary-button" id="addSubjectButton" type="button">
-          <span>+</span>
-          Adaugă materie
-        </button>
+        <button class="manage-button" id="addSubjectButton" type="button"><span aria-hidden="true">＋</span>Gestionează</button>
       </header>
 
-      <!-- SUMMARY -->
-      <section class="summary-grid">
-        <article class="summary-card">
-          <span class="summary-label">Materii</span>
-          <strong class="summary-value" id="subjectsCount">0</strong>
-          <span class="summary-caption">în planul tău</span>
-        </article>
-
-        <article class="summary-card">
-          <span class="summary-label">Media generală</span>
-          <strong class="summary-value" id="overallAverage">—</strong>
-          <span class="summary-caption">din toate notele</span>
-        </article>
-
-        <article class="summary-card">
-          <span class="summary-label">Timp studiat</span>
-          <strong class="summary-value" id="totalStudyTime">0 min</strong>
-          <span class="summary-caption">în total</span>
-        </article>
+      <section class="summary-strip" aria-label="Rezumat materii">
+        <div class="summary-item"><span class="summary-label">Materii</span><strong id="subjectsCount">0</strong></div>
+        <span class="summary-divider" aria-hidden="true"></span>
+        <div class="summary-item"><span class="summary-label">Media generală</span><strong id="overallAverage">—</strong></div>
+        <span class="summary-divider" aria-hidden="true"></span>
+        <div class="summary-item"><span class="summary-label">Timp studiat</span><strong id="totalStudyTime">0 min</strong></div>
       </section>
 
-      <!-- LOADING -->
-      <section class="state-card" id="loadingState">
-        <div class="loader"></div>
-
-        <div>
-          <strong>Îți încărcăm materiile</strong>
-          <p>Va dura doar o clipă.</p>
-        </div>
-      </section>
-
-      <!-- EMPTY -->
-      <section class="state-card empty-state hidden" id="emptyState">
-        <div class="empty-icon">◫</div>
-
-        <div>
-          <strong>Nu ai încă nicio materie</strong>
-
-          <p>
-            Adaugă prima materie pentru a putea salva note, materiale și
-            sesiuni de studiu.
-          </p>
-
-          <button class="secondary-button" id="emptyAddSubjectButton" type="button">
-            Adaugă o materie
-          </button>
-        </div>
-      </section>
-
-      <!-- ERROR -->
-      <section class="state-card error-state hidden" id="errorState">
-        <div class="error-icon">!</div>
-
-        <div>
-          <strong>Nu am putut încărca materiile</strong>
-          <p id="errorMessage">Reîncarcă pagina și încearcă din nou.</p>
-
-          <button class="secondary-button" id="retryButton" type="button">
-            Încearcă din nou
-          </button>
-        </div>
-      </section>
-
-      <!-- SUBJECTS -->
-      <section
-        class="subjects-grid hidden"
-        id="subjectsGrid"
-        aria-live="polite"
-      ></section>
+      <section class="state-card" id="loadingState"><div class="loader" aria-hidden="true"></div><div><strong>Îți încărcăm materiile</strong><p>Va dura doar o clipă.</p></div></section>
+      <section class="state-card empty-state hidden" id="emptyState"><div class="empty-icon">◫</div><div><strong>Nu ai încă nicio materie</strong><p>Adaugă prima materie pentru a începe.</p><button class="secondary-button" id="emptyAddSubjectButton" type="button">Adaugă o materie</button></div></section>
+      <section class="state-card error-state hidden" id="errorState"><div class="error-icon">!</div><div><strong>Nu am putut încărca materiile</strong><p id="errorMessage">Reîncarcă pagina și încearcă din nou.</p><button class="secondary-button" id="retryButton" type="button">Încearcă din nou</button></div></section>
+      <section class="subjects-grid hidden" id="subjectsGrid" aria-live="polite"></section>
     </main>
   </div>
 
-  <!-- ADD SUBJECT MODAL -->
   <div class="modal-backdrop hidden" id="subjectModal">
-    <section
-      class="modal"
-      role="dialog"
-      aria-modal="true"
-      aria-labelledby="subjectModalTitle"
-    >
-      <div class="modal-header">
-        <div>
-          <p class="eyebrow">Materie nouă</p>
-          <h2 id="subjectModalTitle">Adaugă o materie</h2>
-        </div>
-
-        <button
-          class="icon-button"
-          id="closeSubjectModalButton"
-          type="button"
-          aria-label="Închide"
-        >
-          ×
-        </button>
-      </div>
-
+    <section class="modal" role="dialog" aria-modal="true" aria-labelledby="subjectModalTitle">
+      <div class="modal-header"><div><p class="eyebrow">Materii</p><h2 id="subjectModalTitle">Adaugă o materie</h2></div><button class="icon-button" id="closeSubjectModalButton" type="button" aria-label="Închide">×</button></div>
       <form id="subjectForm">
-        <label class="form-field">
-          <span>Numele materiei</span>
-
-          <input
-            type="text"
-            id="subjectNameInput"
-            maxlength="80"
-            placeholder="Exemplu: Matematică"
-            autocomplete="off"
-            required
-          />
-        </label>
-
-        <label class="form-field">
-          <span>Profesor <small>(opțional)</small></span>
-
-          <input
-            type="text"
-            id="teacherNameInput"
-            maxlength="100"
-            placeholder="Exemplu: doamna Popescu"
-            autocomplete="off"
-          />
-        </label>
-
+        <label class="form-field"><span>Numele materiei</span><input type="text" id="subjectNameInput" maxlength="80" placeholder="Exemplu: Matematică" autocomplete="off" required /></label>
+        <label class="form-field"><span>Profesor <small>(opțional)</small></span><input type="text" id="teacherNameInput" maxlength="100" placeholder="Exemplu: doamna Popescu" autocomplete="off" /></label>
         <p class="form-error hidden" id="subjectFormError"></p>
-
-        <div class="modal-actions">
-          <button
-            class="secondary-button"
-            id="cancelSubjectButton"
-            type="button"
-          >
-            Renunță
-          </button>
-
-          <button class="primary-button" id="saveSubjectButton" type="submit">
-            Salvează materia
-          </button>
-        </div>
+        <div class="modal-actions"><button class="secondary-button" id="cancelSubjectButton" type="button">Renunță</button><button class="primary-button" id="saveSubjectButton" type="submit">Salvează materia</button></div>
       </form>
     </section>
   </div>
 
-  <!-- TOAST -->
   <div class="toast hidden" id="toast" role="status"></div>
-
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-
-  <!-- Păstrează exact numele fișierelor tale existente -->
   <script src="supabase.js"></script>
   <script src="auth-guard.js"></script>
   <script src="subjects.js"></script>
