@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="ro">
+<head>
+  <meta charset="UTF-8" />
+
+  <meta
+    name="viewport"
+    content="width=device-width, initial-scale=1.0"
+  />
+
+  <title>Materii | Itera</title>
+
+  <link rel="stylesheet" href="subjects.css" />
+</head>
+
+<body>
+  <div class="app-layout">
+
+    <!-- SIDEBAR -->
+    <aside class="sidebar">
+      <a href="index.html" class="brand">
+        <span class="brand-mark">I</span>
+        <span class="brand-name">Itera</span>
+      </a>
+
+      <nav class="sidebar-nav">
+        <a href="index.html" class="nav-item">
+          <span class="nav-icon">⌂</span>
+          <span>Acasă</span>
+        </a>
+
+        <a href="schedule.html" class="nav-item">
+          <span class="nav-icon">▦</span>
+          <span>Orar</span>
+        </a>
+
+        <a href="tasks.html" class="nav-item">
+          <span class="nav-icon">✓</span>
+          <span>Task-uri</span>
+        </a>
+
+        <a href="calendar.html" class="nav-item">
+          <span class="nav-icon">□</span>
+          <span>Calendar</span>
+        </a>
+
+        <a href="subjects.html" class="nav-item active">
+          <span class="nav-icon">◫</span>
+          <span>Materii</span>
+        </a>
+
+        <button class="nav-item nav-item-disabled" type="button">
+          <span class="nav-icon">★</span>
+          <span>Note</span>
+          <span class="coming-soon">În curând</span>
+        </button>
+
+        <button class="nav-item nav-item-disabled" type="button">
+          <span class="nav-icon">◎</span>
+          <span>Admitere</span>
+          <span class="coming-soon">În curând</span>
+        </button>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="user-card">
+          <div class="user-avatar" id="userAvatar">U</div>
+
+          <div class="user-details">
+            <strong id="userName">Utilizator</strong>
+            <span>Contul meu</span>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+    <!-- MAIN CONTENT -->
+    <main class="main-content">
+
+      <header class="page-header">
+        <div>
+          <p class="eyebrow">Spațiul tău de învățare</p>
+          <h1>Materiile mele</h1>
+
+          <p class="page-description">
+            Vezi progresul, notele și timpul studiat pentru fiecare materie.
+          </p>
+        </div>
+
+        <button class="primary-button" id="addSubjectButton" type="button">
+          <span>+</span>
+          Adaugă materie
+        </button>
+      </header>
+
+      <!-- SUMMARY -->
+      <section class="summary-grid">
+        <article class="summary-card">
+          <span class="summary-label">Materii</span>
+          <strong class="summary-value" id="subjectsCount">0</strong>
+          <span class="summary-caption">în planul tău</span>
+        </article>
+
+        <article class="summary-card">
+          <span class="summary-label">Media generală</span>
+          <strong class="summary-value" id="overallAverage">—</strong>
+          <span class="summary-caption">din toate notele</span>
+        </article>
+
+        <article class="summary-card">
+          <span class="summary-label">Timp studiat</span>
+          <strong class="summary-value" id="totalStudyTime">0 min</strong>
+          <span class="summary-caption">în total</span>
+        </article>
+      </section>
+
+      <!-- LOADING -->
+      <section class="state-card" id="loadingState">
+        <div class="loader"></div>
+
+        <div>
+          <strong>Îți încărcăm materiile</strong>
+          <p>Va dura doar o clipă.</p>
+        </div>
+      </section>
+
+      <!-- EMPTY -->
+      <section class="state-card empty-state hidden" id="emptyState">
+        <div class="empty-icon">◫</div>
+
+        <div>
+          <strong>Nu ai încă nicio materie</strong>
+
+          <p>
+            Adaugă prima materie pentru a putea salva note, materiale și
+            sesiuni de studiu.
+          </p>
+
+          <button class="secondary-button" id="emptyAddSubjectButton" type="button">
+            Adaugă o materie
+          </button>
+        </div>
+      </section>
+
+      <!-- ERROR -->
+      <section class="state-card error-state hidden" id="errorState">
+        <div class="error-icon">!</div>
+
+        <div>
+          <strong>Nu am putut încărca materiile</strong>
+          <p id="errorMessage">Reîncarcă pagina și încearcă din nou.</p>
+
+          <button class="secondary-button" id="retryButton" type="button">
+            Încearcă din nou
+          </button>
+        </div>
+      </section>
+
+      <!-- SUBJECTS -->
+      <section
+        class="subjects-grid hidden"
+        id="subjectsGrid"
+        aria-live="polite"
+      ></section>
+    </main>
+  </div>
+
+  <!-- ADD SUBJECT MODAL -->
+  <div class="modal-backdrop hidden" id="subjectModal">
+    <section
+      class="modal"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="subjectModalTitle"
+    >
+      <div class="modal-header">
+        <div>
+          <p class="eyebrow">Materie nouă</p>
+          <h2 id="subjectModalTitle">Adaugă o materie</h2>
+        </div>
+
+        <button
+          class="icon-button"
+          id="closeSubjectModalButton"
+          type="button"
+          aria-label="Închide"
+        >
+          ×
+        </button>
+      </div>
+
+      <form id="subjectForm">
+        <label class="form-field">
+          <span>Numele materiei</span>
+
+          <input
+            type="text"
+            id="subjectNameInput"
+            maxlength="80"
+            placeholder="Exemplu: Matematică"
+            autocomplete="off"
+            required
+          />
+        </label>
+
+        <label class="form-field">
+          <span>Profesor <small>(opțional)</small></span>
+
+          <input
+            type="text"
+            id="teacherNameInput"
+            maxlength="100"
+            placeholder="Exemplu: doamna Popescu"
+            autocomplete="off"
+          />
+        </label>
+
+        <p class="form-error hidden" id="subjectFormError"></p>
+
+        <div class="modal-actions">
+          <button
+            class="secondary-button"
+            id="cancelSubjectButton"
+            type="button"
+          >
+            Renunță
+          </button>
+
+          <button class="primary-button" id="saveSubjectButton" type="submit">
+            Salvează materia
+          </button>
+        </div>
+      </form>
+    </section>
+  </div>
+
+  <!-- TOAST -->
+  <div class="toast hidden" id="toast" role="status"></div>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+  <!-- Păstrează exact numele fișierelor tale existente -->
+  <script src="supabase.js"></script>
+  <script src="auth-guard.js"></script>
+  <script src="subjects.js"></script>
+</body>
+</html>
