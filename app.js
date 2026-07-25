@@ -51,6 +51,8 @@ let focusPaused = false;
 let focusStartedAt = null;
 let focusSubjectId = null;
 let focusTaskId = null;
+let focusTaskTitle = null;
+let focusSessionSaved = false;
 let currentEnergy = 3;
 let recommendedTask = null;
 
@@ -764,6 +766,8 @@ function startFocusSession() {
   focusSubjectId = subjects.find((item) => item.name === subject)?.id || null;
   const matchingTask = recommendedTask?.subject === subject ? recommendedTask : null;
   focusTaskId = matchingTask?.id || null;
+  focusTaskTitle = matchingTask?.title || null;
+  focusSessionSaved = false;
 
   updateFocusTimerDisplay();
   showFloatingTimer(subject, matchingTask?.title || "Studiu individual");
@@ -852,7 +856,11 @@ function updateFocusTimerDisplay() {
     `${Math.max(0, progress)}%`;
 }
 
-async function finishFocusSession() {
+async function saveCurrentFocusSession() {
+  if (focusSessionSaved) return Math.max(1, Math.round(
+    (focusInitialSeconds - focusSecondsRemaining) / 60
+  ));
+
   clearInterval(focusTimerInterval);
   const studiedSeconds = Math.max(0, focusInitialSeconds - focusSecondsRemaining);
   const studiedMinutes = Math.max(1, Math.round(studiedSeconds / 60));
@@ -865,15 +873,33 @@ async function finishFocusSession() {
       ended_at: new Date().toISOString(),
       duration_minutes: studiedMinutes,
       source: "focus-timer",
-      notes: focusTaskId ? recommendedTask?.title : null,
+      notes: focusTaskTitle,
       study_date: formatDateForInput(new Date())
     });
 
     if (error) {
       showToast("Timpul nu a putut fi salvat în Supabase.", "!");
-      return;
+      return 0;
     }
   }
+  focusSessionSaved = true;
+  return studiedMinutes;
+}
+
+async function finishFocusSession() {
+  clearInterval(focusTimerInterval);
+  focusPaused = true;
+
+  if (focusTaskId) {
+    document.getElementById("taskCompletionTitle").textContent =
+      `„${focusTaskTitle}” — spune-ne dacă ai terminat.`;
+    document.getElementById("taskResumeOptions").hidden = true;
+    openModal("taskCompletionModal");
+    return;
+  }
+
+  const studiedMinutes = await saveCurrentFocusSession();
+  if (!studiedMinutes) return;
 
   const floatingTimer = document.getElementById("floatingTimer");
   floatingTimer.classList.remove("visible");
@@ -963,7 +989,16 @@ function initializeFloatingTimer() {
     timer.classList.toggle("minimized");
   });
   document.getElementById("closeFloatingTimer").addEventListener("click", () => {
-    timer.classList.add("minimized");
+    finishFocusSession();
+  });
+  document.getElementById("taskCompletedYes").addEventListener("click", completeFocusedTask);
+  document.getElementById("taskCompletedNo").addEventListener("click", () => {
+    document.getElementById("taskResumeOptions").hidden = false;
+  });
+  document.querySelectorAll("[data-resume-minutes]").forEach((button) => {
+    button.addEventListener("click", () => {
+      scheduleTaskContinuation(Number(button.dataset.resumeMinutes));
+    });
   });
 
   dragHandle.addEventListener("pointerdown", (event) => {
@@ -1002,6 +1037,90 @@ function showFloatingTimer(subject, taskTitle) {
   document.getElementById("floatingTimerTask").textContent = taskTitle;
   document.getElementById("floatingPauseButton").textContent = "Pauză";
 }
+
+function startTaskFocus(task, subject) {
+  clearInterval(focusTimerInterval);
+  focusInitialSeconds = Math.max(1, Number(task.estimated_minutes || 30)) * 60;
+  focusSecondsRemaining = focusInitialSeconds;
+  focusPaused = false;
+  focusStartedAt = new Date();
+  focusSubjectId = task.subject_id || subject?.id || null;
+  focusTaskId = task.id;
+  focusTaskTitle = task.title;
+  focusSessionSaved = false;
+  updateFocusTimerDisplay();
+  showFloatingTimer(subject?.name || "Fără materie", task.title);
+
+  focusTimerInterval = setInterval(() => {
+    if (focusPaused) return;
+    focusSecondsRemaining -= 1;
+    updateFocusTimerDisplay();
+    if (focusSecondsRemaining <= 0) finishFocusSession();
+  }, 1000);
+}
+
+async function completeFocusedTask() {
+  const taskId = focusTaskId;
+  const studiedMinutes = await saveCurrentFocusSession();
+  if (!studiedMinutes) return;
+
+  const { error } = await supabaseClient.from("tasks").update({
+    completed: true,
+    progress: 100,
+    completed_at: new Date().toISOString()
+  }).eq("id", taskId).eq("user_id", currentUser.id);
+
+  if (error) {
+    showToast("Task-ul nu a putut fi bifat.", "!");
+    return;
+  }
+
+  closeTaskSession();
+  window.dispatchEvent(new CustomEvent("itera:task-updated"));
+  await loadHomeData();
+  renderAll();
+  showToast("Task finalizat și timpul salvat.", "✓");
+}
+
+async function scheduleTaskContinuation(minutes) {
+  const taskSnapshot = {
+    id: focusTaskId,
+    title: focusTaskTitle,
+    subject_id: focusSubjectId,
+    estimated_minutes: Math.max(1, Math.ceil(focusInitialSeconds / 60))
+  };
+  const subjectSnapshot = subjects.find((subject) => subject.id === focusSubjectId);
+  const reminderTitle = focusTaskTitle;
+  const studiedMinutes = await saveCurrentFocusSession();
+  if (!studiedMinutes) return;
+  closeTaskSession();
+
+  if (minutes === 0) {
+    startTaskFocus(taskSnapshot, subjectSnapshot);
+    return;
+  }
+
+  if (minutes > 0) {
+    window.setTimeout(() => {
+      showToast(`E timpul să continui „${reminderTitle}”.`, "▶");
+    }, minutes * 60000);
+    showToast(`Îți amintim peste ${minutes} minute.`, "♡");
+    return;
+  }
+
+  showToast("Task-ul rămâne în listă pentru mai târziu.", "♡");
+}
+
+function closeTaskSession() {
+  closeModal("taskCompletionModal");
+  const timer = document.getElementById("floatingTimer");
+  timer.classList.remove("visible");
+  timer.setAttribute("aria-hidden", "true");
+  focusTaskId = null;
+  focusTaskTitle = null;
+}
+
+globalThis.IteraFocus = Object.freeze({ startTask: startTaskFocus });
 
 function buildNotifications() {
   const today = parseLocalDate(formatDateForInput(new Date()));

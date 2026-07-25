@@ -455,6 +455,26 @@
     </div>
   </section>
 
+  <!-- TASK SESSION COMPLETION -->
+  <div class="modal-overlay" id="taskCompletionModal" aria-hidden="true">
+    <div class="modal-card task-completion-card">
+      <p class="card-kicker">Sesiune încheiată</p>
+      <h2>Ai terminat task-ul?</h2>
+      <p id="taskCompletionTitle">Spune-ne ce s-a întâmplat și continuăm de aici.</p>
+      <div class="task-completion-primary">
+        <button class="primary-button" id="taskCompletedYes">Da, este gata</button>
+        <button class="secondary-button" id="taskCompletedNo">Nu încă</button>
+      </div>
+      <div class="task-resume-options" id="taskResumeOptions" hidden>
+        <strong>Când vrei să continui?</strong>
+        <button data-resume-minutes="0">Acum</button>
+        <button data-resume-minutes="30">Peste 30 min</button>
+        <button data-resume-minutes="60">Peste o oră</button>
+        <button data-resume-minutes="-1">Mai târziu</button>
+      </div>
+    </div>
+  </div>
+
   <!-- QUICK ADD MENU -->
   <div class="modal-overlay" id="quickAddModal" aria-hidden="true">
     <div class="modal-card quick-add-card">
@@ -684,6 +704,7 @@
 <script src="schedule-view.js"></script>
 <script src="tasks-view.js"></script>
 <script src="calendar-view.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
 <script src="subjects-view.js"></script>
 <script src="progress-view.js"></script>
 <script src="app.js"></script>

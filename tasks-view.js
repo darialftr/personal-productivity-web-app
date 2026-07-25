@@ -84,6 +84,7 @@
       <button class="tasks-spa-check" data-toggle-task="${task.id}" aria-label="Schimbă starea">${task.completed ? "✓" : ""}</button>
       <div><strong>${escapeHtml(task.title)}</strong><small>${escapeHtml(subject?.name || "Fără materie")}${task.deadline_date ? ` · ${task.deadline_date}` : ""}</small></div>
       <span class="tasks-spa-badge">${task.estimated_minutes || 0}m</span>
+      ${task.completed ? "" : `<button class="tasks-spa-start" data-start-task="${task.id}">▶ Start</button>`}
       <button class="tasks-spa-edit" data-edit-task="${task.id}">Editează</button></article>`;
   }
 
@@ -95,6 +96,11 @@
     root.querySelector("[data-task-search]").addEventListener("change", event => { search = event.target.value.trim().toLowerCase(); render(); });
     root.querySelectorAll("[data-task-filter]").forEach(button => button.addEventListener("click", () => { filter = button.dataset.taskFilter; render(); }));
     root.querySelectorAll("[data-toggle-task]").forEach(button => button.addEventListener("click", () => toggleTask(button.dataset.toggleTask)));
+    root.querySelectorAll("[data-start-task]").forEach(button => button.addEventListener("click", () => {
+      const task = tasks.find(item => item.id === button.dataset.startTask);
+      const subject = subjects.find(item => item.id === task?.subject_id);
+      if (task && global.IteraFocus) global.IteraFocus.startTask(task, subject);
+    }));
     root.querySelectorAll("[data-edit-task]").forEach(button => button.addEventListener("click", () => openDialog(tasks.find(task => task.id === button.dataset.editTask))));
   }
 
@@ -142,5 +148,8 @@
     return String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;")
       .replaceAll('"', "&quot;").replaceAll("'", "&#039;");
   }
+  window.addEventListener("itera:task-updated", () => {
+    if (mounted) reload();
+  });
   global.IteraTasksView = Object.freeze({ mount, unmount });
 })(window);

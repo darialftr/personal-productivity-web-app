@@ -2,6 +2,9 @@
 
 (function (global) {
   let root, user, mounted = false, timerStartedAt = null, timerInterval = null;
+  let pdfDocument = null, pdfPage = 1, pdfScale = 1.15, pdfRendering = false;
+  let currentPdfPath = null;
+  const pdfLastPages = new Map();
 
   async function session() {
     const { data: { session } } = await supabaseClient.auth.getSession();
@@ -116,12 +119,48 @@
         <section class="subject-spa-panel"><div class="subject-spa-panel-head"><h3>Note</h3><button data-add-grade>＋</button></div>
           ${data.grades.length ? data.grades.map(item => `<div class="subject-spa-row"><b>${item.grade}</b><span>${escapeHtml(item.description || item.grade_type || "Notă")}</span><small>${item.grade_date || ""}</small></div>`).join("") : empty("Nicio notă")}</section>
         <section class="subject-spa-panel"><h3>Task-uri active</h3>${data.tasks.length ? data.tasks.map(item => `<a class="subject-spa-row" href="#/tasks"><b>✓</b><span>${escapeHtml(item.title)}</span><small>${item.deadline_date || ""}</small></a>`).join("") : empty("Niciun task activ")}</section>
-        <section class="subject-spa-panel"><h3>Resurse și cărți</h3>${[...data.books, ...data.resources].length ?
-          [...data.books, ...data.resources].map(item => `<div class="subject-spa-row"><b>◇</b><span>${escapeHtml(item.title)}</span><small>${escapeHtml(item.author || item.resource_type || "")}</small></div>`).join("") : empty("Nicio resursă")}</section>
+        <section class="subject-spa-panel"><div class="subject-spa-panel-head"><h3>Resurse și cărți</h3>
+          <button data-add-pdf>＋ PDF</button></div>${[...data.books, ...data.resources].length ?
+          [...data.books, ...data.resources].map(item => `<button class="subject-spa-row subject-spa-resource" data-open-pdf="${item.id}" data-file-path="${escapeHtml(item.file_path || "")}" data-resource-title="${escapeHtml(item.title)}"><b>◇</b><span>${escapeHtml(item.title)}</span><small>${escapeHtml(item.author || item.resource_type || "")}</small></button>`).join("") : empty("Nicio resursă")}</section>
         <section class="subject-spa-panel"><h3>Obiective</h3>${data.goals.length ? data.goals.map(item => `<div class="subject-spa-row"><b>${item.completed ? "✓" : "○"}</b><span>${escapeHtml(item.title)}</span></div>`).join("") : empty("Niciun obiectiv")}</section>
-      </div>`;
+      </div>
+      <dialog class="subject-pdf-upload"><form data-pdf-form>
+        <div class="subjects-spa-dialog-head"><h3>Adaugă un PDF</h3><button type="button" class="icon-button" data-close-pdf-upload>×</button></div>
+        <label>Titlu<input name="title" required placeholder="Ex: Manual de matematică"></label>
+        <label>Autor<input name="author" placeholder="Opțional"></label>
+        <label>Fișier PDF<input name="pdf" type="file" accept="application/pdf,.pdf" required></label>
+        <p class="subjects-spa-error" data-pdf-error></p>
+        <button class="primary-button">Încarcă PDF-ul</button>
+      </form></dialog>
+      <dialog class="subject-pdf-viewer">
+        <div class="pdf-viewer-shell">
+          <header class="pdf-viewer-toolbar">
+            <strong data-pdf-title>Document</strong>
+            <div class="pdf-page-controls">
+              <button data-pdf-prev aria-label="Pagina anterioară">‹</button>
+              <label>Pagina <input data-pdf-page type="number" min="1" value="1"> <span data-pdf-count>/ 1</span></label>
+              <button data-pdf-next aria-label="Pagina următoare">›</button>
+            </div>
+            <div class="pdf-zoom-controls">
+              <button data-pdf-zoom-out aria-label="Micșorează">−</button>
+              <span data-pdf-zoom>100%</span>
+              <button data-pdf-zoom-in aria-label="Mărește">＋</button>
+              <button data-close-pdf-viewer aria-label="Închide">×</button>
+            </div>
+          </header>
+          <div class="pdf-canvas-wrap"><canvas data-pdf-canvas></canvas></div>
+          <p class="subjects-spa-error" data-viewer-error></p>
+        </div>
+      </dialog>`;
     root.querySelector("[data-add-grade]").addEventListener("click", () => addGrade(id));
     root.querySelector("[data-study-timer]").addEventListener("click", event => toggleTimer(id, event.currentTarget));
+    root.querySelector("[data-add-pdf]").addEventListener("click", () => root.querySelector(".subject-pdf-upload").showModal());
+    root.querySelector("[data-close-pdf-upload]").addEventListener("click", () => root.querySelector(".subject-pdf-upload").close());
+    root.querySelector("[data-pdf-form]").addEventListener("submit", event => uploadPdf(event, id));
+    root.querySelectorAll("[data-open-pdf]").forEach(button => button.addEventListener("click", () => {
+      if (button.dataset.filePath) openPdf(button.dataset.filePath, button.dataset.resourceTitle);
+    }));
+    bindPdfViewer();
   }
 
   async function addGrade(subjectId) {
@@ -134,6 +173,132 @@
       user_id: user.id, subject_id: subjectId, grade, description, grade_date: new Date().toISOString().slice(0, 10)
     });
     if (!error) { mounted = false; await mountDetail(subjectId); }
+  }
+
+  async function uploadPdf(event, subjectId) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const file = form.elements.pdf.files[0];
+    const errorElement = form.querySelector("[data-pdf-error]");
+    errorElement.textContent = "";
+
+    if (!file || file.type !== "application/pdf") {
+      errorElement.textContent = "Alege un fișier PDF.";
+      return;
+    }
+
+    const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "-");
+    const filePath = `${user.id}/${subjectId}/${Date.now()}-${safeName}`;
+    const submitButton = form.querySelector(".primary-button");
+    submitButton.disabled = true;
+    submitButton.textContent = "Se încarcă…";
+
+    const { error: uploadError } = await supabaseClient.storage
+      .from("subject-files")
+      .upload(filePath, file, { contentType: "application/pdf", upsert: false });
+
+    if (uploadError) {
+      errorElement.textContent = "PDF-ul nu a putut fi încărcat. Verifică bucket-ul „subject-files”.";
+      submitButton.disabled = false;
+      submitButton.textContent = "Încarcă PDF-ul";
+      return;
+    }
+
+    const { error: bookError } = await supabaseClient.from("subject_books").insert({
+      user_id: user.id,
+      subject_id: subjectId,
+      title: form.elements.title.value.trim(),
+      author: form.elements.author.value.trim() || null,
+      file_name: file.name,
+      file_path: filePath,
+      file_size: file.size,
+      mime_type: file.type
+    });
+
+    if (bookError) {
+      await supabaseClient.storage.from("subject-files").remove([filePath]);
+      errorElement.textContent = "Datele PDF-ului nu au putut fi salvate.";
+      submitButton.disabled = false;
+      submitButton.textContent = "Încarcă PDF-ul";
+      return;
+    }
+
+    form.closest("dialog").close();
+    mounted = false;
+    await mountDetail(subjectId);
+  }
+
+  function bindPdfViewer() {
+    const viewer = root.querySelector(".subject-pdf-viewer");
+    viewer.querySelector("[data-close-pdf-viewer]").addEventListener("click", () => viewer.close());
+    viewer.querySelector("[data-pdf-prev]").addEventListener("click", () => changePdfPage(pdfPage - 1));
+    viewer.querySelector("[data-pdf-next]").addEventListener("click", () => changePdfPage(pdfPage + 1));
+    viewer.querySelector("[data-pdf-page]").addEventListener("change", event => changePdfPage(Number(event.target.value)));
+    viewer.querySelector("[data-pdf-zoom-in]").addEventListener("click", () => changePdfZoom(0.15));
+    viewer.querySelector("[data-pdf-zoom-out]").addEventListener("click", () => changePdfZoom(-0.15));
+  }
+
+  async function openPdf(filePath, title) {
+    const viewer = root.querySelector(".subject-pdf-viewer");
+    const errorElement = viewer.querySelector("[data-viewer-error]");
+    errorElement.textContent = "";
+    viewer.querySelector("[data-pdf-title]").textContent = title;
+    currentPdfPath = filePath;
+    viewer.showModal();
+
+    if (!global.pdfjsLib) {
+      errorElement.textContent = "Viewerul PDF nu s-a putut încărca.";
+      return;
+    }
+
+    const { data, error } = await supabaseClient.storage
+      .from("subject-files")
+      .createSignedUrl(filePath, 3600);
+    if (error || !data?.signedUrl) {
+      errorElement.textContent = "PDF-ul nu a putut fi deschis.";
+      return;
+    }
+
+    try {
+      global.pdfjsLib.GlobalWorkerOptions.workerSrc =
+        "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js";
+      pdfDocument = await global.pdfjsLib.getDocument(data.signedUrl).promise;
+      pdfPage = Math.min(pdfDocument.numPages, pdfLastPages.get(filePath) || 1);
+      pdfScale = 1.15;
+      viewer.querySelector("[data-pdf-count]").textContent = `/ ${pdfDocument.numPages}`;
+      await renderPdfPage();
+    } catch (error) {
+      errorElement.textContent = "PDF-ul nu a putut fi randat.";
+    }
+  }
+
+  async function changePdfPage(nextPage) {
+    if (!pdfDocument || pdfRendering) return;
+    pdfPage = Math.max(1, Math.min(pdfDocument.numPages, Number(nextPage) || 1));
+    await renderPdfPage();
+  }
+
+  async function changePdfZoom(delta) {
+    if (!pdfDocument || pdfRendering) return;
+    pdfScale = Math.max(0.55, Math.min(2.5, pdfScale + delta));
+    await renderPdfPage();
+  }
+
+  async function renderPdfPage() {
+    if (!pdfDocument) return;
+    pdfRendering = true;
+    const viewer = root.querySelector(".subject-pdf-viewer");
+    const page = await pdfDocument.getPage(pdfPage);
+    const viewport = page.getViewport({ scale: pdfScale });
+    const canvas = viewer.querySelector("[data-pdf-canvas]");
+    const context = canvas.getContext("2d");
+    canvas.width = viewport.width;
+    canvas.height = viewport.height;
+    await page.render({ canvasContext: context, viewport }).promise;
+    viewer.querySelector("[data-pdf-page]").value = pdfPage;
+    viewer.querySelector("[data-pdf-zoom]").textContent = `${Math.round(pdfScale * 100)}%`;
+    if (currentPdfPath) pdfLastPages.set(currentPdfPath, pdfPage);
+    pdfRendering = false;
   }
 
   async function toggleTimer(subjectId, button) {
