@@ -1,6 +1,5 @@
 "use strict";
 
-const LEGACY_PROFILE_STORAGE_KEY = "itera_profile";
 const totalSteps = 5;
 
 let currentStep = 1;
@@ -69,7 +68,6 @@ async function initializeOnboarding() {
   initializeCustomSubject();
   initializeNavigation();
 
-  restoreLegacyProfile();
   updateStepInterface();
 
   await checkExistingSupabaseProfile();
@@ -89,7 +87,7 @@ async function checkExistingSupabaseProfile() {
     }
 
     if (!user) {
-      window.location.href = "login.html";
+      window.location.href = "auth.html";
       return;
     }
 
@@ -165,92 +163,6 @@ function populateFromSupabaseProfile(profile) {
     });
 
     synchronizeGoalButtons();
-  }
-}
-
-/* LEGACY LOCALSTORAGE MIGRATION */
-
-function restoreLegacyProfile() {
-  const rawProfile = localStorage.getItem(
-    LEGACY_PROFILE_STORAGE_KEY
-  );
-
-  if (!rawProfile) {
-    return;
-  }
-
-  try {
-    const profile = JSON.parse(rawProfile);
-
-    if (profile.firstName) {
-      document.getElementById("firstName").value =
-        profile.firstName;
-    }
-
-    if (profile.gradeLevel) {
-      document.getElementById("gradeLevel").value =
-        profile.gradeLevel;
-    }
-
-    if (profile.universityGoal) {
-      document.getElementById("universityGoal").value =
-        profile.universityGoal;
-    }
-
-    if (Array.isArray(profile.subjects)) {
-      selectedSubjects.clear();
-
-      profile.subjects.forEach((subject) => {
-        addSubjectToSelectionInterface(subject);
-      });
-
-      synchronizeSubjectButtons();
-    }
-
-    if (Array.isArray(profile.goals)) {
-      selectedGoals.clear();
-
-      profile.goals.forEach((goal) => {
-        selectedGoals.add(goal);
-      });
-
-      synchronizeGoalButtons();
-    }
-
-    if (profile.schedulePreferences) {
-      const preferences = profile.schedulePreferences;
-
-      if (preferences.schoolStartTime) {
-        document.getElementById(
-          "schoolStartTime"
-        ).value = preferences.schoolStartTime;
-      }
-
-      if (preferences.schoolEndTime) {
-        document.getElementById(
-          "schoolEndTime"
-        ).value = preferences.schoolEndTime;
-      }
-
-      if (preferences.preferredStudyTime) {
-        document.getElementById(
-          "preferredStudyTime"
-        ).value = preferences.preferredStudyTime;
-      }
-
-      if (preferences.dailyStudyGoal) {
-        document.getElementById(
-          "dailyStudyGoal"
-        ).value = String(
-          preferences.dailyStudyGoal
-        );
-      }
-    }
-  } catch (error) {
-    console.error(
-      "Datele vechi din localStorage nu au putut fi citite:",
-      error
-    );
   }
 }
 
@@ -809,11 +721,7 @@ async function finishOnboarding() {
       Ștergem vechiul profil local numai după ce
       salvarea în Supabase a reușit complet.
     */
-    localStorage.removeItem(
-      LEGACY_PROFILE_STORAGE_KEY
-    );
-
-    window.location.href = "schedule.html";
+    window.location.href = "index.html#/schedule";
   } catch (error) {
     console.error(
       "Onboarding-ul nu a putut fi salvat:",

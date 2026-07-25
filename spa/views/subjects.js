@@ -1,2 +1,0 @@
-import {AppState} from '../state.js';import {escape} from '../ui.js';
-export function subjects(){return `<section class="grid subject-grid">${AppState.subjects.length?AppState.subjects.map(subject=>`<a class="subject-card" href="#/subject/${subject.id}"><p class="kicker">Materie</p><h3>${escape(subject.name)}</h3><small>Vezi task-urile și progresul</small></a>`).join(''):'<div class="card empty">Nu ai materii active încă.</div>'}</section>`}

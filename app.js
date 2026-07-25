@@ -1,18 +1,5 @@
 "use strict";
 
-/*
-  ITERA — INITIAL FRONTEND PROTOTYPE
-
-  Momentan, datele sunt salvate în localStorage.
-  Mai târziu le vom înlocui cu date din Supabase.
-*/
-
-const STORAGE_KEYS = {
-  events: "itera_events",
-  tasks: "itera_tasks",
-  energy: "itera_energy"
-};
-
 const monthNames = [
   "Ianuarie",
   "Februarie",
@@ -53,19 +40,7 @@ const weekdayNames = [
   "sâmbătă"
 ];
 
-const pageIds = {
-  home: "homePage",
-  calendar: "calendarPage",
-  tasks: "tasksPage",
-  subjects: "subjectsPage",
-  grades: "gradesPage",
-  university: "universityPage"
-};
-
 const now = new Date();
-
-let displayedMonth = now.getMonth();
-let displayedYear = now.getFullYear();
 
 let selectedDate = formatDateForInput(now);
 
@@ -74,117 +49,34 @@ let focusSecondsRemaining = 45 * 60;
 let focusInitialSeconds = 45 * 60;
 let focusPaused = false;
 
-const defaultEvents = [
-  {
-    id: createId(),
-    title: "Matematică",
-    type: "school",
-    subject: "Matematică",
-    date: formatDateForInput(now),
-    time: "08:00",
-    duration: 50,
-    priority: "medium",
-    notes: "Ora de matematică",
-    completed: false
-  },
-  {
-    id: createId(),
-    title: "Limba română",
-    type: "school",
-    subject: "Limba română",
-    date: formatDateForInput(now),
-    time: "10:00",
-    duration: 50,
-    priority: "medium",
-    notes: "Ora de limba română",
-    completed: false
-  },
-  {
-    id: createId(),
-    title: "Exerciții la matematică",
-    type: "homework",
-    subject: "Matematică",
-    date: formatDateForInput(now),
-    time: "16:00",
-    duration: 45,
-    priority: "high",
-    notes: "Exercițiile 4–12",
-    completed: false
-  },
-  {
-    id: createId(),
-    title: "Eseu la română",
-    type: "homework",
-    subject: "Limba română",
-    date: formatDateForInput(now),
-    time: "17:00",
-    duration: 60,
-    priority: "high",
-    notes: "Introducere și primul argument",
-    completed: false
-  },
-  {
-    id: createId(),
-    title: "Recapitulare informatică",
-    type: "homework",
-    subject: "Informatică",
-    date: formatDateForInput(now),
-    time: "18:30",
-    duration: 35,
-    priority: "medium",
-    notes: "Backtracking",
-    completed: false
-  },
-  {
-    id: createId(),
-    title: "Test la biologie",
-    type: "test",
-    subject: "Biologie",
-    date: addDaysToDate(now, 3),
-    time: "09:00",
-    duration: 50,
-    priority: "high",
-    notes: "Sistemul nervos",
-    completed: false
-  },
-  {
-    id: createId(),
-    title: "Meditație la informatică",
-    type: "tutoring",
-    subject: "Informatică",
-    date: addDaysToDate(now, 1),
-    time: "17:00",
-    duration: 120,
-    priority: "medium",
-    notes: "",
-    completed: false
-  }
-];
-
-let events = loadEvents();
-let tasks = loadTasks();
+let currentUser = null;
+let profile = null;
+let subjects = [];
+let events = [];
+let tasks = [];
 
 initializeApp();
 
-function initializeApp() {
+async function initializeApp() {
+  await loadHomeData();
+  initializeShellViews();
   updateCurrentDate();
   initializeNavigation();
   initializeModals();
   initializeFocusControls();
   initializeEnergySlider();
   initializeEventForm();
-  initializeCalendarControls();
   initializeQuickActions();
-  window.addEventListener("focus", () => {
-  refreshStoredData();
+  window.addEventListener("focus", async () => {
+  await loadHomeData();
   renderAll();
 });
 
 document.addEventListener(
   "visibilitychange",
-  () => {
+  async () => {
     if (!document.hidden) {
-      refreshStoredData();
+      await loadHomeData();
       renderAll();
     }
   }
@@ -193,69 +85,167 @@ document.addEventListener(
   renderAll();
 }
 
-function loadEvents() {
-  try {
-    const storedEvents = localStorage.getItem(STORAGE_KEYS.events);
+function initializeShellViews() {
+  IteraShell.registerView("home", {
+    elementId: "homePage",
+    route: "/"
+  });
 
-    if (!storedEvents) {
-      localStorage.setItem(
-        STORAGE_KEYS.events,
-        JSON.stringify(defaultEvents)
-      );
-
-      return defaultEvents;
+  IteraShell.registerView("calendar", {
+    elementId: "calendarPage",
+    route: "/calendar",
+    onEnter() {
+      IteraCalendarView.mount();
+    },
+    onLeave() {
+      IteraCalendarView.unmount();
     }
+  });
 
-    const parsedEvents = JSON.parse(storedEvents);
-
-    if (!Array.isArray(parsedEvents)) {
-      throw new Error("Format invalid pentru evenimente.");
+  IteraShell.registerView("schedule", {
+    elementId: "schedulePage",
+    route: "/schedule",
+    onEnter() {
+      IteraScheduleView.mount();
+    },
+    onLeave() {
+      IteraScheduleView.unmount();
     }
+  });
 
-    return parsedEvents;
-  } catch (error) {
-    console.error("Evenimentele nu au putut fi încărcate:", error);
+  IteraShell.registerView("tasks", {
+    elementId: "tasksPage",
+    route: "/tasks",
+    onEnter() {
+      IteraTasksView.mount();
+    },
+    onLeave() {
+      IteraTasksView.unmount();
+    }
+  });
 
-    return defaultEvents;
+  IteraShell.registerView("subjects", {
+    elementId: "subjectsPage",
+    route: "/subjects",
+    onEnter() {
+      IteraSubjectsView.mountList();
+    },
+    onLeave() {
+      IteraSubjectsView.unmount();
+    }
+  });
+
+  IteraShell.registerView("subject-detail", {
+    elementId: "subjectDetailPage",
+    route: "/subjects/:id",
+    navigationName: "subjects",
+    onEnter(context) {
+      IteraSubjectsView.mountDetail(context.params.id);
+    },
+    onLeave() {
+      IteraSubjectsView.unmount();
+    }
+  });
+
+  IteraShell.registerView("grades", {
+    elementId: "gradesPage",
+    route: "/grades",
+    onEnter() {
+      IteraProgressView.mountGrades();
+    },
+    onLeave() {
+      IteraProgressView.unmount();
+    }
+  });
+
+  IteraShell.registerView("university", {
+    elementId: "universityPage",
+    route: "/admission",
+    onEnter() {
+      IteraProgressView.mountAdmission();
+    },
+    onLeave() {
+      IteraProgressView.unmount();
+    }
+  });
+
+  IteraShell.start({
+    notFoundView: "home"
+  });
+}
+
+async function loadHomeData() {
+  const {
+    data: { session },
+    error: sessionError
+  } = await supabaseClient.auth.getSession();
+
+  if (sessionError || !session) {
+    return;
   }
+
+  currentUser = session.user;
+
+  const [profileResult, subjectsResult, eventsResult, tasksResult] =
+    await Promise.all([
+      supabaseClient
+        .from("profiles")
+        .select("*")
+        .eq("id", currentUser.id)
+        .maybeSingle(),
+      supabaseClient
+        .from("subjects")
+        .select("*")
+        .eq("user_id", currentUser.id)
+        .eq("is_active", true)
+        .order("position"),
+      supabaseClient
+        .from("calendar_events")
+        .select("*")
+        .eq("user_id", currentUser.id)
+        .order("event_date"),
+      supabaseClient
+        .from("tasks")
+        .select("*")
+        .eq("user_id", currentUser.id)
+        .order("created_at", { ascending: false })
+    ]);
+
+  profile = profileResult.data || null;
+  subjects = subjectsResult.data || [];
+  events = (eventsResult.data || []).map(normalizeHomeEvent);
+  tasks = (tasksResult.data || []).map(normalizeHomeTask);
 }
 
-function saveEvents() {
-  localStorage.setItem(
-    STORAGE_KEYS.events,
-    JSON.stringify(events)
-  );
-}
-function loadTasks() {
-  try {
-    const storedTasks = localStorage.getItem(
-      STORAGE_KEYS.tasks
-    );
-
-    if (!storedTasks) {
-      return [];
-    }
-
-    const parsedTasks = JSON.parse(storedTasks);
-
-    return Array.isArray(parsedTasks)
-      ? parsedTasks
-      : [];
-  } catch (error) {
-    console.error(
-      "Task-urile nu au putut fi încărcate:",
-      error
-    );
-
-    return [];
-  }
+function subjectName(subjectId) {
+  return subjects.find((subject) => subject.id === subjectId)?.name || "";
 }
 
-function saveTasks() {
-  localStorage.setItem(
-    STORAGE_KEYS.tasks,
-    JSON.stringify(tasks)
-  );
+function normalizeHomeEvent(event) {
+  return {
+    id: event.id,
+    title: event.title,
+    type: event.event_type,
+    subject: subjectName(event.subject_id),
+    subjectId: event.subject_id,
+    date: event.event_date,
+    time: String(event.start_time || "").slice(0, 5),
+    duration: 0,
+    priority: "medium",
+    notes: event.notes || "",
+    completed: false
+  };
+}
+
+function normalizeHomeTask(task) {
+  return {
+    ...task,
+    type: task.task_type,
+    subject: subjectName(task.subject_id),
+    deadline: task.deadline_date,
+    deadlineTime: String(task.deadline_time || "").slice(0, 5),
+    estimatedMinutes: task.estimated_minutes
+  };
 }
 
 function convertTaskToCalendarItem(task) {
@@ -301,29 +291,12 @@ function getAllCalendarItems() {
   ];
 }
 
-function refreshStoredData() {
-  events = loadEvents();
-  tasks = loadTasks();
-}
-
-function createId() {
-  return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
-}
-
 function formatDateForInput(date) {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
 
   return `${year}-${month}-${day}`;
-}
-
-function addDaysToDate(date, days) {
-  const newDate = new Date(date);
-
-  newDate.setDate(newDate.getDate() + days);
-
-  return formatDateForInput(newDate);
 }
 
 function parseLocalDate(dateString) {
@@ -346,19 +319,10 @@ function updateCurrentDate() {
   const todayNumber = document.getElementById(
     "todayNumber"
   );
-  let profileName = "Daria";
-
-try {
-  const savedProfile = JSON.parse(
-    localStorage.getItem("itera_profile")
-  );
-
-  if (savedProfile?.firstName) {
-    profileName = savedProfile.firstName;
-  }
-} catch (error) {
-  console.error("Profilul nu a putut fi citit:", error);
-}
+  const profileName =
+    profile?.first_name ||
+    currentUser?.user_metadata?.first_name ||
+    "Itera";
 
   const hour = now.getHours();
 
@@ -402,42 +366,25 @@ function initializeNavigation() {
       openPage(button.dataset.openPage);
     });
   });
+
+  document
+    .getElementById("mobileMoreButton")
+    .addEventListener("click", () => openModal("mobileMoreModal"));
+
+  document
+    .querySelectorAll("[data-mobile-route]")
+    .forEach((link) => {
+      link.addEventListener("click", () => {
+        closeModal("mobileMoreModal");
+      });
+    });
 }
 
 function openPage(pageName) {
-  const targetPageId = pageIds[pageName];
-
-  if (!targetPageId) {
+  if (!IteraShell.navigate(pageName, {
+    updateUrl: true
+  })) {
     return;
-  }
-
-  document.querySelectorAll(".page-section").forEach((page) => {
-    page.classList.remove("active-page");
-  });
-
-  const targetPage = document.getElementById(targetPageId);
-
-  targetPage.classList.add("active-page");
-
-  document.querySelectorAll("[data-page]").forEach((button) => {
-    button.classList.toggle(
-      "active",
-      button.dataset.page === pageName
-    );
-  });
-
-  window.scrollTo({
-    top: 0,
-    behavior: "smooth"
-  });
-
-  if (pageName === "calendar") {
-    renderCalendar();
-    renderSelectedDateEvents();
-  }
-
-  if (pageName === "tasks") {
-    renderAllTasks();
   }
 }
 
@@ -516,11 +463,13 @@ function initializeQuickActions() {
   ];
 
   eventButtons.forEach((buttonId) => {
-    document
-      .getElementById(buttonId)
-      .addEventListener("click", () => {
+    const button = document.getElementById(buttonId);
+
+    if (button) {
+      button.addEventListener("click", () => {
         prepareEventModal(selectedDate);
       });
+    }
   });
 
   const taskButtons = [
@@ -537,7 +486,7 @@ taskButtons.forEach((buttonId) => {
   }
 
   button.addEventListener("click", () => {
-    window.location.href = "tasks.html";
+    IteraShell.navigate("tasks", { updateUrl: true });
   });
 });
 
@@ -557,7 +506,7 @@ taskButtons.forEach((buttonId) => {
   action === "task" ||
   action === "test"
 ) {
-  window.location.href = "tasks.html";
+  IteraShell.navigate("tasks", { updateUrl: true });
   return;
 }
 
@@ -603,7 +552,7 @@ function initializeEventForm() {
     .addEventListener("submit", handleEventSubmit);
 }
 
-function handleEventSubmit(event) {
+async function handleEventSubmit(event) {
   event.preventDefault();
 
   const title = document
@@ -622,29 +571,38 @@ function handleEventSubmit(event) {
     return;
   }
 
-  const newEvent = {
-    id: createId(),
+  const subjectNameValue =
+    document.getElementById("eventSubject").value;
+  const subject = subjects.find(
+    (item) => item.name === subjectNameValue
+  );
+  const eventPayload = {
+    user_id: currentUser.id,
     title,
-    type: document.getElementById("eventType").value,
-    subject: document.getElementById("eventSubject").value,
-    date,
-    time: document.getElementById("eventTime").value,
-    duration: Number(
-      document.getElementById("eventDuration").value
-    ),
-    priority: document.getElementById("eventPriority").value,
+    event_type: document.getElementById("eventType").value,
+    subject_id: subject?.id || null,
+    event_date: date,
+    start_time: document.getElementById("eventTime").value || null,
     notes: document
       .getElementById("eventNotes")
       .value
-      .trim(),
-    completed: false
+      .trim() || null
   };
 
+  const { data, error } = await supabaseClient
+    .from("calendar_events")
+    .insert(eventPayload)
+    .select()
+    .single();
+
+  if (error) {
+    showToast("Evenimentul nu a putut fi salvat.", "!");
+    return;
+  }
+
+  const newEvent = normalizeHomeEvent(data);
   events.push(newEvent);
-
   events.sort(sortEvents);
-
-  saveEvents();
   renderAll();
 
   selectedDate = newEvent.date;
@@ -839,22 +797,10 @@ function initializeEnergySlider() {
     "energySlider"
   );
 
-  const savedEnergy =
-    localStorage.getItem(STORAGE_KEYS.energy);
-
-  if (savedEnergy) {
-    energySlider.value = savedEnergy;
-  }
-
   updateEnergyDisplay(energySlider.value);
 
   energySlider.addEventListener("input", () => {
     updateEnergyDisplay(energySlider.value);
-
-    localStorage.setItem(
-      STORAGE_KEYS.energy,
-      energySlider.value
-    );
   });
 }
 
@@ -871,9 +817,6 @@ function renderAll() {
   renderTodayTimeline();
   renderTodayTasks();
   renderUpcomingEvents();
-  renderCalendar();
-  renderSelectedDateEvents();
-  renderAllTasks();
 }
 
 function getTodayEvents() {
@@ -1012,28 +955,6 @@ function renderTodayTasks() {
   );
 }
 
-function renderAllTasks() {
-  const taskList = document.getElementById(
-    "allTasksList"
-  );
-
-  const taskItems = getAllCalendarItems()
-    .filter(
-      (item) =>
-        item.source === "task" ||
-        item.type === "homework" ||
-        item.type === "test" ||
-        item.type === "project"
-    )
-    .sort(sortEvents);
-
-  renderTaskCollection(
-    taskList,
-    taskItems,
-    "Nu ai adăugat încă niciun task."
-  );
-}
-
 function renderTaskCollection(
   container,
   taskEvents,
@@ -1102,7 +1023,7 @@ data-item-source="${event.source || "event"}"
     });
 }
 
-function toggleItemCompletion(
+async function toggleItemCompletion(
   itemId,
   itemSource
 ) {
@@ -1128,20 +1049,29 @@ function toggleItemCompletion(
       };
     });
 
-    saveTasks();
+    const task = tasks.find((item) => item.id === itemId);
+    const { error } = await supabaseClient
+      .from("tasks")
+      .update({
+        completed: task.completed,
+        progress: task.progress,
+        completed_at: task.completed
+          ? new Date().toISOString()
+          : null
+      })
+      .eq("id", itemId)
+      .eq("user_id", currentUser.id);
+
+    if (error) {
+      await loadHomeData();
+      showToast("Task-ul nu a putut fi actualizat.", "!");
+    }
   } else {
-    events = events.map((event) => {
-      if (event.id !== itemId) {
-        return event;
-      }
-
-      return {
-        ...event,
-        completed: !event.completed
-      };
-    });
-
-    saveEvents();
+    showToast(
+      "Evenimentele nu folosesc starea de task finalizat.",
+      "!"
+    );
+    return;
   }
 
   renderAll();
@@ -1222,183 +1152,6 @@ function getTypeLabel(type) {
 }
 
 /* CALENDAR */
-
-function initializeCalendarControls() {
-  document
-    .getElementById("previousMonthButton")
-    .addEventListener("click", () => {
-      displayedMonth -= 1;
-
-      if (displayedMonth < 0) {
-        displayedMonth = 11;
-        displayedYear -= 1;
-      }
-
-      renderCalendar();
-    });
-
-  document
-    .getElementById("nextMonthButton")
-    .addEventListener("click", () => {
-      displayedMonth += 1;
-
-      if (displayedMonth > 11) {
-        displayedMonth = 0;
-        displayedYear += 1;
-      }
-
-      renderCalendar();
-    });
-}
-
-function renderCalendar() {
-  const calendarGrid = document.getElementById(
-    "calendarGrid"
-  );
-
-  const calendarMonthTitle = document.getElementById(
-    "calendarMonthTitle"
-  );
-
-  calendarMonthTitle.textContent =
-    `${monthNames[displayedMonth]} ${displayedYear}`;
-
-  const firstDay = new Date(
-    displayedYear,
-    displayedMonth,
-    1
-  );
-
-  const lastDay = new Date(
-    displayedYear,
-    displayedMonth + 1,
-    0
-  );
-
-  const totalDays = lastDay.getDate();
-
-  let startingWeekday = firstDay.getDay();
-
-  startingWeekday =
-    startingWeekday === 0
-      ? 6
-      : startingWeekday - 1;
-
-  const cells = [];
-
-  for (let index = 0; index < startingWeekday; index += 1) {
-    cells.push(`
-      <div class="calendar-day empty"></div>
-    `);
-  }
-
-  for (let day = 1; day <= totalDays; day += 1) {
-    const dateString = formatDateForInput(
-      new Date(displayedYear, displayedMonth, day)
-    );
-
-    const dateEvents =
-  getAllCalendarItems().filter(
-    (item) => item.date === dateString
-  );
-
-    const isToday =
-      dateString === formatDateForInput(new Date());
-
-    const isSelected = dateString === selectedDate;
-
-    const dotMarkup = dateEvents
-      .slice(0, 5)
-      .map(
-        (event) =>
-          `<span class="event-dot ${event.type}"></span>`
-      )
-      .join("");
-
-    cells.push(`
-      <button
-        class="calendar-day
-          ${isToday ? "today" : ""}
-          ${isSelected ? "selected" : ""}"
-        data-calendar-date="${dateString}"
-      >
-        <span class="calendar-number">
-          ${day}
-        </span>
-
-        <span class="calendar-event-dots">
-          ${dotMarkup}
-        </span>
-      </button>
-    `);
-  }
-
-  calendarGrid.innerHTML = cells.join("");
-
-  calendarGrid
-    .querySelectorAll("[data-calendar-date]")
-    .forEach((button) => {
-      button.addEventListener("click", () => {
-        selectedDate = button.dataset.calendarDate;
-
-        renderCalendar();
-        renderSelectedDateEvents();
-      });
-    });
-}
-
-function renderSelectedDateEvents() {
-  const title = document.getElementById(
-    "selectedDateTitle"
-  );
-
-  const container = document.getElementById(
-    "selectedDateEvents"
-  );
-
-  const selectedDateObject = parseLocalDate(selectedDate);
-
-  title.textContent =
-    `${selectedDateObject.getDate()} ` +
-    `${monthNames[
-      selectedDateObject.getMonth()
-    ].toLowerCase()}`;
-
-  const dateEvents = getAllCalendarItems()
-  .filter(
-    (item) => item.date === selectedDate
-  )
-  .sort(sortEvents);
-
-  if (dateEvents.length === 0) {
-    container.innerHTML = `
-      <p class="empty-message">
-        Ziua aceasta este liberă. Poți adăuga un eveniment, un test sau o sesiune de studiu.
-      </p>
-    `;
-
-    return;
-  }
-
-  container.innerHTML = dateEvents
-    .map((event) => {
-      return `
-        <div class="selected-event">
-          <strong>${escapeHtml(event.title)}</strong>
-
-          <span>
-            ${event.time ? `${escapeHtml(event.time)} · ` : ""}
-            ${
-              escapeHtml(event.subject) ||
-              getTypeLabel(event.type)
-            }
-            · ${formatMinutes(event.duration)}
-          </span>
-        </div>
-      `;
-    })
-    .join("");
-}
 
 function formatReadableDate(dateString) {
   const date = parseLocalDate(dateString);

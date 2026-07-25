@@ -1,7 +1,0 @@
-import {AppState} from './state.js';
-export const escape=value=>String(value??'').replaceAll('&','&amp;').replaceAll('<','&lt;').replaceAll('>','&gt;').replaceAll('"','&quot;').replaceAll("'",'&#039;');
-export const today=()=>new Date().toISOString().slice(0,10);
-export function subjectName(id){return AppState.subjects.find(subject=>subject.id===id)?.name||'Fără materie'}
-export function showNotice(message){const el=document.querySelector('#appNotice');el.textContent=message;el.hidden=!message}
-export function renderProfile(){const name=AppState.profile?.first_name||AppState.user?.user_metadata?.first_name||'Itera';document.querySelector('#profileName').textContent=name;document.querySelector('#profileAvatar').textContent=name.charAt(0).toUpperCase();document.querySelector('#profileGrade').textContent=AppState.profile?.grade||'Cont Itera'}
-export function taskItem(task){return `<div class="list-item"><button class="check ${task.completed?'done':''}" data-complete="${task.id}" aria-label="Marchează task-ul ca finalizat">${task.completed?'✓':''}</button><div><strong>${escape(task.title)}</strong><small>${escape(subjectName(task.subject_id))}${task.deadline_date?` · ${task.deadline_date}`:''}</small></div><span class="badge">${task.estimated_minutes||0}m</span><button class="secondary-button task-action" data-edit="${task.id}">Editează</button><button class="secondary-button task-action" data-delete="${task.id}">Șterge</button></div>`}
