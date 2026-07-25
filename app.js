@@ -54,6 +54,7 @@ let profile = null;
 let subjects = [];
 let events = [];
 let tasks = [];
+let scheduleItems = [];
 
 initializeApp();
 
@@ -64,7 +65,6 @@ async function initializeApp() {
   initializeNavigation();
   initializeModals();
   initializeFocusControls();
-  initializeEnergySlider();
   initializeEventForm();
   initializeQuickActions();
   window.addEventListener("focus", async () => {
@@ -186,7 +186,7 @@ async function loadHomeData() {
 
   currentUser = session.user;
 
-  const [profileResult, subjectsResult, eventsResult, tasksResult] =
+  const [profileResult, subjectsResult, eventsResult, tasksResult, scheduleResult] =
     await Promise.all([
       supabaseClient
         .from("profiles")
@@ -208,13 +208,44 @@ async function loadHomeData() {
         .from("tasks")
         .select("*")
         .eq("user_id", currentUser.id)
-        .order("created_at", { ascending: false })
+        .order("created_at", { ascending: false }),
+      supabaseClient
+        .from("schedule_items")
+        .select("*")
+        .eq("user_id", currentUser.id)
+        .order("day_of_week")
+        .order("start_time")
     ]);
 
   profile = profileResult.data || null;
   subjects = subjectsResult.data || [];
   events = (eventsResult.data || []).map(normalizeHomeEvent);
   tasks = (tasksResult.data || []).map(normalizeHomeTask);
+  scheduleItems = scheduleResult.data || [];
+  populateHomeSubjects();
+}
+
+function populateHomeSubjects() {
+  const focusSelect = document.getElementById("focusSubject");
+  const eventSelect = document.getElementById("eventSubject");
+
+  if (focusSelect && subjects.length) {
+    const previousValue = focusSelect.value;
+    focusSelect.innerHTML = subjects
+      .map((subject) => `<option value="${escapeHtml(subject.name)}">${escapeHtml(subject.name)}</option>`)
+      .join("");
+    focusSelect.value = subjects.some((subject) => subject.name === previousValue)
+      ? previousValue
+      : subjects[0].name;
+  }
+
+  if (eventSelect) {
+    const previousValue = eventSelect.value;
+    eventSelect.innerHTML = `<option value="">Fără materie</option>${subjects
+      .map((subject) => `<option value="${escapeHtml(subject.name)}">${escapeHtml(subject.name)}</option>`)
+      .join("")}`;
+    eventSelect.value = previousValue;
+  }
 }
 
 function subjectName(subjectId) {
@@ -342,6 +373,20 @@ function updateCurrentDate() {
 
   greetingTitle.textContent = `${greeting}, ${profileName} 🌷`;
   todayNumber.textContent = String(now.getDate());
+
+  const sidebarName = document.querySelector(".mini-profile-text strong");
+  const sidebarGrade = document.querySelector(".mini-profile-text span");
+  const sidebarAvatar = document.querySelector(".mini-profile .avatar");
+
+  if (sidebarName) sidebarName.textContent = profileName;
+  if (sidebarGrade) {
+    sidebarGrade.textContent = profile?.grade
+      ? `Clasa a ${profile.grade}-a`
+      : "Profilul meu";
+  }
+  if (sidebarAvatar) {
+    sidebarAvatar.textContent = profileName.charAt(0).toUpperCase();
+  }
 }
 
 function capitalizeFirstLetter(value) {
@@ -790,26 +835,6 @@ function finishFocusSession() {
   );
 }
 
-/* ENERGY */
-
-function initializeEnergySlider() {
-  const energySlider = document.getElementById(
-    "energySlider"
-  );
-
-  updateEnergyDisplay(energySlider.value);
-
-  energySlider.addEventListener("input", () => {
-    updateEnergyDisplay(energySlider.value);
-  });
-}
-
-function updateEnergyDisplay(value) {
-  document.getElementById(
-    "energyValue"
-  ).textContent = `${value}/10`;
-}
-
 /* RENDER */
 
 function renderAll() {
@@ -832,18 +857,12 @@ function getTodayEvents() {
 }
 
 function renderHomeSummary() {
-  const todayEvents = getTodayEvents();
-
-  const schoolEvents = todayEvents.filter(
-    (event) => event.type === "school"
+  const todayString = formatDateForInput(new Date());
+  const schoolEvents = scheduleItems.filter(
+    (item) => Number(item.day_of_week) === new Date().getDay()
   );
 
-  const taskEvents = todayEvents.filter(
-    (event) =>
-      event.type === "homework" ||
-      event.type === "test" ||
-      event.type === "project"
-  );
+  const taskEvents = tasks.filter((task) => task.deadline === todayString);
 
   const remainingTasks = taskEvents.filter(
     (event) => !event.completed
@@ -873,6 +892,27 @@ function renderHomeSummary() {
   document.getElementById(
     "estimatedWorkTime"
   ).textContent = formatMinutes(totalMinutes);
+
+  const currentDate = new Date();
+  const mondayOffset = (currentDate.getDay() + 6) % 7;
+  const weekStart = new Date(currentDate);
+  weekStart.setHours(0, 0, 0, 0);
+  weekStart.setDate(currentDate.getDate() - mondayOffset);
+  const weekEnd = new Date(weekStart);
+  weekEnd.setDate(weekStart.getDate() + 6);
+
+  const weeklyTasks = tasks.filter((task) => {
+    if (!task.deadline) return false;
+    const deadline = parseLocalDate(task.deadline);
+    return deadline >= weekStart && deadline <= weekEnd;
+  });
+  const completedCount = weeklyTasks.filter((task) => task.completed).length;
+  const progress = weeklyTasks.length
+    ? Math.round((completedCount / weeklyTasks.length) * 100)
+    : 0;
+
+  document.getElementById("homeProgressValue").textContent = `${progress}%`;
+  document.getElementById("homeProgressRing").style.setProperty("--progress", progress);
 }
 
 function formatMinutes(totalMinutes) {
@@ -893,16 +933,38 @@ function renderTodayTimeline() {
     "todayTimeline"
   );
 
-  const todayEvents = getTodayEvents()
-    .filter((event) => event.time)
+  const todaySchedule = scheduleItems
+    .filter((item) => Number(item.day_of_week) === new Date().getDay())
+    .map((item) => ({
+      title: item.title,
+      subject: subjectName(item.subject_id),
+      time: String(item.start_time || "").slice(0, 5),
+      endTime: String(item.end_time || "").slice(0, 5),
+      type: item.item_type || "school"
+    }));
+
+  const todayEvents = [
+    ...todaySchedule,
+    ...events
+      .filter((event) => event.date === formatDateForInput(new Date()) && event.time)
+      .map((event) => ({ ...event, endTime: "" }))
+  ]
+    .sort((a, b) => a.time.localeCompare(b.time))
     .slice(0, 5);
 
   if (todayEvents.length === 0) {
     timeline.innerHTML = `
-      <p class="empty-message">
-        Nu ai nimic programat astăzi.
-      </p>
+      <div class="empty-state">
+        <span>☁</span>
+        <strong>O zi mai aerisită.</strong>
+        <p>Adaugă ceva în orar când ești gata.</p>
+        <button class="text-button" data-open-page="schedule">Deschide orarul</button>
+      </div>
     `;
+    timeline.querySelector("[data-open-page]")?.addEventListener(
+      "click",
+      () => openPage("schedule")
+    );
 
     return;
   }
@@ -927,7 +989,7 @@ function renderTodayTimeline() {
                 escapeHtml(event.subject) ||
                 getTypeLabel(event.type)
               }
-              · ${formatMinutes(event.duration)}
+              ${event.endTime ? ` · până la ${escapeHtml(event.endTime)}` : ""}
             </span>
           </div>
         </div>
@@ -962,9 +1024,11 @@ function renderTaskCollection(
 ) {
   if (taskEvents.length === 0) {
     container.innerHTML = `
-      <p class="empty-message">
-        ${escapeHtml(emptyText)}
-      </p>
+      <div class="empty-state">
+        <span>✓</span>
+        <strong>Ești la zi.</strong>
+        <p>${escapeHtml(emptyText)}</p>
+      </div>
     `;
 
     return;
@@ -1101,9 +1165,11 @@ function renderUpcomingEvents() {
 
   if (upcomingEvents.length === 0) {
     upcomingList.innerHTML = `
-      <p class="empty-message">
-        Nu ai deadline-uri apropiate.
-      </p>
+      <div class="empty-state">
+        <span>✦</span>
+        <strong>Niciun deadline apropiat.</strong>
+        <p>Poți planifica următorul pas în calendar.</p>
+      </div>
     `;
 
     return;
@@ -1112,9 +1178,17 @@ function renderUpcomingEvents() {
   upcomingList.innerHTML = upcomingEvents
     .map((event) => {
       const date = parseLocalDate(event.date);
+      const daysUntil = Math.round(
+        (date - parseLocalDate(formatDateForInput(new Date()))) / 86400000
+      );
+      const urgencyClass = daysUntil <= 1
+        ? "is-urgent"
+        : daysUntil <= 3
+          ? "is-soon"
+          : "";
 
       return `
-        <div class="upcoming-item">
+        <div class="upcoming-item ${urgencyClass}">
           <div class="upcoming-date">
             ${date.getDate()}
           </div>
@@ -1123,7 +1197,7 @@ function renderUpcomingEvents() {
             <strong>${escapeHtml(event.title)}</strong>
 
             <span>
-              ${shortMonthNames[date.getMonth()]}
+              ${formatRelativeDate(event.date)}
               ${event.time ? `· ${escapeHtml(event.time)}` : ""}
             </span>
           </div>
@@ -1149,6 +1223,17 @@ function getTypeLabel(type) {
   };
 
   return labels[type] || "Eveniment";
+}
+
+function formatRelativeDate(dateString) {
+  const target = parseLocalDate(dateString);
+  const today = parseLocalDate(formatDateForInput(new Date()));
+  const days = Math.round((target - today) / 86400000);
+
+  if (days === 0) return "Astăzi";
+  if (days === 1) return "Mâine";
+  if (days > 1 && days < 7) return `Peste ${days} zile`;
+  return `${target.getDate()} ${shortMonthNames[target.getMonth()]}`;
 }
 
 /* CALENDAR */
