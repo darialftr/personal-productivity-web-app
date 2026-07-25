@@ -106,10 +106,11 @@
         <div class="topbar-actions">
           <button
             class="icon-button notification-button"
+            id="notificationButton"
             aria-label="Notificări"
           >
             ♡
-            <span class="notification-dot"></span>
+            <span class="notification-dot" id="notificationDot"></span>
           </button>
 
           <button class="primary-small-button" id="openQuickAddButton">
@@ -138,6 +139,17 @@
         id="homePage"
         data-app-view="home"
       >
+        <section class="now-recommendation" id="nowRecommendation">
+          <div class="now-recommendation-icon">→</div>
+          <div class="now-recommendation-copy">
+            <p class="card-kicker">Ce fac acum?</p>
+            <h2 id="nowRecommendationTitle">Îți pregătim următorul pas.</h2>
+            <p id="nowRecommendationReason">Analizăm orarul și deadline-urile tale.</p>
+          </div>
+          <button class="primary-small-button" id="startRecommendedSession">
+            Pornește sesiunea
+          </button>
+        </section>
 
         <section class="hero-grid">
           <article class="focus-card">
@@ -152,6 +164,18 @@
               <p class="focus-description">
                 Alege materia, pornește sesiunea și ocupă-te doar de următorul pas.
               </p>
+
+              <div class="energy-checkin">
+                <span>Cum te simți azi?</span>
+                <div class="energy-options" id="energyOptions" role="group" aria-label="Nivel de energie">
+                  <button type="button" data-energy="1" aria-label="Foarte obosită">1</button>
+                  <button type="button" data-energy="2" aria-label="Energie scăzută">2</button>
+                  <button type="button" data-energy="3" class="active" aria-label="Energie medie">3</button>
+                  <button type="button" data-energy="4" aria-label="Energie bună">4</button>
+                  <button type="button" data-energy="5" aria-label="Energie foarte bună">5</button>
+                </div>
+                <small id="energyRecommendation">Plan echilibrat pentru astăzi.</small>
+              </div>
 
               <div class="home-progress-ring" id="homeProgressRing" style="--progress: 0">
                 <strong id="homeProgressValue">0%</strong>
@@ -396,6 +420,41 @@
     </div>
   </div>
 
+  <!-- NOTIFICATION CENTER -->
+  <div class="notification-panel" id="notificationPanel" aria-hidden="true">
+    <div class="notification-panel-header">
+      <div>
+        <p class="card-kicker">Itera</p>
+        <h2>Notificări</h2>
+      </div>
+      <button class="modal-close-button" id="closeNotificationPanel" aria-label="Închide">×</button>
+    </div>
+    <div class="notification-list" id="notificationList"></div>
+  </div>
+
+  <!-- FLOATING STUDY TIMER -->
+  <section class="floating-timer" id="floatingTimer" aria-hidden="true">
+    <header class="floating-timer-drag" id="floatingTimerDrag">
+      <span class="focus-status-dot"></span>
+      <span>Nu te distrage</span>
+      <div>
+        <button id="minimizeFloatingTimer" aria-label="Minimizează">−</button>
+        <button id="closeFloatingTimer" aria-label="Închide">×</button>
+      </div>
+    </header>
+    <div class="floating-timer-body">
+      <p id="floatingTimerType">Sesiune focus</p>
+      <h2 id="floatingTimerSubject">Matematică</h2>
+      <span id="floatingTimerTask">Studiu individual</span>
+      <strong id="floatingTimerValue">45:00</strong>
+      <div class="floating-progress"><span id="floatingTimerProgress"></span></div>
+      <div class="floating-timer-actions">
+        <button class="secondary-button" id="floatingPauseButton">Pauză</button>
+        <button class="primary-button" id="floatingFinishButton">Finalizează</button>
+      </div>
+    </div>
+  </section>
+
   <!-- QUICK ADD MENU -->
   <div class="modal-overlay" id="quickAddModal" aria-hidden="true">
     <div class="modal-card quick-add-card">
@@ -417,8 +476,14 @@
       <div class="quick-add-grid">
         <button class="quick-add-option" data-quick-action="task">
           <span class="quick-add-icon pink">✓</span>
-          <strong>Homework</strong>
+          <strong>Task</strong>
           <small>Task cu deadline</small>
+        </button>
+
+        <button class="quick-add-option" data-quick-action="homework">
+          <span class="quick-add-icon pink">⌂</span>
+          <strong>Temă</strong>
+          <small>Temă pentru o materie</small>
         </button>
 
         <button class="quick-add-option" data-quick-action="event">
@@ -437,6 +502,18 @@
           <span class="quick-add-icon green">▶</span>
           <strong>Sesiune</strong>
           <small>Pornește focus</small>
+        </button>
+
+        <button class="quick-add-option" data-quick-action="grade">
+          <span class="quick-add-icon peach">9</span>
+          <strong>Notă</strong>
+          <small>Actualizează media</small>
+        </button>
+
+        <button class="quick-add-option" data-quick-action="material">
+          <span class="quick-add-icon lilac">↗</span>
+          <strong>Material</strong>
+          <small>Salvează la o materie</small>
         </button>
       </div>
     </div>

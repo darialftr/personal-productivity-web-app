@@ -48,6 +48,11 @@ let focusTimerInterval = null;
 let focusSecondsRemaining = 45 * 60;
 let focusInitialSeconds = 45 * 60;
 let focusPaused = false;
+let focusStartedAt = null;
+let focusSubjectId = null;
+let focusTaskId = null;
+let currentEnergy = 3;
+let recommendedTask = null;
 
 let currentUser = null;
 let profile = null;
@@ -65,6 +70,9 @@ async function initializeApp() {
   initializeNavigation();
   initializeModals();
   initializeFocusControls();
+  initializeEnergyCheckin();
+  initializeNotificationCenter();
+  initializeFloatingTimer();
   initializeEventForm();
   initializeQuickActions();
   window.addEventListener("focus", async () => {
@@ -549,11 +557,22 @@ taskButtons.forEach((buttonId) => {
         }
         if (
   action === "task" ||
-  action === "test"
+  action === "test" ||
+  action === "homework"
 ) {
   IteraShell.navigate("tasks", { updateUrl: true });
   return;
 }
+
+        if (action === "grade") {
+          IteraShell.navigate("grades", { updateUrl: true });
+          return;
+        }
+
+        if (action === "material") {
+          IteraShell.navigate("subjects", { updateUrl: true });
+          return;
+        }
 
         const typeMap = {
           task: "homework",
@@ -693,6 +712,10 @@ function initializeFocusControls() {
     .addEventListener("click", startFocusSession);
 
   document
+    .getElementById("startRecommendedSession")
+    .addEventListener("click", startRecommendedFocusSession);
+
+  document
     .getElementById("pauseFocusButton")
     .addEventListener("click", toggleFocusPause);
 
@@ -737,23 +760,13 @@ function startFocusSession() {
   focusInitialSeconds = duration * 60;
   focusSecondsRemaining = focusInitialSeconds;
   focusPaused = false;
-
-  document.getElementById(
-    "focusModalSubject"
-  ).textContent = subject;
-
-  document.getElementById(
-    "pauseFocusButton"
-  ).textContent = "Pauză";
-
-  document.getElementById(
-    "focusMessage"
-  ).textContent =
-    "Ai nevoie doar de următorul pas.";
+  focusStartedAt = new Date();
+  focusSubjectId = subjects.find((item) => item.name === subject)?.id || null;
+  const matchingTask = recommendedTask?.subject === subject ? recommendedTask : null;
+  focusTaskId = matchingTask?.id || null;
 
   updateFocusTimerDisplay();
-
-  openModal("focusModal");
+  showFloatingTimer(subject, matchingTask?.title || "Studiu individual");
 
   focusTimerInterval = setInterval(() => {
     if (focusPaused) {
@@ -770,6 +783,20 @@ function startFocusSession() {
   }, 1000);
 }
 
+function startRecommendedFocusSession() {
+  if (recommendedTask?.subject) {
+    const focusSubject = document.getElementById("focusSubject");
+    const subjectExists = [...focusSubject.options].some(
+      (option) => option.value === recommendedTask.subject
+    );
+    if (subjectExists) focusSubject.value = recommendedTask.subject;
+  }
+
+  document.getElementById("focusDuration").value = String(getRecommendedSessionMinutes());
+  updateFocusButtonSubtitle();
+  startFocusSession();
+}
+
 function toggleFocusPause() {
   focusPaused = !focusPaused;
 
@@ -784,6 +811,10 @@ function toggleFocusPause() {
   ).textContent = focusPaused
     ? "Ia o gură de apă și revino când ești gata."
     : "Ai nevoie doar de următorul pas.";
+
+  document.getElementById("floatingPauseButton").textContent = focusPaused
+    ? "Continuă"
+    : "Pauză";
 }
 
 function resetFocusSession() {
@@ -811,28 +842,243 @@ function updateFocusTimerDisplay() {
   ).textContent =
     `${String(minutes).padStart(2, "0")}:` +
     `${String(seconds).padStart(2, "0")}`;
+
+  document.getElementById("floatingTimerValue").textContent =
+    `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+  const progress = focusInitialSeconds
+    ? ((focusInitialSeconds - focusSecondsRemaining) / focusInitialSeconds) * 100
+    : 0;
+  document.getElementById("floatingTimerProgress").style.width =
+    `${Math.max(0, progress)}%`;
 }
 
-function finishFocusSession() {
+async function finishFocusSession() {
   clearInterval(focusTimerInterval);
+  const studiedSeconds = Math.max(0, focusInitialSeconds - focusSecondsRemaining);
+  const studiedMinutes = Math.max(1, Math.round(studiedSeconds / 60));
 
-  focusSecondsRemaining = 0;
+  if (currentUser && focusSubjectId && studiedSeconds >= 30) {
+    const { error } = await supabaseClient.from("subject_study_sessions").insert({
+      user_id: currentUser.id,
+      subject_id: focusSubjectId,
+      started_at: focusStartedAt?.toISOString() || new Date().toISOString(),
+      ended_at: new Date().toISOString(),
+      duration_minutes: studiedMinutes,
+      source: "focus-timer",
+      notes: focusTaskId ? recommendedTask?.title : null,
+      study_date: formatDateForInput(new Date())
+    });
 
-  updateFocusTimerDisplay();
+    if (error) {
+      showToast("Timpul nu a putut fi salvat în Supabase.", "!");
+      return;
+    }
+  }
 
-  document.getElementById(
-    "focusMessage"
-  ).textContent =
-    "Minunat! Ai terminat sesiunea de focus. 🌷";
-
-  document.getElementById(
-    "pauseFocusButton"
-  ).textContent = "Finalizat";
+  const floatingTimer = document.getElementById("floatingTimer");
+  floatingTimer.classList.remove("visible");
+  floatingTimer.setAttribute("aria-hidden", "true");
 
   showToast(
-    "Sesiunea de focus a fost finalizată.",
+    `Sesiunea de ${studiedMinutes} min a fost salvată.`,
     "✿"
   );
+}
+
+function initializeEnergyCheckin() {
+  document.querySelectorAll("[data-energy]").forEach((button) => {
+    button.addEventListener("click", () => {
+      currentEnergy = Number(button.dataset.energy);
+      document.querySelectorAll("[data-energy]").forEach((item) => {
+        item.classList.toggle("active", item === button);
+      });
+      renderNowRecommendation();
+    });
+  });
+}
+
+function getRecommendedSessionMinutes() {
+  if (currentEnergy <= 2) return 25;
+  if (currentEnergy === 3) return 45;
+  return 60;
+}
+
+function renderNowRecommendation() {
+  const today = parseLocalDate(formatDateForInput(new Date()));
+  const openTasks = tasks
+    .filter((task) => !task.completed)
+    .map((task) => {
+      const deadline = task.deadline ? parseLocalDate(task.deadline) : null;
+      const daysUntil = deadline ? Math.round((deadline - today) / 86400000) : 30;
+      const priorityScore = { high: 40, medium: 20, low: 5 }[task.priority] || 10;
+      const difficultyScore = { hard: 12, medium: 7, easy: 2 }[task.difficulty] || 5;
+      return {
+        ...task,
+        daysUntil,
+        recommendationScore: priorityScore + difficultyScore + Math.max(0, 35 - daysUntil * 7)
+      };
+    })
+    .sort((a, b) => b.recommendationScore - a.recommendationScore);
+
+  recommendedTask = openTasks[0] || null;
+  const title = document.getElementById("nowRecommendationTitle");
+  const reason = document.getElementById("nowRecommendationReason");
+  const energyMessage = document.getElementById("energyRecommendation");
+  const minutes = getRecommendedSessionMinutes();
+
+  const energyLabels = {
+    1: "Astăzi păstrăm planul foarte ușor.",
+    2: "Îți recomandăm sesiuni scurte și o pauză generoasă.",
+    3: "Plan echilibrat pentru astăzi.",
+    4: "Ai energie pentru o sesiune mai consistentă.",
+    5: "Energie bună — folosim momentul fără să exagerăm."
+  };
+  energyMessage.textContent = energyLabels[currentEnergy];
+
+  if (!recommendedTask) {
+    title.textContent = "Ai încheiat task-urile importante.";
+    reason.textContent = `Poți face ${minutes} min de recapitulare la materia aleasă.`;
+    return;
+  }
+
+  title.textContent = `Începe cu „${recommendedTask.title}”.`;
+  const urgency = recommendedTask.daysUntil <= 0
+    ? "are termen astăzi"
+    : recommendedTask.daysUntil === 1
+      ? "este pentru mâine"
+      : `are termen peste ${recommendedTask.daysUntil} zile`;
+  reason.textContent =
+    `${urgency}, iar o sesiune realistă acum este de ${minutes} minute.`;
+}
+
+function initializeFloatingTimer() {
+  const timer = document.getElementById("floatingTimer");
+  const dragHandle = document.getElementById("floatingTimerDrag");
+  let dragOffsetX = 0;
+  let dragOffsetY = 0;
+
+  document.getElementById("floatingPauseButton").addEventListener("click", toggleFocusPause);
+  document.getElementById("floatingFinishButton").addEventListener("click", finishFocusSession);
+  document.getElementById("minimizeFloatingTimer").addEventListener("click", () => {
+    timer.classList.toggle("minimized");
+  });
+  document.getElementById("closeFloatingTimer").addEventListener("click", () => {
+    timer.classList.add("minimized");
+  });
+
+  dragHandle.addEventListener("pointerdown", (event) => {
+    if (event.target.closest("button")) return;
+    const rect = timer.getBoundingClientRect();
+    dragOffsetX = event.clientX - rect.left;
+    dragOffsetY = event.clientY - rect.top;
+    dragHandle.setPointerCapture(event.pointerId);
+    timer.classList.add("dragging");
+  });
+
+  dragHandle.addEventListener("pointermove", (event) => {
+    if (!dragHandle.hasPointerCapture(event.pointerId)) return;
+    const maxLeft = window.innerWidth - timer.offsetWidth - 8;
+    const maxTop = window.innerHeight - timer.offsetHeight - 8;
+    timer.style.left = `${Math.max(8, Math.min(maxLeft, event.clientX - dragOffsetX))}px`;
+    timer.style.top = `${Math.max(8, Math.min(maxTop, event.clientY - dragOffsetY))}px`;
+    timer.style.right = "auto";
+    timer.style.bottom = "auto";
+  });
+
+  dragHandle.addEventListener("pointerup", (event) => {
+    if (dragHandle.hasPointerCapture(event.pointerId)) {
+      dragHandle.releasePointerCapture(event.pointerId);
+    }
+    timer.classList.remove("dragging");
+  });
+}
+
+function showFloatingTimer(subject, taskTitle) {
+  const timer = document.getElementById("floatingTimer");
+  timer.classList.remove("minimized");
+  timer.classList.add("visible");
+  timer.setAttribute("aria-hidden", "false");
+  document.getElementById("floatingTimerSubject").textContent = subject;
+  document.getElementById("floatingTimerTask").textContent = taskTitle;
+  document.getElementById("floatingPauseButton").textContent = "Pauză";
+}
+
+function buildNotifications() {
+  const today = parseLocalDate(formatDateForInput(new Date()));
+  const taskNotifications = tasks
+    .filter((task) => !task.completed && task.deadline)
+    .map((task) => {
+      const days = Math.round((parseLocalDate(task.deadline) - today) / 86400000);
+      if (days > 3) return null;
+      return {
+        icon: days < 0 ? "!" : "✓",
+        title: days < 0 ? `${task.title} este întârziat` : task.title,
+        text: days === 0
+          ? `Deadline astăzi · ${task.estimatedMinutes || 30} min estimate`
+          : days === 1
+            ? `Pentru mâine · ${task.estimatedMinutes || 30} min estimate`
+            : days < 0
+              ? "Replanifică-l sau finalizează-l acum."
+              : `Deadline peste ${days} zile`,
+        action: "tasks",
+        urgent: days <= 1
+      };
+    })
+    .filter(Boolean);
+
+  const testNotifications = events
+    .filter((event) => event.type === "test" && event.date >= formatDateForInput(new Date()))
+    .slice(0, 3)
+    .map((event) => ({
+      icon: "☆",
+      title: event.title,
+      text: `${formatRelativeDate(event.date)}${event.subject ? ` · ${event.subject}` : ""}`,
+      action: "calendar",
+      urgent: event.date === formatDateForInput(new Date())
+    }));
+
+  return [...taskNotifications, ...testNotifications].slice(0, 8);
+}
+
+function initializeNotificationCenter() {
+  const panel = document.getElementById("notificationPanel");
+  const close = () => {
+    panel.classList.remove("visible");
+    panel.setAttribute("aria-hidden", "true");
+  };
+
+  document.getElementById("notificationButton").addEventListener("click", () => {
+    panel.classList.toggle("visible");
+    panel.setAttribute("aria-hidden", String(!panel.classList.contains("visible")));
+  });
+  document.getElementById("closeNotificationPanel").addEventListener("click", close);
+}
+
+function renderNotifications() {
+  const notifications = buildNotifications();
+  const list = document.getElementById("notificationList");
+  const dot = document.getElementById("notificationDot");
+  dot.classList.toggle("hidden", notifications.length === 0);
+
+  if (!notifications.length) {
+    list.innerHTML = `<div class="empty-state"><span>✓</span><strong>Ești la zi.</strong><p>Nu ai notificări urgente.</p></div>`;
+    return;
+  }
+
+  list.innerHTML = notifications.map((notification) => `
+    <button class="notification-item ${notification.urgent ? "urgent" : ""}" data-notification-route="${notification.action}">
+      <span>${notification.icon}</span>
+      <div><strong>${escapeHtml(notification.title)}</strong><small>${escapeHtml(notification.text)}</small></div>
+      <b>→</b>
+    </button>
+  `).join("");
+
+  list.querySelectorAll("[data-notification-route]").forEach((button) => {
+    button.addEventListener("click", () => {
+      document.getElementById("notificationPanel").classList.remove("visible");
+      openPage(button.dataset.notificationRoute);
+    });
+  });
 }
 
 /* RENDER */
@@ -842,6 +1088,8 @@ function renderAll() {
   renderTodayTimeline();
   renderTodayTasks();
   renderUpcomingEvents();
+  renderNowRecommendation();
+  renderNotifications();
 }
 
 function getTodayEvents() {
