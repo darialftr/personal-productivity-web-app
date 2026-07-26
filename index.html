@@ -15,8 +15,14 @@
   >
 
   <meta name="theme-color" content="#f7b8cf">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
+  <meta name="apple-mobile-web-app-title" content="Itera">
 
   <title>Itera — Study beautifully</title>
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="apple-touch-icon" href="itera-icon.png">
+  <link rel="icon" href="itera-icon.png" type="image/png">
 
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -429,6 +435,15 @@
       </div>
       <button class="modal-close-button" id="closeNotificationPanel" aria-label="Închide">×</button>
     </div>
+    <section class="push-settings-card" id="pushSettingsCard">
+      <div>
+        <strong id="pushSettingsTitle">Notificări pe telefon</strong>
+        <small id="pushSettingsDescription">Primește remindere chiar dacă Itera nu este deschisă.</small>
+      </div>
+      <button class="primary-small-button" id="enablePushButton">Activează</button>
+      <button class="text-button" id="testPushButton" hidden>Trimite un test</button>
+      <button class="text-button" id="installIteraButton" hidden>Instalează Itera</button>
+    </section>
     <div class="notification-list" id="notificationList"></div>
   </div>
 
@@ -699,6 +714,7 @@
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="supabase-config.js"></script>
+<script src="push-notifications.js"></script>
 <script src="auth-guard.js"></script>
 <script src="app-shell.js"></script>
 <script src="schedule-view.js"></script>

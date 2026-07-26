@@ -2540,6 +2540,40 @@ textarea:focus-visible {
   gap: 8px;
 }
 
+.push-settings-card {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px 12px;
+  margin-bottom: 14px;
+  padding: 14px;
+  background:
+    linear-gradient(120deg, rgba(255, 247, 250, 0.96), rgba(248, 236, 245, 0.92));
+  border: 1px solid rgba(200, 109, 145, 0.18);
+  border-radius: 16px;
+}
+
+.push-settings-card > div {
+  min-width: 0;
+  display: grid;
+  gap: 3px;
+}
+
+.push-settings-card small {
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.push-settings-card .text-button {
+  grid-column: 1 / -1;
+  justify-self: start;
+}
+
+.push-settings-card button:disabled {
+  opacity: 0.68;
+  cursor: default;
+}
+
 .notification-item {
   width: 100%;
   display: grid;

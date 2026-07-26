@@ -1,0 +1,22 @@
+{
+  "id": "./",
+  "name": "Itera — Study beautifully",
+  "short_name": "Itera",
+  "description": "Planifică, studiază și primește remindere inteligente.",
+  "lang": "ro",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait-primary",
+  "background_color": "#fff9fb",
+  "theme_color": "#cf6f95",
+  "categories": ["education", "productivity"],
+  "icons": [
+    {
+      "src": "itera-icon.png",
+      "sizes": "1254x1254",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -1,0 +1,4 @@
+PUSH_SECRETS.local.txt
+.env
+.env.*
+!.env.example

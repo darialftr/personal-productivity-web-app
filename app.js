@@ -75,6 +75,7 @@ async function initializeApp() {
   initializeEnergyCheckin();
   initializeNotificationCenter();
   initializeFloatingTimer();
+  IteraPush.initialize();
   initializeEventForm();
   initializeQuickActions();
   window.addEventListener("focus", async () => {
