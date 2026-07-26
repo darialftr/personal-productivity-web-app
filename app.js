@@ -57,6 +57,7 @@ let currentEnergy = 3;
 let currentEnergyDate = formatDateForInput(now);
 let energySaveVersion = 0;
 let recommendedTask = null;
+let pendingDayPlan = [];
 const appLaunchStartedAt = Date.now();
 
 let currentUser = null;
@@ -87,6 +88,8 @@ async function initializeApp() {
   initializeQuickActions();
   initializeQuickTaskForm();
   initializeOrganizer();
+  initializeDayPlanner();
+  initializeMorningBrief();
   window.setInterval(() => {
     resetEnergyForNewDay();
     updateCurrentDate();
@@ -1378,6 +1381,183 @@ function renderNowRecommendation() {
     `„${recommendedTask.title}” ${urgency}. Dacă începi acum, termini înainte de ${finishTime}.`;
 }
 
+function getMinutesFromTime(value) {
+  const [hours, minutes] = String(value || "00:00").slice(0, 5).split(":").map(Number);
+  return hours * 60 + minutes;
+}
+
+function formatClockMinutes(totalMinutes) {
+  const safeMinutes = Math.max(0, Math.min(totalMinutes, 23 * 60 + 59));
+  return `${String(Math.floor(safeMinutes / 60)).padStart(2, "0")}:${String(safeMinutes % 60).padStart(2, "0")}`;
+}
+
+function roundToQuarter(totalMinutes) {
+  return Math.ceil(totalMinutes / 15) * 15;
+}
+
+function buildDayPlan() {
+  const today = formatDateForInput(new Date());
+  const dayTasks = tasks
+    .filter((task) => !task.completed && task.deadline && task.deadline <= today)
+    .sort(sortTasksForPlan);
+  const energyCapacity = { 1: 45, 2: 90, 3: 150, 4: 210, 5: 270 }[currentEnergy] || 150;
+  const currentDate = new Date();
+  let cursor = roundToQuarter(currentDate.getHours() * 60 + currentDate.getMinutes() + 10);
+  const lastClass = scheduleItems
+    .filter((item) => Number(item.day_of_week) === currentDate.getDay())
+    .sort((a, b) => String(a.end_time || a.start_time || "").localeCompare(String(b.end_time || b.start_time || "")))
+    .at(-1);
+
+  if (lastClass) {
+    const classEnd = getMinutesFromTime(lastClass.end_time || lastClass.start_time);
+    if (classEnd > cursor) cursor = roundToQuarter(classEnd + 30);
+  }
+
+  const plan = [];
+  let plannedMinutes = 0;
+  for (const task of dayTasks) {
+    const duration = Math.min(getTaskMinutes(task), getRecommendedSessionMinutes());
+    if (plan.length && plannedMinutes + duration > energyCapacity) break;
+    if (cursor + duration > 22 * 60 + 30) break;
+    plan.push({
+      task,
+      start: formatClockMinutes(cursor),
+      end: formatClockMinutes(cursor + duration),
+      duration
+    });
+    plannedMinutes += duration;
+    cursor = roundToQuarter(cursor + duration + 10);
+  }
+
+  return {
+    entries: plan,
+    totalTasks: dayTasks.length,
+    plannedMinutes
+  };
+}
+
+function openDayPlanner() {
+  const plan = buildDayPlan();
+  const list = document.getElementById("dayPlanList");
+  const intro = document.getElementById("dayPlanIntro");
+  const applyButton = document.getElementById("applyDayPlanButton");
+  pendingDayPlan = plan.entries;
+
+  if (!plan.entries.length) {
+    intro.textContent = plan.totalTasks
+      ? "Este prea târziu pentru un plan realist astăzi. Păstrează doar ce este urgent."
+      : "Nu ai task-uri restante sau cu deadline astăzi.";
+    list.innerHTML = `
+      <div class="day-plan-empty">
+        <strong>Ziua poate rămâne aerisită.</strong>
+        <span>Itera nu îți va umple programul doar de dragul de a-l umple.</span>
+      </div>
+    `;
+    applyButton.hidden = true;
+  } else {
+    intro.textContent =
+      `Am așezat ${plan.entries.length} din ${plan.totalTasks} ${plan.totalTasks === 1 ? "task" : "task-uri"} în limita energiei ${currentEnergy}/5 · ${formatMinutes(plan.plannedMinutes)}.`;
+    list.innerHTML = plan.entries.map((entry, index) => `
+      ${index ? '<div class="day-plan-break"><span></span>Pauză scurtă</div>' : ""}
+      <div class="day-plan-row">
+        <time>${escapeHtml(entry.start)}</time>
+        <span class="day-plan-line"><i></i></span>
+        <div>
+          <strong>${escapeHtml(entry.task.title)}</strong>
+          <small>${escapeHtml(entry.task.subject || "Fără materie")} · ${entry.duration} min · până la ${escapeHtml(entry.end)}</small>
+        </div>
+      </div>
+    `).join("");
+    applyButton.hidden = false;
+  }
+
+  openModal("dayPlanModal");
+}
+
+function initializeDayPlanner() {
+  document.getElementById("planDayButton")?.addEventListener("click", openDayPlanner);
+  document.getElementById("briefPlanDayButton")?.addEventListener("click", () => {
+    markMorningBriefSeen();
+    closeModal("morningBriefModal");
+    openDayPlanner();
+  });
+  document.getElementById("applyDayPlanButton")?.addEventListener("click", async (event) => {
+    if (!pendingDayPlan.length || !currentUser) return;
+    event.currentTarget.disabled = true;
+    event.currentTarget.textContent = "Aplic planul…";
+    const today = formatDateForInput(new Date());
+    const results = await Promise.all(
+      pendingDayPlan.map((entry) =>
+        supabaseClient
+          .from("tasks")
+          .update({ deadline_date: today, deadline_time: entry.start })
+          .eq("id", entry.task.id)
+          .eq("user_id", currentUser.id)
+      )
+    );
+    event.currentTarget.disabled = false;
+    event.currentTarget.textContent = "Aplică planul";
+
+    if (results.some((result) => result.error)) {
+      showToast("O parte din plan nu a putut fi salvată.", "!");
+      return;
+    }
+
+    await loadHomeData();
+    closeModal("dayPlanModal");
+    renderAll();
+    showToast("Planul zilei apare acum în timeline și calendar.", "✓");
+  });
+}
+
+async function markMorningBriefSeen() {
+  if (!currentUser) return;
+  const today = formatDateForInput(new Date());
+  const nextMetadata = {
+    ...(currentUser.user_metadata || {}),
+    itera_brief_seen_date: today
+  };
+  const { data } = await supabaseClient.auth.updateUser({ data: nextMetadata });
+  if (data?.user) currentUser = data.user;
+}
+
+function initializeMorningBrief() {
+  const today = formatDateForInput(new Date());
+  if (currentUser?.user_metadata?.itera_brief_seen_date === today) return;
+
+  const todayTasks = tasks.filter((task) => !task.completed && task.deadline === today);
+  const todayClasses = scheduleItems.filter(
+    (item) => Number(item.day_of_week) === new Date().getDay()
+  );
+  const studyMinutes = todayTasks.reduce((sum, task) => sum + getTaskMinutes(task), 0);
+  const displayName =
+    profile?.first_name ||
+    currentUser?.user_metadata?.first_name ||
+    "Itera";
+  const isWeekend = [0, 6].includes(new Date().getDay());
+
+  document.getElementById("morningBriefTitle").textContent =
+    isWeekend
+      ? `Un weekend în ritmul tău, ${displayName}.`
+      : new Date().getHours() < 12
+        ? `Bună dimineața, ${displayName}.`
+        : `Planul de azi, ${displayName}.`;
+  document.getElementById("morningBriefSummary").textContent =
+    todayTasks.length
+      ? `Ai ${todayTasks.length} ${todayTasks.length === 1 ? "task" : "task-uri"} și aproximativ ${formatMinutes(studyMinutes)} de studiu.`
+      : "Nu ai nimic urgent planificat pentru astăzi.";
+  document.getElementById("morningBriefMetrics").innerHTML = `
+    <div><strong>${todayClasses.length}</strong><span>ore</span></div>
+    <div><strong>${todayTasks.length}</strong><span>task-uri</span></div>
+    <div><strong>${currentEnergy}/5</strong><span>energie</span></div>
+  `;
+
+  document
+    .querySelectorAll('[data-close-modal="morningBriefModal"]')
+    .forEach((button) => button.addEventListener("click", markMorningBriefSeen, { once: true }));
+  window.setTimeout(() => openModal("morningBriefModal"), 1150);
+}
+
 function getTomorrowDate(offset = 1) {
   const date = new Date();
   date.setDate(date.getDate() + offset);
@@ -1536,6 +1716,9 @@ function initializeOrganizer() {
       <ol class="organizer-insights">
         ${plan.insights.map((insight) => `<li><span aria-hidden="true"></span><p>${escapeHtml(insight)}</p></li>`).join("")}
       </ol>
+      <section class="weekly-review-panel" id="weeklyReviewPanel">
+        <div class="weekly-review-loading">Pregătesc review-ul săptămânal…</div>
+      </section>
     `;
 
     if (plan.action) {
@@ -1551,6 +1734,7 @@ function initializeOrganizer() {
     }
 
     openModal("organizerModal");
+    renderWeeklyReview();
   });
 
   document.getElementById("rebalanceTasksButton")?.addEventListener("click", async (event) => {
@@ -1588,6 +1772,90 @@ function renderOrganizerPreview() {
   const preview = document.getElementById("organizerPreview");
   if (!preview) return;
   preview.textContent = getOrganizerPlan().preview;
+}
+
+async function renderWeeklyReview() {
+  const panel = document.getElementById("weeklyReviewPanel");
+  if (!panel || !currentUser) return;
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  const heatmapStart = new Date(today);
+  heatmapStart.setDate(today.getDate() - 55);
+  const weekStart = new Date(today);
+  weekStart.setDate(today.getDate() - ((today.getDay() + 6) % 7));
+  const { data: sessions, error } = await supabaseClient
+    .from("subject_study_sessions")
+    .select("subject_id,duration_minutes,study_date")
+    .eq("user_id", currentUser.id)
+    .gte("study_date", formatDateForInput(heatmapStart))
+    .order("study_date");
+
+  const safeSessions = error ? [] : (sessions || []);
+  const completedThisWeek = tasks.filter((task) => {
+    if (!task.completed_at) return false;
+    const completedAt = new Date(task.completed_at);
+    return completedAt >= weekStart && completedAt <= new Date();
+  });
+  const weekSessions = safeSessions.filter(
+    (session) => session.study_date >= formatDateForInput(weekStart)
+  );
+  const weekMinutes = weekSessions.reduce(
+    (sum, session) => sum + Number(session.duration_minutes || 0),
+    0
+  );
+  const subjectMinutes = weekSessions.reduce((totals, session) => {
+    totals[session.subject_id] = (totals[session.subject_id] || 0) + Number(session.duration_minutes || 0);
+    return totals;
+  }, {});
+  const topSubjectId = Object.entries(subjectMinutes)
+    .sort((first, second) => second[1] - first[1])[0]?.[0];
+  const topSubject = subjectName(topSubjectId) || "—";
+  const activityByDate = {};
+
+  safeSessions.forEach((session) => {
+    activityByDate[session.study_date] =
+      (activityByDate[session.study_date] || 0) + Number(session.duration_minutes || 0);
+  });
+  tasks.forEach((task) => {
+    if (!task.completed_at) return;
+    const completedDate = formatDateForInput(new Date(task.completed_at));
+    if (completedDate >= formatDateForInput(heatmapStart)) {
+      activityByDate[completedDate] = (activityByDate[completedDate] || 0) + 15;
+    }
+  });
+
+  const heatmapDays = Array.from({ length: 56 }, (_, index) => {
+    const date = new Date(heatmapStart);
+    date.setDate(heatmapStart.getDate() + index);
+    const dateString = formatDateForInput(date);
+    const activity = activityByDate[dateString] || 0;
+    const level = activity === 0 ? 0 : activity < 30 ? 1 : activity < 60 ? 2 : activity < 120 ? 3 : 4;
+    return `<span data-level="${level}" title="${formatReadableDate(dateString)} · ${formatMinutes(activity)}"></span>`;
+  }).join("");
+  const bestDayEntry = Object.entries(activityByDate)
+    .filter(([date]) => date >= formatDateForInput(weekStart))
+    .sort((first, second) => second[1] - first[1])[0];
+  const bestDay = bestDayEntry ? formatReadableDate(bestDayEntry[0]) : "—";
+
+  panel.innerHTML = `
+    <div class="weekly-review-heading">
+      <div>
+        <p class="card-kicker">Weekly Review</p>
+        <strong>Săptămâna ta, fără presiune</strong>
+      </div>
+      <span>${formatReadableDate(formatDateForInput(weekStart))}–${formatReadableDate(formatDateForInput(today))}</span>
+    </div>
+    <div class="weekly-review-stats">
+      <div><strong>${completedThisWeek.length}</strong><span>finalizate</span></div>
+      <div><strong>${formatMinutes(weekMinutes)}</strong><span>studiu</span></div>
+      <div><strong>${escapeHtml(topSubject)}</strong><span>materia principală</span></div>
+      <div><strong>${escapeHtml(bestDay)}</strong><span>ziua cea mai activă</span></div>
+    </div>
+    <div class="study-heatmap-wrap">
+      <div class="study-heatmap" aria-label="Activitatea din ultimele opt săptămâni">${heatmapDays}</div>
+      <div class="heatmap-legend"><span>Mai puțin</span><i data-level="1"></i><i data-level="2"></i><i data-level="3"></i><i data-level="4"></i><span>Mai mult</span></div>
+    </div>
+  `;
 }
 
 function renderGoalCountdowns() {

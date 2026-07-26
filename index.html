@@ -304,9 +304,14 @@
                 <p class="card-kicker">Program</p>
                 <h2>Ce urmează</h2>
               </div>
-              <button class="text-button" data-open-page="schedule">
-                Vezi orarul
-              </button>
+              <div class="card-heading-actions">
+                <button class="text-button plan-day-trigger" id="planDayButton">
+                  Planifică ziua
+                </button>
+                <button class="text-button schedule-link" data-open-page="schedule">
+                  Vezi orarul
+                </button>
+              </div>
             </div>
             <div class="timeline" id="todayTimeline"></div>
           </article>
@@ -692,6 +697,40 @@
           <strong>Material</strong>
           <small>Salvează la o materie</small>
         </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- MORNING BRIEF -->
+  <div class="modal-overlay morning-brief-modal" id="morningBriefModal" aria-hidden="true">
+    <div class="modal-card morning-brief-card">
+      <button class="modal-close-button morning-brief-close" data-close-modal="morningBriefModal" aria-label="Închide">&times;</button>
+      <p class="card-kicker">Brief-ul zilei</p>
+      <h2 id="morningBriefTitle">Bună dimineața.</h2>
+      <p id="morningBriefSummary">Îți pregătim ziua.</p>
+      <div class="morning-brief-metrics" id="morningBriefMetrics"></div>
+      <div class="form-actions">
+        <button class="secondary-button" id="dismissMorningBrief" data-close-modal="morningBriefModal">Nu acum</button>
+        <button class="primary-button" id="briefPlanDayButton">Planifică ziua</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- DAY PLANNER -->
+  <div class="modal-overlay" id="dayPlanModal" aria-hidden="true">
+    <div class="modal-card day-plan-card">
+      <div class="modal-header">
+        <div>
+          <p class="card-kicker">Planul de azi</p>
+          <h2>Un ritm realist</h2>
+        </div>
+        <button class="modal-close-button" data-close-modal="dayPlanModal" aria-label="Închide">&times;</button>
+      </div>
+      <p class="day-plan-intro" id="dayPlanIntro"></p>
+      <div class="day-plan-list" id="dayPlanList"></div>
+      <div class="form-actions">
+        <button class="secondary-button" data-close-modal="dayPlanModal">Păstrează ziua liberă</button>
+        <button class="primary-button" id="applyDayPlanButton">Aplică planul</button>
       </div>
     </div>
   </div>
