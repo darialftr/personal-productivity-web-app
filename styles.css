@@ -2284,6 +2284,22 @@ textarea:focus-visible {
 .goal-countdown-card,
 .organizer-card {
   min-width: 0;
+  padding: 26px;
+}
+
+.goal-countdown-card {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr);
+}
+
+.goal-countdown-card .card-heading-row {
+  align-items: flex-start;
+  margin-bottom: 8px;
+}
+
+.goal-countdown-card .text-button {
+  flex: 0 0 auto;
+  margin-top: 3px;
 }
 
 .goal-countdown-list {
@@ -2331,8 +2347,15 @@ textarea:focus-visible {
 
 .countdown-empty {
   display: grid;
+  align-content: center;
   gap: 6px;
-  padding: 22px 0 8px;
+  min-height: 116px;
+  padding: 18px 0 8px;
+}
+
+.countdown-empty strong,
+.countdown-empty span {
+  display: block;
 }
 
 .countdown-empty span {
@@ -2343,8 +2366,9 @@ textarea:focus-visible {
 .organizer-card {
   position: relative;
   display: grid;
-  align-content: space-between;
-  gap: 20px;
+  grid-template-rows: minmax(0, 1fr) auto;
+  align-content: stretch;
+  gap: 18px;
   overflow: hidden;
   background:
     radial-gradient(circle at 100% 0%, color-mix(in srgb, var(--primary) 16%, transparent), transparent 44%),
@@ -2352,7 +2376,23 @@ textarea:focus-visible {
 }
 
 .organizer-card .primary-button {
+  align-self: end;
   width: fit-content;
+}
+
+.organizer-card > div:not(.organizer-mark) {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  padding-right: 42px;
+}
+
+.organizer-card h2 {
+  margin: 0;
+  font-family: "DM Serif Display", serif;
+  font-size: 27px;
+  font-weight: 400;
+  line-height: 1.1;
 }
 
 .organizer-mark {
@@ -2364,6 +2404,7 @@ textarea:focus-visible {
 }
 
 .organizer-card p:not(.card-kicker) {
+  margin: 10px 0 0;
   max-width: 38ch;
   color: var(--muted);
   line-height: 1.55;
@@ -2461,6 +2502,15 @@ textarea:focus-visible {
 
   .organizer-card .primary-button {
     width: 100%;
+  }
+
+  .goal-countdown-card,
+  .organizer-card {
+    padding: 20px;
+  }
+
+  .organizer-card > div:not(.organizer-mark) {
+    padding-right: 28px;
   }
 
   .goal-countdown-row {
