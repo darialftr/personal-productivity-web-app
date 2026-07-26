@@ -2476,17 +2476,85 @@ textarea:focus-visible {
 
 .organizer-response {
   display: grid;
-  gap: 8px;
+  gap: 18px;
   padding: 20px;
   border: 1px solid var(--border);
   border-radius: 18px;
   background: color-mix(in srgb, var(--primary) 5%, var(--surface));
 }
 
+.organizer-response-heading {
+  display: grid;
+  gap: 6px;
+}
+
+.organizer-response-heading > strong {
+  font-family: "DM Serif Display", serif;
+  font-size: 1.5rem;
+  font-weight: 400;
+  line-height: 1.15;
+}
+
 .organizer-response p {
   margin: 0;
   color: var(--muted);
   line-height: 1.55;
+}
+
+.organizer-metrics {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+
+.organizer-metrics div {
+  display: grid;
+  gap: 2px;
+  padding: 12px;
+  border: 1px solid color-mix(in srgb, var(--primary) 16%, var(--border));
+  border-radius: 13px;
+  background: var(--surface);
+}
+
+.organizer-metrics strong,
+.organizer-metrics span {
+  display: block;
+}
+
+.organizer-metrics strong {
+  color: var(--primary-dark);
+  font-size: 1rem;
+}
+
+.organizer-metrics span {
+  color: var(--muted);
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.organizer-insights {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.organizer-insights li {
+  display: grid;
+  grid-template-columns: 9px minmax(0, 1fr);
+  align-items: start;
+  gap: 10px;
+}
+
+.organizer-insights li > span {
+  width: 7px;
+  height: 7px;
+  margin-top: 8px;
+  border-radius: 50%;
+  background: var(--primary);
+  box-shadow: 0 0 0 4px color-mix(in srgb, var(--primary) 12%, transparent);
 }
 
 @media (max-width: 820px) {
@@ -2532,6 +2600,15 @@ textarea:focus-visible {
   .quick-task-card .form-actions button,
   .organizer-modal-card .form-actions button {
     width: 100%;
+  }
+
+  .organizer-response {
+    gap: 14px;
+    padding: 16px;
+  }
+
+  .organizer-metrics div {
+    padding: 10px;
   }
 }
 

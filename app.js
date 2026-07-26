@@ -1209,6 +1209,7 @@ function initializeEnergyCheckin() {
       });
       document.getElementById("energyValue").textContent = `${currentEnergy}/5`;
       renderNowRecommendation();
+      renderOrganizerPreview();
     });
   });
 }
@@ -1285,32 +1286,165 @@ function getTomorrowTasks() {
   return tasks.filter((task) => !task.completed && task.deadline === tomorrow);
 }
 
+function getTaskMinutes(task) {
+  return Math.max(5, Number(task.estimatedMinutes || task.estimated_minutes || 30));
+}
+
+function sortTasksForPlan(firstTask, secondTask) {
+  const priorityScore = { high: 0, medium: 1, low: 2 };
+  const firstDeadline = firstTask.deadline || "9999-12-31";
+  const secondDeadline = secondTask.deadline || "9999-12-31";
+  return firstDeadline.localeCompare(secondDeadline) ||
+    (priorityScore[firstTask.priority] ?? 1) - (priorityScore[secondTask.priority] ?? 1);
+}
+
+function getOrganizerPlan() {
+  const today = formatDateForInput(new Date());
+  const tomorrow = getTomorrowDate();
+  const openTasks = tasks.filter((task) => !task.completed);
+  const overdueTasks = openTasks.filter((task) => task.deadline && task.deadline < today);
+  const todayTasks = openTasks.filter((task) => task.deadline === today).sort(sortTasksForPlan);
+  const tomorrowTasks = openTasks.filter((task) => task.deadline === tomorrow).sort(sortTasksForPlan);
+  const todayMinutes = todayTasks.reduce((sum, task) => sum + getTaskMinutes(task), 0);
+  const tomorrowMinutes = tomorrowTasks.reduce((sum, task) => sum + getTaskMinutes(task), 0);
+  const energyCapacity = { 1: 45, 2: 90, 3: 150, 4: 210, 5: 270 }[currentEnergy] || 150;
+  const tomorrowClasses = scheduleItems.filter(
+    (item) => Number(item.day_of_week) === parseLocalDate(tomorrow).getDay()
+  ).length;
+  const insights = [];
+
+  if (overdueTasks.length) {
+    insights.push(
+      `Ai ${overdueTasks.length} ${overdueTasks.length === 1 ? "task restant" : "task-uri restante"}. Primul pas ar trebui să fie „${overdueTasks.sort(sortTasksForPlan)[0].title}”.`
+    );
+  }
+
+  if (todayTasks.length) {
+    const firstTask = todayTasks[0];
+    insights.push(
+      `Astăzi începe cu „${firstTask.title}” și rezervă aproximativ ${formatMinutes(getTaskMinutes(firstTask))}.`
+    );
+  } else {
+    insights.push("Pentru astăzi nu ai task-uri cu deadline. Păstrează spațiul liber.");
+  }
+
+  if (todayMinutes > energyCapacity) {
+    insights.push(
+      `Planul de azi are ${formatMinutes(todayMinutes)}, peste ritmul recomandat pentru energia ${currentEnergy}/5. Lucrează în sesiuni de ${getRecommendedSessionMinutes()} de minute.`
+    );
+  } else if (todayMinutes) {
+    insights.push(
+      `Cele ${formatMinutes(todayMinutes)} planificate astăzi se potrivesc cu energia ta de ${currentEnergy}/5.`
+    );
+  }
+
+  if (tomorrowTasks.length) {
+    insights.push(
+      `Mâine ai ${tomorrowTasks.length} ${tomorrowTasks.length === 1 ? "task" : "task-uri"}, ${formatMinutes(tomorrowMinutes)} în total${tomorrowClasses ? `, plus ${tomorrowClasses} ore în program` : ""}.`
+    );
+  } else {
+    insights.push("Mâine nu ai task-uri planificate.");
+  }
+
+  const tomorrowIsHeavy =
+    tomorrowTasks.length >= 4 ||
+    tomorrowMinutes > 180 ||
+    (tomorrowClasses >= 5 && tomorrowMinutes > 120);
+  let action = null;
+
+  if (tomorrowIsHeavy) {
+    const movable = tomorrowTasks
+      .filter((task) => task.type !== "test" && task.priority !== "high")
+      .sort((a, b) => getTaskMinutes(b) - getTaskMinutes(a))
+      .slice(0, 2);
+    const candidateDays = [2, 3, 4, 5, 6].map((offset) => {
+      const date = getTomorrowDate(offset);
+      const dayTasks = openTasks.filter((task) => task.deadline === date);
+      return {
+        date,
+        count: dayTasks.length,
+        minutes: dayTasks.reduce((sum, task) => sum + getTaskMinutes(task), 0)
+      };
+    }).sort((a, b) => a.minutes - b.minutes || a.count - b.count);
+    const targetDay = candidateDays[0];
+
+    if (movable.length && targetDay) {
+      action = {
+        taskIds: movable.map((task) => task.id),
+        targetDate: targetDay.date,
+        label: `Mută ${movable.length === 1 ? "un task" : "două task-uri"}`,
+        description:
+          `Mutăm ${movable.map((task) => `„${task.title}”`).join(" și ")} pe ${formatReadableDate(targetDay.date)}.`
+      };
+      insights.push(action.description);
+    }
+  }
+
+  const nextTask = [...overdueTasks, ...todayTasks, ...tomorrowTasks]
+    .sort(sortTasksForPlan)[0] || null;
+  const headline = action
+    ? "Am găsit o zi care merită echilibrată."
+    : nextTask
+      ? "Planul tău are un următor pas clar."
+      : "Programul tău este aerisit.";
+  const summary = action
+    ? "Am ales doar task-uri care nu sunt teste și nu au prioritate ridicată."
+    : nextTask
+      ? `Următorul pas recomandat este „${nextTask.title}”.`
+      : "Nu este nevoie să mutăm nimic acum.";
+  const preview = action
+    ? `Mâine este încărcat. Pot muta ${action.taskIds.length === 1 ? "un task" : "două task-uri"} într-o zi mai liberă.`
+    : todayTasks.length
+      ? `Începe cu „${todayTasks[0].title}”. Planul de azi are ${formatMinutes(todayMinutes)}.`
+      : tomorrowTasks.length
+        ? `Mâine ai ${tomorrowTasks.length} ${tomorrowTasks.length === 1 ? "task" : "task-uri"}, dar planul este realist.`
+        : "Planul este aerisit. Nu este nevoie să mutăm nimic.";
+
+  return {
+    headline,
+    summary,
+    preview,
+    insights: insights.slice(0, 4),
+    action,
+    metrics: [
+      { value: `${currentEnergy}/5`, label: "energie" },
+      { value: formatMinutes(todayMinutes), label: "astăzi" },
+      { value: formatMinutes(tomorrowMinutes), label: "mâine" }
+    ]
+  };
+}
+
 function initializeOrganizer() {
   document.getElementById("openOrganizerButton")?.addEventListener("click", () => {
-    const tomorrowTasks = getTomorrowTasks();
+    const plan = getOrganizerPlan();
     const response = document.getElementById("organizerResponse");
     const rebalanceButton = document.getElementById("rebalanceTasksButton");
 
-    if (tomorrowTasks.length <= 3) {
-      response.innerHTML = `
-        <strong>Planul de mâine este echilibrat.</strong>
-        <p>Ai ${tomorrowTasks.length} ${tomorrowTasks.length === 1 ? "task" : "task-uri"}. Nu aș muta nimic acum.</p>
-      `;
-      rebalanceButton.hidden = true;
-    } else {
-      const movable = tomorrowTasks
-        .slice()
-        .sort((a, b) => {
-          const score = { low: 0, medium: 1, high: 2 };
-          return (score[a.priority] ?? 1) - (score[b.priority] ?? 1);
-        })
-        .slice(0, 2);
-      response.innerHTML = `
-        <strong>Ai prea multe task-uri mâine.</strong>
-        <p>Pot muta ${movable.map((task) => `„${escapeHtml(task.title)}”`).join(" și ")} cu o zi mai târziu.</p>
-      `;
-      rebalanceButton.dataset.taskIds = movable.map((task) => task.id).join(",");
+    response.innerHTML = `
+      <div class="organizer-response-heading">
+        <strong>${escapeHtml(plan.headline)}</strong>
+        <p>${escapeHtml(plan.summary)}</p>
+      </div>
+      <div class="organizer-metrics">
+        ${plan.metrics.map((metric) => `
+          <div><strong>${escapeHtml(metric.value)}</strong><span>${escapeHtml(metric.label)}</span></div>
+        `).join("")}
+      </div>
+      <ol class="organizer-insights">
+        ${plan.insights.map((insight) => `<li><span aria-hidden="true"></span><p>${escapeHtml(insight)}</p></li>`).join("")}
+      </ol>
+    `;
+
+    if (plan.action) {
+      rebalanceButton.dataset.taskIds = plan.action.taskIds.join(",");
+      rebalanceButton.dataset.targetDate = plan.action.targetDate;
+      rebalanceButton.textContent = plan.action.label;
       rebalanceButton.hidden = false;
+    } else {
+      delete rebalanceButton.dataset.taskIds;
+      delete rebalanceButton.dataset.targetDate;
+      rebalanceButton.textContent = "Echilibrează ziua";
+      rebalanceButton.hidden = true;
     }
 
     openModal("organizerModal");
@@ -1318,17 +1452,19 @@ function initializeOrganizer() {
 
   document.getElementById("rebalanceTasksButton")?.addEventListener("click", async (event) => {
     const taskIds = event.currentTarget.dataset.taskIds?.split(",").filter(Boolean) || [];
-    if (!taskIds.length || !currentUser) return;
+    const targetDate = event.currentTarget.dataset.targetDate;
+    if (!taskIds.length || !targetDate || !currentUser) return;
 
+    const originalLabel = event.currentTarget.textContent;
     event.currentTarget.disabled = true;
     event.currentTarget.textContent = "Reechilibrez…";
     const { error } = await supabaseClient
       .from("tasks")
-      .update({ deadline_date: getTomorrowDate(2) })
+      .update({ deadline_date: targetDate })
       .eq("user_id", currentUser.id)
       .in("id", taskIds);
     event.currentTarget.disabled = false;
-    event.currentTarget.textContent = "Echilibrează ziua";
+    event.currentTarget.textContent = originalLabel;
 
     if (error) {
       showToast("Planul nu a putut fi actualizat.", "!");
@@ -1338,19 +1474,17 @@ function initializeOrganizer() {
     await loadHomeData();
     closeModal("organizerModal");
     renderAll();
-    showToast("Am mutat două task-uri cu o zi mai târziu.", "✓");
+    showToast(
+      `${taskIds.length === 1 ? "Task-ul a fost mutat" : "Task-urile au fost mutate"} pe ${formatReadableDate(targetDate)}.`,
+      "✓"
+    );
   });
 }
 
 function renderOrganizerPreview() {
   const preview = document.getElementById("organizerPreview");
   if (!preview) return;
-  const tomorrowCount = getTomorrowTasks().length;
-  preview.textContent = tomorrowCount > 3
-    ? `Ai ${tomorrowCount} task-uri mâine. Îți pot elibera puțin programul.`
-    : tomorrowCount
-      ? `Mâine ai ${tomorrowCount} ${tomorrowCount === 1 ? "task" : "task-uri"}, într-un ritm realist.`
-      : "Mâine este liber. Poți păstra spațiu pentru odihnă.";
+  preview.textContent = getOrganizerPlan().preview;
 }
 
 function renderGoalCountdowns() {
