@@ -210,7 +210,9 @@ async function registerUser(
 
       options: {
         data: {
-          first_name: firstName
+          first_name: firstName,
+          itera_theme: "neutral",
+          itera_mode: "light"
         }
       }
     });

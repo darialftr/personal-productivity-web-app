@@ -414,7 +414,7 @@ function getAccountPreferences() {
       : "neutral",
     mode: ["light", "dark", "system"].includes(metadata.itera_mode)
       ? metadata.itera_mode
-      : "system"
+      : "light"
   };
 }
 
@@ -430,7 +430,7 @@ function applyAccountPreferences(preferences = getAccountPreferences()) {
   const themeColor = effectiveMode === "dark"
     ? "#101114"
     : {
-        neutral: "#f5f5f7",
+        neutral: "#f7f3eb",
         rose: "#fff8fb",
         ocean: "#f5f8fb",
         forest: "#f5f8f5"
