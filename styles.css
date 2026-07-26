@@ -2322,6 +2322,50 @@ html[data-theme="neutral"][data-mode="light"] .mobile-navigation {
   border-color: rgba(117, 153, 170, 0.22);
 }
 
+/* Desktop home alignment fixes */
+@media (min-width: 761px) {
+  .focus-card-content {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) 92px;
+    column-gap: 20px;
+    align-items: start;
+  }
+
+  .focus-card-content > .card-kicker,
+  .focus-card-content > h2,
+  .focus-card-content > .focus-description {
+    grid-column: 1;
+  }
+
+  .focus-card-content > .home-progress-ring {
+    position: static;
+    grid-column: 2;
+    grid-row: 1 / 4;
+    align-self: start;
+    justify-self: end;
+  }
+
+  .focus-card-content > .energy-checkin,
+  .focus-card-content > .focus-settings,
+  .focus-card-content > .start-focus-button {
+    grid-column: 1 / -1;
+  }
+
+  .focus-card-content > .energy-checkin {
+    margin-top: 16px;
+  }
+
+  .home-next-card {
+    padding: 26px;
+  }
+}
+
+@media (max-width: 760px) {
+  .focus-card-content {
+    display: block;
+  }
+}
+
 html[data-mode="dark"] {
   color-scheme: dark;
   --background: #101114;
