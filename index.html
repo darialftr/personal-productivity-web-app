@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ro">
+<html lang="ro" class="app-booting">
 <head>
 
   <meta charset="UTF-8">
@@ -15,6 +15,7 @@
   >
 
   <meta name="theme-color" content="#f7f3eb">
+  <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="Itera">
@@ -36,6 +37,17 @@
 </head>
 
 <body>
+  <div class="app-launch-screen" id="appLaunchScreen" role="status" aria-label="Itera se deschide">
+    <div class="app-launch-glow launch-glow-one"></div>
+    <div class="app-launch-glow launch-glow-two"></div>
+    <div class="app-launch-content">
+      <div class="app-launch-mark" aria-hidden="true">i</div>
+      <strong>Itera</strong>
+      <p>Productivity, made personal.</p>
+      <div class="app-launch-progress" aria-hidden="true"><span></span></div>
+    </div>
+  </div>
+
   <div class="app-shell" id="appShell" data-app-shell>
 
     <!-- DESKTOP SIDEBAR -->

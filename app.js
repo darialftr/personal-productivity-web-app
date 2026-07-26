@@ -55,6 +55,7 @@ let focusTaskTitle = null;
 let focusSessionSaved = false;
 let currentEnergy = 3;
 let recommendedTask = null;
+const appLaunchStartedAt = Date.now();
 
 let currentUser = null;
 let profile = null;
@@ -67,6 +68,7 @@ initializeApp();
 
 async function initializeApp() {
   await loadHomeData();
+  if (!currentUser) return;
   applyAccountPreferences();
   initializeShellViews();
   updateCurrentDate();
@@ -107,6 +109,24 @@ document.addEventListener(
 );
 
   renderAll();
+  hideAppLaunchScreen();
+}
+
+function hideAppLaunchScreen() {
+  const launchScreen = document.getElementById("appLaunchScreen");
+  if (!launchScreen) {
+    document.documentElement.classList.remove("app-booting");
+    return;
+  }
+
+  const minimumDuration = 620;
+  const remainingDelay = Math.max(0, minimumDuration - (Date.now() - appLaunchStartedAt));
+
+  window.setTimeout(() => {
+    launchScreen.classList.add("leaving");
+    document.documentElement.classList.remove("app-booting");
+    window.setTimeout(() => launchScreen.remove(), 520);
+  }, remainingDelay);
 }
 
 function initializeShellViews() {
@@ -642,6 +662,12 @@ function initializeNavigation() {
     "[data-page]"
   );
 
+  document
+    .querySelectorAll(".mobile-navigation > button, .mobile-navigation > a")
+    .forEach((item) => {
+      item.addEventListener("click", () => animateMobileNavigationItem(item));
+    });
+
   navigationButtons.forEach((button) => {
     button.addEventListener("click", () => {
       openPage(button.dataset.page);
@@ -665,6 +691,13 @@ function initializeNavigation() {
         closeModal("mobileMoreModal");
       });
     });
+}
+
+function animateMobileNavigationItem(item) {
+  item.classList.remove("nav-bounce");
+  void item.offsetWidth;
+  item.classList.add("nav-bounce");
+  window.setTimeout(() => item.classList.remove("nav-bounce"), 480);
 }
 
 function openPage(pageName) {
