@@ -2986,7 +2986,40 @@ textarea:focus-visible {
 
 @media (max-width: 760px) {
   .topbar .notification-button {
+    width: 43px;
+    height: 43px;
+    display: grid !important;
+    place-items: center;
+    flex: 0 0 43px;
+    background: rgba(255, 255, 255, 0.92);
+    box-shadow: 0 8px 20px rgba(80, 51, 64, 0.1);
+  }
+
+  .topbar {
+    width: 100%;
     display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: start;
+    gap: 10px;
+  }
+
+  .topbar > div:first-child {
+    min-width: 0;
+  }
+
+  .topbar-actions {
+    flex-shrink: 0;
+  }
+
+  .topbar h1 {
+    overflow-wrap: anywhere;
+  }
+
+  .notification-bell {
+    display: block;
+    font-size: 17px;
+    line-height: 1;
+    filter: grayscale(1);
   }
 
   .now-recommendation {
