@@ -54,6 +54,8 @@ let focusTaskId = null;
 let focusTaskTitle = null;
 let focusSessionSaved = false;
 let currentEnergy = 3;
+let currentEnergyDate = formatDateForInput(now);
+let energySaveVersion = 0;
 let recommendedTask = null;
 const appLaunchStartedAt = Date.now();
 
@@ -69,6 +71,7 @@ initializeApp();
 async function initializeApp() {
   await loadHomeData();
   if (!currentUser) return;
+  hydrateDailyEnergy();
   applyAccountPreferences();
   initializeShellViews();
   updateCurrentDate();
@@ -85,12 +88,14 @@ async function initializeApp() {
   initializeQuickTaskForm();
   initializeOrganizer();
   window.setInterval(() => {
+    resetEnergyForNewDay();
     updateCurrentDate();
     renderTodayTimeline();
     renderNowRecommendation();
   }, 60000);
   window.addEventListener("focus", async () => {
   await loadHomeData();
+  hydrateDailyEnergy();
   applyAccountPreferences();
   updateCurrentDate();
   renderAll();
@@ -101,6 +106,7 @@ document.addEventListener(
   async () => {
     if (!document.hidden) {
       await loadHomeData();
+      hydrateDailyEnergy();
       applyAccountPreferences();
       updateCurrentDate();
       renderAll();
@@ -1231,18 +1237,82 @@ async function finishFocusSession() {
   );
 }
 
+function hydrateDailyEnergy() {
+  const today = formatDateForInput(new Date());
+  const metadata = currentUser?.user_metadata || {};
+  const savedLevel = Number(metadata.itera_energy_level);
+  const hasSavedLevel =
+    metadata.itera_energy_date === today &&
+    Number.isInteger(savedLevel) &&
+    savedLevel >= 1 &&
+    savedLevel <= 5;
+
+  currentEnergyDate = today;
+  currentEnergy = hasSavedLevel ? savedLevel : 3;
+  syncEnergyCheckinUI();
+}
+
+function resetEnergyForNewDay() {
+  const today = formatDateForInput(new Date());
+  if (currentEnergyDate === today) return;
+  currentEnergyDate = today;
+  currentEnergy = 3;
+  syncEnergyCheckinUI();
+  renderOrganizerPreview();
+}
+
+function syncEnergyCheckinUI() {
+  document.querySelectorAll("[data-energy]").forEach((item) => {
+    const level = Number(item.dataset.energy);
+    item.classList.toggle("active", level === currentEnergy);
+    item.classList.toggle("filled", level <= currentEnergy);
+  });
+  const value = document.getElementById("energyValue");
+  if (value) value.textContent = `${currentEnergy}/5`;
+}
+
+async function saveDailyEnergy(level, previousLevel) {
+  if (!currentUser) return;
+  const requestVersion = ++energySaveVersion;
+  const today = formatDateForInput(new Date());
+  const nextMetadata = {
+    ...(currentUser.user_metadata || {}),
+    itera_energy_level: level,
+    itera_energy_date: today
+  };
+  const { data, error } = await supabaseClient.auth.updateUser({
+    data: nextMetadata
+  });
+
+  if (requestVersion !== energySaveVersion) return;
+
+  if (error) {
+    currentEnergy = previousLevel;
+    syncEnergyCheckinUI();
+    renderNowRecommendation();
+    renderOrganizerPreview();
+    showToast("Nivelul de energie nu a putut fi salvat.", "!");
+    return;
+  }
+
+  currentUser = data.user || {
+    ...currentUser,
+    user_metadata: nextMetadata
+  };
+  currentEnergyDate = today;
+}
+
 function initializeEnergyCheckin() {
+  syncEnergyCheckinUI();
   document.querySelectorAll("[data-energy]").forEach((button) => {
     button.addEventListener("click", () => {
+      const previousLevel = currentEnergy;
       currentEnergy = Number(button.dataset.energy);
-      document.querySelectorAll("[data-energy]").forEach((item) => {
-        const level = Number(item.dataset.energy);
-        item.classList.toggle("active", item === button);
-        item.classList.toggle("filled", level <= currentEnergy);
-      });
-      document.getElementById("energyValue").textContent = `${currentEnergy}/5`;
+      currentEnergyDate = formatDateForInput(new Date());
+      syncEnergyCheckinUI();
       renderNowRecommendation();
       renderOrganizerPreview();
+      saveDailyEnergy(currentEnergy, previousLevel);
     });
   });
 }
