@@ -182,8 +182,13 @@
     const errorElement = form.querySelector("[data-pdf-error]");
     errorElement.textContent = "";
 
-    if (!file || file.type !== "application/pdf") {
+    if (!file || (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf"))) {
       errorElement.textContent = "Alege un fișier PDF.";
+      return;
+    }
+
+    if (file.size > 50 * 1024 * 1024) {
+      errorElement.textContent = "PDF-ul este prea mare. Limita este de 50 MB.";
       return;
     }
 
@@ -198,7 +203,16 @@
       .upload(filePath, file, { contentType: "application/pdf", upsert: false });
 
     if (uploadError) {
-      errorElement.textContent = "PDF-ul nu a putut fi încărcat. Verifică bucket-ul „subject-files”.";
+      const uploadMessage = String(uploadError.message || "").toLowerCase();
+      if (uploadMessage.includes("bucket") && uploadMessage.includes("not found")) {
+        errorElement.textContent = "Spațiul pentru PDF-uri nu este încă configurat.";
+      } else if (uploadMessage.includes("row-level security") || uploadMessage.includes("policy")) {
+        errorElement.textContent = "Nu ai permisiunea de a încărca în acest folder. Reautentifică-te și încearcă din nou.";
+      } else if (uploadMessage.includes("maximum allowed size") || uploadMessage.includes("too large")) {
+        errorElement.textContent = "PDF-ul depășește limita de 50 MB.";
+      } else {
+        errorElement.textContent = `PDF-ul nu a putut fi încărcat: ${uploadError.message || "eroare necunoscută"}`;
+      }
       submitButton.disabled = false;
       submitButton.textContent = "Încarcă PDF-ul";
       return;
