@@ -40,7 +40,7 @@ const weekdayNames = [
   "sâmbătă"
 ];
 
-const now = new Date();
+let now = new Date();
 
 let selectedDate = formatDateForInput(now);
 
@@ -80,6 +80,13 @@ async function initializeApp() {
   IteraPush.initialize();
   initializeEventForm();
   initializeQuickActions();
+  initializeQuickTaskForm();
+  initializeOrganizer();
+  window.setInterval(() => {
+    updateCurrentDate();
+    renderTodayTimeline();
+    renderNowRecommendation();
+  }, 60000);
   window.addEventListener("focus", async () => {
   await loadHomeData();
   applyAccountPreferences();
@@ -245,6 +252,7 @@ async function loadHomeData() {
 function populateHomeSubjects() {
   const focusSelect = document.getElementById("focusSubject");
   const eventSelect = document.getElementById("eventSubject");
+  const quickTaskSelect = document.getElementById("quickTaskSubject");
 
   if (focusSelect && subjects.length) {
     const previousValue = focusSelect.value;
@@ -262,6 +270,18 @@ function populateHomeSubjects() {
       .map((subject) => `<option value="${escapeHtml(subject.name)}">${escapeHtml(subject.name)}</option>`)
       .join("")}`;
     eventSelect.value = previousValue;
+  }
+
+  if (quickTaskSelect) {
+    const previousValue = quickTaskSelect.value;
+    quickTaskSelect.innerHTML = subjects.length
+      ? subjects
+          .map((subject) => `<option value="${subject.id}">${escapeHtml(subject.name)}</option>`)
+          .join("")
+      : '<option value="">Adaugă mai întâi o materie</option>';
+    if (previousValue && subjects.some((subject) => subject.id === previousValue)) {
+      quickTaskSelect.value = previousValue;
+    }
   }
 }
 
@@ -356,6 +376,7 @@ function parseLocalDate(dateString) {
 }
 
 function updateCurrentDate() {
+  now = new Date();
   const currentDateLabel = document.getElementById(
     "currentDateLabel"
   );
@@ -372,23 +393,14 @@ function updateCurrentDate() {
     currentUser?.user_metadata?.first_name ||
     "Itera";
 
-  const hour = now.getHours();
-
-  let greeting = "Bună dimineața";
-
-  if (hour >= 12 && hour < 18) {
-    greeting = "Bună ziua";
-  }
-
-  if (hour >= 18) {
-    greeting = "Bună seara";
-  }
+  const dailyBriefing = getDailyBriefing(profileName);
 
   currentDateLabel.textContent =
     `${capitalizeFirstLetter(weekdayNames[now.getDay()])}, ` +
     `${now.getDate()} ${monthNames[now.getMonth()].toLowerCase()}`;
 
-  greetingTitle.textContent = `${greeting}, ${profileName}.`;
+  greetingTitle.textContent = dailyBriefing.title;
+  document.getElementById("dailyBriefingText").textContent = dailyBriefing.subtitle;
   todayNumber.textContent = String(now.getDate());
 
   const sidebarName = document.querySelector(".mini-profile-text strong");
@@ -404,6 +416,76 @@ function updateCurrentDate() {
   if (sidebarAvatar) {
     sidebarAvatar.textContent = profileName.charAt(0).toUpperCase();
   }
+}
+
+function getDailyBriefing(profileName) {
+  const todayString = formatDateForInput(now);
+  const day = now.getDay();
+  const isWeekend = day === 0 || day === 6;
+  const todaySchedule = scheduleItems
+    .filter((item) => Number(item.day_of_week) === day)
+    .sort((a, b) => String(a.start_time || "").localeCompare(String(b.start_time || "")));
+  const todayTasks = tasks.filter((task) => task.deadline === todayString);
+  const remainingTasks = todayTasks.filter((task) => !task.completed);
+
+  if (todayTasks.length && remainingTasks.length === 0) {
+    return {
+      title: `Ai terminat tot ce era planificat, ${profileName}.`,
+      subtitle: "Ziua de azi este completă. Bucură-te de progres."
+    };
+  }
+
+  if (isWeekend) {
+    const bacTask = tasks.find(
+      (task) => !task.completed && /bac|recapitul/i.test(`${task.title} ${task.notes || ""}`)
+    );
+    return {
+      title: `Weekend cu ritmul tău, ${profileName}.`,
+      subtitle: bacTask
+        ? `Ai o recapitulare planificată: ${bacTask.title}.`
+        : "Fără grabă. Alege o singură recapitulare care contează."
+    };
+  }
+
+  const lastClass = todaySchedule[todaySchedule.length - 1];
+  const lastClassEnd = String(lastClass?.end_time || lastClass?.start_time || "").slice(0, 5);
+  const currentTime = `${String(now.getHours()).padStart(2, "0")}:${String(now.getMinutes()).padStart(2, "0")}`;
+  const afterSchool = lastClassEnd && currentTime >= lastClassEnd;
+  const nextTask = remainingTasks
+    .slice()
+    .sort((a, b) => {
+      const score = { high: 0, medium: 1, low: 2 };
+      return (score[a.priority] ?? 1) - (score[b.priority] ?? 1);
+    })[0];
+
+  if (now.getHours() < 12) {
+    return {
+      title: `Bună dimineața, ${profileName}.`,
+      subtitle: todaySchedule.length
+        ? `Azi ai ${todaySchedule.length} ${todaySchedule.length === 1 ? "oră" : "ore"} în program.`
+        : "Ai o dimineață liberă pentru un început liniștit."
+    };
+  }
+
+  if (afterSchool && now.getHours() < 18) {
+    return {
+      title: `Bine ai revenit, ${profileName}.`,
+      subtitle: nextTask
+        ? `Este un moment bun să începi „${nextTask.title}”.`
+        : "Programul de școală s-a încheiat. Poți lua o pauză."
+    };
+  }
+
+  const remainingMinutes = remainingTasks.reduce(
+    (sum, task) => sum + Number(task.estimatedMinutes || task.estimated_minutes || 0),
+    0
+  );
+  return {
+    title: `Bună seara, ${profileName}.`,
+    subtitle: remainingMinutes
+      ? `Mai ai aproximativ ${formatMinutes(remainingMinutes)} de studiu recomandat.`
+      : "Poți încheia ziua fără nimic restant."
+  };
 }
 
 function getAccountPreferences() {
@@ -677,23 +759,12 @@ function initializeQuickActions() {
     }
   });
 
-  const taskButtons = [
-  "addTaskButton",
-  "addTaskPageButton"
-];
-
-taskButtons.forEach((buttonId) => {
-  const button =
-    document.getElementById(buttonId);
-
-  if (!button) {
-    return;
-  }
-
-  button.addEventListener("click", () => {
+  document.getElementById("addTaskButton")?.addEventListener("click", () => {
+    prepareQuickTaskModal("homework");
+  });
+  document.getElementById("addTaskPageButton")?.addEventListener("click", () => {
     IteraShell.navigate("tasks", { updateUrl: true });
   });
-});
 
   document
     .querySelectorAll("[data-quick-action]")
@@ -712,7 +783,7 @@ taskButtons.forEach((buttonId) => {
   action === "test" ||
   action === "homework"
 ) {
-  IteraShell.navigate("tasks", { updateUrl: true });
+  prepareQuickTaskModal(action);
   return;
 }
 
@@ -738,6 +809,72 @@ taskButtons.forEach((buttonId) => {
         );
       });
     });
+}
+
+function prepareQuickTaskModal(type = "homework") {
+  const form = document.getElementById("quickTaskForm");
+  const normalizedType = type === "task" ? "homework" : type;
+  form.reset();
+  document.getElementById("quickTaskType").value = normalizedType;
+  document.getElementById("quickTaskDate").value = formatDateForInput(new Date());
+  document.getElementById("quickTaskMinutes").value = "45";
+  document.getElementById("quickTaskModalTitle").textContent =
+    normalizedType === "test" ? "Adaugă un test" : "Adaugă o temă";
+  openModal("quickTaskModal");
+  window.setTimeout(() => document.getElementById("quickTaskTitle")?.focus(), 50);
+}
+
+function initializeQuickTaskForm() {
+  document.getElementById("quickTaskForm")?.addEventListener("submit", handleQuickTaskSubmit);
+}
+
+async function handleQuickTaskSubmit(event) {
+  event.preventDefault();
+  if (!currentUser) return;
+
+  const saveButton = document.getElementById("saveQuickTaskButton");
+  const title = document.getElementById("quickTaskTitle").value.trim();
+  const subjectId = document.getElementById("quickTaskSubject").value || null;
+  const deadlineDate = document.getElementById("quickTaskDate").value;
+  const deadlineTime = document.getElementById("quickTaskTime").value || null;
+  const taskType = document.getElementById("quickTaskType").value || "homework";
+
+  saveButton.disabled = true;
+  saveButton.textContent = "Se salvează…";
+
+  const { data, error } = await supabaseClient
+    .from("tasks")
+    .insert({
+      user_id: currentUser.id,
+      subject_id: subjectId,
+      title,
+      task_type: taskType,
+      deadline_date: deadlineDate,
+      deadline_time: deadlineTime,
+      priority: document.getElementById("quickTaskPriority").value,
+      estimated_minutes: Number(document.getElementById("quickTaskMinutes").value) || 45,
+      notes: document.getElementById("quickTaskNotes").value.trim() || null,
+      completed: false,
+      progress: 0
+    })
+    .select("*")
+    .single();
+
+  saveButton.disabled = false;
+  saveButton.textContent = "Salvează";
+
+  if (error) {
+    showToast("Tema nu a putut fi salvată.", "!");
+    return;
+  }
+
+  tasks.unshift(normalizeHomeTask(data));
+  closeModal("quickTaskModal");
+  renderAll();
+  showToast(
+    `${taskType === "test" ? "Testul" : "Tema"} apare acum în Task-uri, Calendar și Materii.`,
+    "✓"
+  );
 }
 
 function prepareEventModal(
@@ -1066,8 +1203,11 @@ function initializeEnergyCheckin() {
     button.addEventListener("click", () => {
       currentEnergy = Number(button.dataset.energy);
       document.querySelectorAll("[data-energy]").forEach((item) => {
+        const level = Number(item.dataset.energy);
         item.classList.toggle("active", item === button);
+        item.classList.toggle("filled", level <= currentEnergy);
       });
+      document.getElementById("energyValue").textContent = `${currentEnergy}/5`;
       renderNowRecommendation();
     });
   });
@@ -1112,19 +1252,187 @@ function renderNowRecommendation() {
   energyMessage.textContent = energyLabels[currentEnergy];
 
   if (!recommendedTask) {
-    title.textContent = "Ai încheiat task-urile importante.";
-    reason.textContent = `Poți face ${minutes} min de recapitulare la materia aleasă.`;
+    title.textContent = "Ai terminat tot ce era planificat pentru azi.";
+    reason.textContent = `Dacă vrei, poți păstra ${minutes} de minute pentru o recapitulare ușoară.`;
     return;
   }
 
-  title.textContent = `Începe cu „${recommendedTask.title}”.`;
+  const subject = recommendedTask.subject || subjectName(recommendedTask.subject_id);
+  const finishTime = new Date(Date.now() + minutes * 60000).toLocaleTimeString("ro-RO", {
+    hour: "2-digit",
+    minute: "2-digit"
+  });
+  title.textContent = subject
+    ? `Îți recomand să începi cu ${subject.toLowerCase()}.`
+    : `Îți recomand să începi cu „${recommendedTask.title}”.`;
   const urgency = recommendedTask.daysUntil <= 0
     ? "are termen astăzi"
     : recommendedTask.daysUntil === 1
       ? "este pentru mâine"
       : `are termen peste ${recommendedTask.daysUntil} zile`;
   reason.textContent =
-    `${urgency}, iar o sesiune realistă acum este de ${minutes} minute.`;
+    `„${recommendedTask.title}” ${urgency}. Dacă începi acum, termini înainte de ${finishTime}.`;
+}
+
+function getTomorrowDate(offset = 1) {
+  const date = new Date();
+  date.setDate(date.getDate() + offset);
+  return formatDateForInput(date);
+}
+
+function getTomorrowTasks() {
+  const tomorrow = getTomorrowDate();
+  return tasks.filter((task) => !task.completed && task.deadline === tomorrow);
+}
+
+function initializeOrganizer() {
+  document.getElementById("openOrganizerButton")?.addEventListener("click", () => {
+    const tomorrowTasks = getTomorrowTasks();
+    const response = document.getElementById("organizerResponse");
+    const rebalanceButton = document.getElementById("rebalanceTasksButton");
+
+    if (tomorrowTasks.length <= 3) {
+      response.innerHTML = `
+        <strong>Planul de mâine este echilibrat.</strong>
+        <p>Ai ${tomorrowTasks.length} ${tomorrowTasks.length === 1 ? "task" : "task-uri"}. Nu aș muta nimic acum.</p>
+      `;
+      rebalanceButton.hidden = true;
+    } else {
+      const movable = tomorrowTasks
+        .slice()
+        .sort((a, b) => {
+          const score = { low: 0, medium: 1, high: 2 };
+          return (score[a.priority] ?? 1) - (score[b.priority] ?? 1);
+        })
+        .slice(0, 2);
+      response.innerHTML = `
+        <strong>Ai prea multe task-uri mâine.</strong>
+        <p>Pot muta ${movable.map((task) => `„${escapeHtml(task.title)}”`).join(" și ")} cu o zi mai târziu.</p>
+      `;
+      rebalanceButton.dataset.taskIds = movable.map((task) => task.id).join(",");
+      rebalanceButton.hidden = false;
+    }
+
+    openModal("organizerModal");
+  });
+
+  document.getElementById("rebalanceTasksButton")?.addEventListener("click", async (event) => {
+    const taskIds = event.currentTarget.dataset.taskIds?.split(",").filter(Boolean) || [];
+    if (!taskIds.length || !currentUser) return;
+
+    event.currentTarget.disabled = true;
+    event.currentTarget.textContent = "Reechilibrez…";
+    const { error } = await supabaseClient
+      .from("tasks")
+      .update({ deadline_date: getTomorrowDate(2) })
+      .eq("user_id", currentUser.id)
+      .in("id", taskIds);
+    event.currentTarget.disabled = false;
+    event.currentTarget.textContent = "Echilibrează ziua";
+
+    if (error) {
+      showToast("Planul nu a putut fi actualizat.", "!");
+      return;
+    }
+
+    await loadHomeData();
+    closeModal("organizerModal");
+    renderAll();
+    showToast("Am mutat două task-uri cu o zi mai târziu.", "✓");
+  });
+}
+
+function renderOrganizerPreview() {
+  const preview = document.getElementById("organizerPreview");
+  if (!preview) return;
+  const tomorrowCount = getTomorrowTasks().length;
+  preview.textContent = tomorrowCount > 3
+    ? `Ai ${tomorrowCount} task-uri mâine. Îți pot elibera puțin programul.`
+    : tomorrowCount
+      ? `Mâine ai ${tomorrowCount} ${tomorrowCount === 1 ? "task" : "task-uri"}, într-un ritm realist.`
+      : "Mâine este liber. Poți păstra spațiu pentru odihnă.";
+}
+
+function renderGoalCountdowns() {
+  const list = document.getElementById("goalCountdownList");
+  if (!list) return;
+  const today = parseLocalDate(formatDateForInput(new Date()));
+  const keywords = /bac|cambridge|delf|driving|permis|admitere|examen/i;
+  const allItems = getAllCalendarItems()
+    .filter((item) => item.date && keywords.test(`${item.title} ${item.notes || ""}`))
+    .sort(sortEvents);
+  const uniqueItems = allItems.filter(
+    (item, index, array) => array.findIndex((candidate) => candidate.title.toLowerCase() === item.title.toLowerCase()) === index
+  );
+  const goals = uniqueItems.length
+    ? uniqueItems.slice(0, 4)
+    : getAllCalendarItems()
+        .filter((item) => item.date && parseLocalDate(item.date) >= today)
+        .sort(sortEvents)
+        .slice(0, 3);
+
+  if (!goals.length) {
+    list.innerHTML = `
+      <div class="countdown-empty">
+        <strong>Adaugă primul obiectiv important.</strong>
+        <span>Examenele și deadline-urile vor avea aici propriul countdown.</span>
+      </div>
+    `;
+    return;
+  }
+
+  list.innerHTML = goals.map((goal) => {
+    const days = Math.ceil((parseLocalDate(goal.date) - today) / 86400000);
+    const isComplete = Boolean(goal.completed);
+    const status = isComplete
+      ? "Finalizat ✓"
+      : days === 0
+        ? "Astăzi"
+        : days === 1
+          ? "Mâine"
+          : days > 1
+            ? `${days} zile`
+            : "Încheiat";
+    return `
+      <div class="goal-countdown-row">
+        <span class="goal-countdown-dot" aria-hidden="true"></span>
+        <strong>${escapeHtml(goal.title)}</strong>
+        <span class="${isComplete ? "completed" : ""}">${status}</span>
+      </div>
+    `;
+  }).join("");
+}
+
+function renderAchievement() {
+  const card = document.getElementById("achievementCard");
+  if (!card) return;
+  const todayString = formatDateForInput(new Date());
+  const todayTasks = tasks.filter((task) => task.deadline === todayString);
+  const currentDate = new Date();
+  const mondayOffset = (currentDate.getDay() + 6) % 7;
+  const weekStart = new Date(currentDate);
+  weekStart.setHours(0, 0, 0, 0);
+  weekStart.setDate(currentDate.getDate() - mondayOffset);
+  const weekEnd = new Date(weekStart);
+  weekEnd.setDate(weekStart.getDate() + 7);
+  const completedThisWeek = tasks.filter((task) => {
+    if (!task.completed_at) return false;
+    const completedAt = new Date(task.completed_at);
+    return completedAt >= weekStart && completedAt < weekEnd;
+  }).length;
+
+  if (todayTasks.length && todayTasks.every((task) => task.completed)) {
+    card.hidden = false;
+    document.getElementById("achievementTitle").textContent = "Ai terminat toate task-urile de azi.";
+    document.getElementById("achievementDescription").textContent = "Planul de astăzi este complet.";
+  } else if (completedThisWeek >= 5) {
+    card.hidden = false;
+    document.getElementById("achievementTitle").textContent = "Consecvență foarte bună.";
+    document.getElementById("achievementDescription").textContent =
+      `Ai finalizat ${completedThisWeek} task-uri săptămâna aceasta.`;
+  } else {
+    card.hidden = true;
+  }
 }
 
 function initializeFloatingTimer() {
@@ -1353,11 +1661,15 @@ function renderNotifications() {
 /* RENDER */
 
 function renderAll() {
+  updateCurrentDate();
   renderHomeSummary();
   renderTodayTimeline();
   renderTodayTasks();
   renderUpcomingEvents();
   renderNowRecommendation();
+  renderGoalCountdowns();
+  renderOrganizerPreview();
+  renderAchievement();
   renderNotifications();
 }
 
@@ -1446,10 +1758,8 @@ function formatMinutes(totalMinutes) {
 }
 
 function renderTodayTimeline() {
-  const timeline = document.getElementById(
-    "todayTimeline"
-  );
-
+  const timeline = document.getElementById("todayTimeline");
+  const todayString = formatDateForInput(new Date());
   const todaySchedule = scheduleItems
     .filter((item) => Number(item.day_of_week) === new Date().getDay())
     .map((item) => ({
@@ -1460,19 +1770,53 @@ function renderTodayTimeline() {
       type: item.item_type || "school"
     }));
 
-  const todayEvents = [
+  const timelineItems = [
     ...todaySchedule,
     ...events
-      .filter((event) => event.date === formatDateForInput(new Date()) && event.time)
-      .map((event) => ({ ...event, endTime: "" }))
-  ]
-    .sort((a, b) => a.time.localeCompare(b.time))
-    .slice(0, 5);
+      .filter((event) => event.date === todayString && event.time)
+      .map((event) => ({ ...event, endTime: "" })),
+    ...tasks
+      .filter((task) => task.deadline === todayString && task.deadlineTime && !task.completed)
+      .map((task) => ({
+        title: task.title,
+        subject: task.subject,
+        time: task.deadlineTime,
+        endTime: "",
+        type: task.type || "homework"
+      }))
+  ];
 
-  if (todayEvents.length === 0) {
+  const lastClass = todaySchedule
+    .slice()
+    .sort((a, b) => a.time.localeCompare(b.time))
+    .at(-1);
+  if (lastClass?.endTime) {
+    const [hours, minutes] = lastClass.endTime.split(":").map(Number);
+    const homeTime = new Date();
+    homeTime.setHours(hours, minutes + 30, 0, 0);
+    timelineItems.push({
+      title: "Acasă",
+      subject: "Timp pentru pauză și reset",
+      time: `${String(homeTime.getHours()).padStart(2, "0")}:${String(homeTime.getMinutes()).padStart(2, "0")}`,
+      endTime: "",
+      type: "personal"
+    });
+  }
+
+  if (timelineItems.length) {
+    timelineItems.push({
+      title: "Somn",
+      subject: "Încheierea zilei",
+      time: "22:30",
+      endTime: "",
+      type: "personal"
+    });
+  }
+
+  if (timelineItems.length === 0) {
     timeline.innerHTML = `
       <div class="empty-state">
-        <span>☁</span>
+        <span>○</span>
         <strong>O zi mai aerisită.</strong>
         <p>Adaugă ceva în orar când ești gata.</p>
         <button class="text-button" data-open-page="schedule">Deschide orarul</button>
@@ -1486,10 +1830,22 @@ function renderTodayTimeline() {
     return;
   }
 
-  timeline.innerHTML = todayEvents
+  const currentTime = `${String(new Date().getHours()).padStart(2, "0")}:${String(new Date().getMinutes()).padStart(2, "0")}`;
+  timelineItems.push({
+    title: "Acum este",
+    subject: "Linia zilei se actualizează în timp real",
+    time: currentTime,
+    endTime: "",
+    type: "current",
+    isCurrent: true
+  });
+
+  timeline.innerHTML = timelineItems
+    .sort((a, b) => a.time.localeCompare(b.time))
+    .slice(0, 12)
     .map((event) => {
       return `
-        <div class="timeline-item">
+        <div class="timeline-item ${event.isCurrent ? "current-time" : ""}">
           <span class="timeline-time">
             ${escapeHtml(event.time)}
           </span>

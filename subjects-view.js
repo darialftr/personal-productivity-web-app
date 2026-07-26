@@ -104,6 +104,8 @@
     const validGrades = data.grades.map(item => Number(item.grade)).filter(Number.isFinite);
     const average = validGrades.length ? (validGrades.reduce((a, b) => a + b, 0) / validGrades.length).toFixed(2) : "—";
     const minutes = data.sessions.reduce((sum, item) => sum + Number(item.duration_minutes || 0), 0);
+    const tests = data.tasks.filter(item => item.task_type === "test").length;
+    const regularTasks = data.tasks.length - tests;
     root.innerHTML = `
       <a class="subjects-spa-back" href="#/subjects">← Materii</a>
       <section class="subject-spa-hero" style="--subject:${subject.color || "#f3a9c5"}">
@@ -112,9 +114,9 @@
         <button class="primary-small-button" data-study-timer>▶ Start focus</button>
       </section>
       <section class="subject-spa-stats"><article><span>Medie</span><strong>${average}</strong></article>
-        <article><span>Studiu</span><strong>${formatMinutes(minutes)}</strong></article>
-        <article><span>Task-uri active</span><strong>${data.tasks.length}</strong></article>
-        <article><span>Obiective</span><strong>${data.goals.filter(goal => !goal.completed).length}</strong></article></section>
+        <article><span>Task-uri</span><strong>${regularTasks}</strong></article>
+        <article><span>Teste</span><strong>${tests}</strong></article>
+        <article><span>Ore studiate</span><strong>${formatMinutes(minutes)}</strong></article></section>
       <div class="subject-spa-columns">
         <section class="subject-spa-panel"><div class="subject-spa-panel-head"><h3>Note</h3><button data-add-grade aria-label="Adaugă o notă"><span aria-hidden="true">+</span></button></div>
           ${data.grades.length ? data.grades.map(item => `<div class="subject-spa-row"><b>${item.grade}</b><span>${escapeHtml(item.description || item.grade_type || "Notă")}</span><small>${item.grade_date || ""}</small></div>`).join("") : empty("Nicio notă")}</section>
