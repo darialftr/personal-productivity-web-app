@@ -19,7 +19,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="apple-mobile-web-app-title" content="Itera">
 
-  <title>Itera — Study beautifully</title>
+  <title>Itera — Productivity made simple</title>
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="apple-touch-icon" href="itera-icon-512.png">
   <link rel="icon" href="itera-icon-192.png" type="image/png">
@@ -45,7 +45,7 @@
 
         <div>
           <p class="brand-name">Itera</p>
-          <p class="brand-subtitle">study beautifully</p>
+          <p class="brand-subtitle">productivity, made simple</p>
         </div>
       </div>
 
@@ -93,8 +93,8 @@
             <span>Clasa a XII-a</span>
           </div>
 
-          <button class="icon-button" aria-label="Deschide setările">
-            ⋯
+          <button class="icon-button" id="openAccountSettingsButton" aria-label="Deschide setările contului">
+            &#8230;
           </button>
         </div>
       </div>
@@ -106,7 +106,7 @@
       <header class="topbar" data-shell-region="topbar">
         <div>
           <p class="eyebrow" id="currentDateLabel">Astăzi</p>
-          <h1 id="greetingTitle">Bună dimineața, Daria 🌷</h1>
+          <h1 id="greetingTitle">Bună dimineața, Daria.</h1>
         </div>
 
         <div class="topbar-actions">
@@ -422,7 +422,85 @@
         <a href="#/subjects" data-mobile-route><span>◇</span><strong>Materii</strong></a>
         <a href="#/grades" data-mobile-route><span>☆</span><strong>Note</strong></a>
         <a href="#/admission" data-mobile-route><span>⌁</span><strong>Admitere</strong></a>
+        <button type="button" id="mobileAccountSettingsButton"><span>&#9881;</span><strong>Setări</strong></button>
       </nav>
+    </div>
+  </div>
+
+  <!-- ACCOUNT SETTINGS -->
+  <div class="modal-overlay account-settings-modal" id="accountSettingsModal" aria-hidden="true">
+    <div class="modal-card account-settings-card">
+      <div class="modal-header">
+        <div>
+          <p class="card-kicker">Contul tău</p>
+          <h2>Setări</h2>
+        </div>
+        <button class="modal-close-button" data-close-modal="accountSettingsModal" aria-label="Închide">&times;</button>
+      </div>
+
+      <form id="accountSettingsForm">
+        <section class="settings-section">
+          <div class="settings-section-heading">
+            <h3>Profil</h3>
+            <p>Numele este afișat în întreaga aplicație.</p>
+          </div>
+          <label class="settings-field">
+            <span>Nume</span>
+            <input id="accountDisplayName" name="displayName" autocomplete="given-name" maxlength="60" required>
+          </label>
+          <label class="settings-field">
+            <span>Email</span>
+            <input id="accountEmail" type="email" readonly>
+          </label>
+        </section>
+
+        <section class="settings-section">
+          <div class="settings-section-heading">
+            <h3>Stil</h3>
+            <p>Alege personalitatea vizuală a spațiului tău.</p>
+          </div>
+          <div class="theme-choice-grid" role="radiogroup" aria-label="Tema de culoare">
+            <label class="theme-choice theme-choice-neutral">
+              <input type="radio" name="theme" value="neutral">
+              <span class="theme-preview"><i></i><i></i><i></i></span>
+              <strong>Neutral</strong><small>Apple-inspired</small>
+            </label>
+            <label class="theme-choice theme-choice-rose">
+              <input type="radio" name="theme" value="rose">
+              <span class="theme-preview"><i></i><i></i><i></i></span>
+              <strong>Rose</strong><small>Cald și delicat</small>
+            </label>
+            <label class="theme-choice theme-choice-ocean">
+              <input type="radio" name="theme" value="ocean">
+              <span class="theme-preview"><i></i><i></i><i></i></span>
+              <strong>Ocean</strong><small>Clar și calm</small>
+            </label>
+            <label class="theme-choice theme-choice-forest">
+              <input type="radio" name="theme" value="forest">
+              <span class="theme-preview"><i></i><i></i><i></i></span>
+              <strong>Forest</strong><small>Natural și focusat</small>
+            </label>
+          </div>
+        </section>
+
+        <section class="settings-section settings-appearance-row">
+          <div class="settings-section-heading">
+            <h3>Aspect</h3>
+            <p>Poți urma automat setarea dispozitivului.</p>
+          </div>
+          <div class="mode-control" role="radiogroup" aria-label="Aspect luminos sau întunecat">
+            <label><input type="radio" name="mode" value="light"><span>Light</span></label>
+            <label><input type="radio" name="mode" value="system"><span>Auto</span></label>
+            <label><input type="radio" name="mode" value="dark"><span>Dark</span></label>
+          </div>
+        </section>
+
+        <p class="settings-error" id="accountSettingsError" role="alert"></p>
+        <div class="form-actions">
+          <button type="button" class="secondary-button" data-close-modal="accountSettingsModal">Renunță</button>
+          <button type="submit" class="primary-button" id="saveAccountSettingsButton">Salvează setările</button>
+        </div>
+      </form>
     </div>
   </div>
 

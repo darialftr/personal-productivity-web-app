@@ -67,10 +67,12 @@ initializeApp();
 
 async function initializeApp() {
   await loadHomeData();
+  applyAccountPreferences();
   initializeShellViews();
   updateCurrentDate();
   initializeNavigation();
   initializeModals();
+  initializeAccountSettings();
   initializeFocusControls();
   initializeEnergyCheckin();
   initializeNotificationCenter();
@@ -80,6 +82,8 @@ async function initializeApp() {
   initializeQuickActions();
   window.addEventListener("focus", async () => {
   await loadHomeData();
+  applyAccountPreferences();
+  updateCurrentDate();
   renderAll();
 });
 
@@ -88,6 +92,8 @@ document.addEventListener(
   async () => {
     if (!document.hidden) {
       await loadHomeData();
+      applyAccountPreferences();
+      updateCurrentDate();
       renderAll();
     }
   }
@@ -382,7 +388,7 @@ function updateCurrentDate() {
     `${capitalizeFirstLetter(weekdayNames[now.getDay()])}, ` +
     `${now.getDate()} ${monthNames[now.getMonth()].toLowerCase()}`;
 
-  greetingTitle.textContent = `${greeting}, ${profileName} 🌷`;
+  greetingTitle.textContent = `${greeting}, ${profileName}.`;
   todayNumber.textContent = String(now.getDate());
 
   const sidebarName = document.querySelector(".mini-profile-text strong");
@@ -398,6 +404,147 @@ function updateCurrentDate() {
   if (sidebarAvatar) {
     sidebarAvatar.textContent = profileName.charAt(0).toUpperCase();
   }
+}
+
+function getAccountPreferences() {
+  const metadata = currentUser?.user_metadata || {};
+  return {
+    theme: ["neutral", "rose", "ocean", "forest"].includes(metadata.itera_theme)
+      ? metadata.itera_theme
+      : "neutral",
+    mode: ["light", "dark", "system"].includes(metadata.itera_mode)
+      ? metadata.itera_mode
+      : "system"
+  };
+}
+
+function applyAccountPreferences(preferences = getAccountPreferences()) {
+  const prefersDark = window.matchMedia?.("(prefers-color-scheme: dark)").matches;
+  const effectiveMode = preferences.mode === "system"
+    ? (prefersDark ? "dark" : "light")
+    : preferences.mode;
+
+  document.documentElement.dataset.theme = preferences.theme;
+  document.documentElement.dataset.mode = effectiveMode;
+
+  const themeColor = effectiveMode === "dark"
+    ? "#101114"
+    : {
+        neutral: "#f5f5f7",
+        rose: "#fff8fb",
+        ocean: "#f5f8fb",
+        forest: "#f5f8f5"
+      }[preferences.theme];
+  document.querySelector('meta[name="theme-color"]')?.setAttribute("content", themeColor);
+}
+
+function initializeAccountSettings() {
+  const desktopButton = document.getElementById("openAccountSettingsButton");
+  const mobileButton = document.getElementById("mobileAccountSettingsButton");
+  const form = document.getElementById("accountSettingsForm");
+  const systemTheme = window.matchMedia?.("(prefers-color-scheme: dark)");
+
+  const openSettings = () => {
+    const preferences = getAccountPreferences();
+    const displayName =
+      profile?.first_name ||
+      currentUser?.user_metadata?.first_name ||
+      "";
+
+    document.getElementById("accountDisplayName").value = displayName;
+    document.getElementById("accountEmail").value = currentUser?.email || "";
+    form.elements.theme.value = preferences.theme;
+    form.elements.mode.value = preferences.mode;
+    document.getElementById("accountSettingsError").textContent = "";
+    closeModal("mobileMoreModal");
+    openModal("accountSettingsModal");
+  };
+
+  desktopButton?.addEventListener("click", openSettings);
+  mobileButton?.addEventListener("click", openSettings);
+  document
+    .querySelectorAll('[data-close-modal="accountSettingsModal"]')
+    .forEach((button) => {
+      button.addEventListener("click", () => applyAccountPreferences());
+    });
+
+  form?.addEventListener("change", (event) => {
+    if (event.target.name === "theme" || event.target.name === "mode") {
+      applyAccountPreferences({
+        theme: form.elements.theme.value || "neutral",
+        mode: form.elements.mode.value || "system"
+      });
+    }
+  });
+
+  form?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    const name = form.elements.displayName.value.trim();
+    const theme = form.elements.theme.value || "neutral";
+    const mode = form.elements.mode.value || "system";
+    const errorElement = document.getElementById("accountSettingsError");
+    const saveButton = document.getElementById("saveAccountSettingsButton");
+
+    if (!name) {
+      errorElement.textContent = "Te rugăm să introduci numele.";
+      return;
+    }
+
+    saveButton.disabled = true;
+    saveButton.textContent = "Se salvează…";
+    errorElement.textContent = "";
+
+    const nextMetadata = {
+      ...(currentUser?.user_metadata || {}),
+      first_name: name,
+      itera_theme: theme,
+      itera_mode: mode
+    };
+
+    const { data: authData, error: authError } = await supabaseClient.auth.updateUser({
+      data: nextMetadata
+    });
+
+    if (authError) {
+      errorElement.textContent = "Setările nu au putut fi salvate. Încearcă din nou.";
+      saveButton.disabled = false;
+      saveButton.textContent = "Salvează setările";
+      return;
+    }
+
+    const { error: profileError } = await supabaseClient
+      .from("profiles")
+      .update({
+        first_name: name,
+        updated_at: new Date().toISOString()
+      })
+      .eq("id", currentUser.id);
+
+    if (profileError) {
+      errorElement.textContent = "Numele nu a putut fi actualizat în profil.";
+      saveButton.disabled = false;
+      saveButton.textContent = "Salvează setările";
+      return;
+    }
+
+    currentUser = authData.user || {
+      ...currentUser,
+      user_metadata: nextMetadata
+    };
+    profile = { ...(profile || {}), first_name: name };
+    applyAccountPreferences({ theme, mode });
+    updateCurrentDate();
+    closeModal("accountSettingsModal");
+    showToast("Setările contului au fost salvate.", "✓");
+    saveButton.disabled = false;
+    saveButton.textContent = "Salvează setările";
+  });
+
+  systemTheme?.addEventListener?.("change", () => {
+    if (getAccountPreferences().mode === "system") {
+      applyAccountPreferences();
+    }
+  });
 }
 
 function capitalizeFirstLetter(value) {
