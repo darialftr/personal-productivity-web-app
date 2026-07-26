@@ -41,7 +41,7 @@
       <header class="schedule-spa-header">
         <div><p class="eyebrow">Planificare</p><h2>Orarul tău</h2>
         <p>Programul săptămânal, sincronizat cu Supabase.</p></div>
-        <button class="primary-small-button" data-add-schedule>＋ Activitate</button>
+        <button class="primary-small-button" data-add-schedule><span aria-hidden="true">+</span> Activitate</button>
       </header>
       <div class="schedule-spa-week">${dayOrder.map(renderDay).join("")}</div>
       <dialog class="schedule-spa-dialog">

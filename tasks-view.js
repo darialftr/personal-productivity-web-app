@@ -50,7 +50,7 @@
     root.innerHTML = `
       <header class="tasks-spa-header"><div><p class="eyebrow">Organizare</p><h2>Task-urile tale</h2>
         <p>${open} task-uri active · sincronizate cu Supabase</p></div>
-        <button class="primary-small-button" data-add-task>＋ Task</button></header>
+        <button class="primary-small-button" data-add-task><span aria-hidden="true">+</span> Task</button></header>
       <section class="tasks-spa-toolbar">
         <input type="search" value="${escapeHtml(search)}" placeholder="Caută un task…" data-task-search>
         <div class="tasks-spa-filters">${[

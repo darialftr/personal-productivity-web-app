@@ -32,7 +32,7 @@
     root.innerHTML = `
       <header class="subjects-spa-header"><div><p class="eyebrow">Învățare</p><h2>Materiile tale</h2>
       <p>${subjects.length} materii active, toate sincronizate.</p></div>
-      <button class="primary-small-button" data-add-subject>＋ Materie</button></header>
+      <button class="primary-small-button" data-add-subject><span aria-hidden="true">+</span> Materie</button></header>
       <section class="subjects-spa-grid">${subjects.length ? subjects.map(subjectCard).join("") :
         '<div class="subjects-spa-state">Adaugă prima materie pentru a începe.</div>'}</section>
       <dialog class="subjects-spa-dialog"><form data-subject-form>
@@ -116,11 +116,11 @@
         <article><span>Task-uri active</span><strong>${data.tasks.length}</strong></article>
         <article><span>Obiective</span><strong>${data.goals.filter(goal => !goal.completed).length}</strong></article></section>
       <div class="subject-spa-columns">
-        <section class="subject-spa-panel"><div class="subject-spa-panel-head"><h3>Note</h3><button data-add-grade>＋</button></div>
+        <section class="subject-spa-panel"><div class="subject-spa-panel-head"><h3>Note</h3><button data-add-grade aria-label="Adaugă o notă"><span aria-hidden="true">+</span></button></div>
           ${data.grades.length ? data.grades.map(item => `<div class="subject-spa-row"><b>${item.grade}</b><span>${escapeHtml(item.description || item.grade_type || "Notă")}</span><small>${item.grade_date || ""}</small></div>`).join("") : empty("Nicio notă")}</section>
         <section class="subject-spa-panel"><h3>Task-uri active</h3>${data.tasks.length ? data.tasks.map(item => `<a class="subject-spa-row" href="#/tasks"><b>✓</b><span>${escapeHtml(item.title)}</span><small>${item.deadline_date || ""}</small></a>`).join("") : empty("Niciun task activ")}</section>
         <section class="subject-spa-panel"><div class="subject-spa-panel-head"><h3>Resurse și cărți</h3>
-          <button data-add-pdf>＋ PDF</button></div>${[...data.books, ...data.resources].length ?
+          <button data-add-pdf><span aria-hidden="true">+</span> PDF</button></div>${[...data.books, ...data.resources].length ?
           [...data.books, ...data.resources].map(item => `<button class="subject-spa-row subject-spa-resource" data-open-pdf="${item.id}" data-file-path="${escapeHtml(item.file_path || "")}" data-resource-title="${escapeHtml(item.title)}"><b>◇</b><span>${escapeHtml(item.title)}</span><small>${escapeHtml(item.author || item.resource_type || "")}</small></button>`).join("") : empty("Nicio resursă")}</section>
         <section class="subject-spa-panel"><h3>Obiective</h3>${data.goals.length ? data.goals.map(item => `<div class="subject-spa-row"><b>${item.completed ? "✓" : "○"}</b><span>${escapeHtml(item.title)}</span></div>`).join("") : empty("Niciun obiectiv")}</section>
       </div>
@@ -144,7 +144,7 @@
             <div class="pdf-zoom-controls">
               <button data-pdf-zoom-out aria-label="Micșorează">−</button>
               <span data-pdf-zoom>100%</span>
-              <button data-pdf-zoom-in aria-label="Mărește">＋</button>
+              <button data-pdf-zoom-in aria-label="Mărește"><span aria-hidden="true">+</span></button>
               <button data-close-pdf-viewer aria-label="Închide">×</button>
             </div>
           </header>

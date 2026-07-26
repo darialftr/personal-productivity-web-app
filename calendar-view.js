@@ -50,7 +50,7 @@
     root.innerHTML = `
       <header class="calendar-spa-header"><div><p class="eyebrow">Planificare</p><h2>Calendarul tău</h2>
         <p>Evenimente și deadline-uri într-un singur loc.</p></div>
-        <button class="primary-small-button" data-add-event>＋ Eveniment</button></header>
+        <button class="primary-small-button" data-add-event><span aria-hidden="true">+</span> Eveniment</button></header>
       <div class="calendar-spa-layout">
         <section class="calendar-spa-card">
           <div class="calendar-spa-month-head"><button class="icon-button" data-month="-1">‹</button>
@@ -81,7 +81,7 @@
   function renderDetails() {
     const items = allItems(selected);
     return `<div class="calendar-spa-detail-head"><div><p class="eyebrow">Zi selectată</p><h3>${formatDate(selected)}</h3></div>
-      <button class="icon-button" data-add-selected aria-label="Adaugă">＋</button></div>
+      <button class="icon-button" data-add-selected aria-label="Adaugă"><span aria-hidden="true">+</span></button></div>
       <div class="calendar-spa-detail-list">${items.length ? items.map(item => `<button class="calendar-spa-detail-item" ${item.source === "event" ? `data-edit-event="${item.id}"` : 'data-open-tasks'} style="--item:${subjectColor(item.subject_id)}">
         <span>${String(item.start_time || "—").slice(0, 5)}</span><span><strong>${escapeHtml(item.title)}</strong>
         <small>${item.source === "task" ? "Deadline task" : escapeHtml(subjectName(item.subject_id) || item.event_type)}</small></span></button>`).join("") :

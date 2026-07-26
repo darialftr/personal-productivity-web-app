@@ -37,7 +37,7 @@
     });
     root.innerHTML = `
       <header class="progress-spa-header"><div><p class="eyebrow">Progres academic</p><h2>Notele tale</h2>
-      <p>O privire compactă asupra rezultatelor tale.</p></div><button class="primary-small-button" data-add-global-grade>＋ Notă</button></header>
+      <p>O privire compactă asupra rezultatelor tale.</p></div><button class="primary-small-button" data-add-global-grade><span aria-hidden="true">+</span> Notă</button></header>
       <section class="grades-spa-summary"><article class="grades-spa-average"><span>Media generală</span><strong>${average}</strong><small>${values.length} note înregistrate</small></article>
       <div class="grades-spa-subjects">${summaries.map(item => `<a href="#/subjects/${item.id}" style="--subject:${item.color || "#f3a9c5"}">
         <span>${escapeHtml(item.name)}</span><strong>${item.average}</strong><small>${item.count} note</small></a>`).join("")}</div></section>
