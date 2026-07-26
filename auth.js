@@ -212,7 +212,8 @@ async function registerUser(
         data: {
           first_name: firstName,
           itera_theme: "neutral",
-          itera_mode: "light"
+          itera_mode: "light",
+          itera_theme_version: 2
         }
       }
     });

@@ -2207,6 +2207,7 @@ textarea:focus-visible {
 
 html[data-theme="rose"] {
   --background: #fff8fb;
+  --surface: #ffffff;
   --surface-soft: #fff1f6;
   --primary: #ee9fbd;
   --primary-light: #f8c9da;
@@ -2219,6 +2220,7 @@ html[data-theme="rose"] {
 
 html[data-theme="ocean"] {
   --background: #f5f8fb;
+  --surface: #ffffff;
   --surface-soft: #edf4fa;
   --primary: #6f9fc8;
   --primary-light: #bad4e9;
@@ -2231,6 +2233,7 @@ html[data-theme="ocean"] {
 
 html[data-theme="forest"] {
   --background: #f5f8f5;
+  --surface: #ffffff;
   --surface-soft: #edf4ee;
   --primary: #78a285;
   --primary-light: #bad3c1;
@@ -2239,6 +2242,84 @@ html[data-theme="forest"] {
   --text: #29352d;
   --muted: #718078;
   --border: #d9e6dc;
+}
+
+html[data-theme="neutral"][data-mode="light"] {
+  --background: #f5efe4;
+  --surface: #fffaf2;
+  --surface-soft: #eaf1f3;
+  --primary: #7599aa;
+  --primary-light: #bfd3da;
+  --primary-soft: #dfecef;
+  --primary-dark: #4e7180;
+  --text: #343a3c;
+  --muted: #747b7c;
+  --border: #ddd8ce;
+}
+
+html[data-theme="neutral"][data-mode="light"] body {
+  background:
+    radial-gradient(circle at 92% 5%, rgba(117, 153, 170, 0.2), transparent 30%),
+    radial-gradient(circle at 15% 95%, rgba(226, 207, 177, 0.25), transparent 30%),
+    var(--background);
+}
+
+html[data-theme="neutral"][data-mode="light"] .sidebar {
+  background: rgba(255, 250, 242, 0.9);
+  border-color: rgba(117, 153, 170, 0.16);
+}
+
+html[data-theme="neutral"][data-mode="light"] :is(
+  .focus-card,
+  .today-summary-card,
+  .schedule-card,
+  .tasks-card,
+  .upcoming-card,
+  .quote-card,
+  .schedule-spa-day,
+  .schedule-spa-state,
+  .tasks-spa-toolbar,
+  .tasks-spa-list,
+  .tasks-spa-state,
+  .calendar-spa-card,
+  .calendar-spa-state,
+  .subjects-spa-card,
+  .subjects-spa-state,
+  .subject-spa-panel,
+  .subject-spa-stats article,
+  .subject-spa-hero,
+  .progress-spa-state,
+  .progress-spa-panel,
+  .grades-spa-average,
+  .grades-spa-subjects,
+  .admission-spa-hero
+) {
+  background: rgba(255, 250, 242, 0.84);
+  border-color: rgba(117, 153, 170, 0.2);
+}
+
+html[data-theme="neutral"][data-mode="light"] :is(
+  .schedule-spa-item,
+  .tasks-spa-item,
+  .calendar-spa-day,
+  .calendar-spa-detail-item,
+  .grades-spa-subjects a,
+  .mobile-more-grid a,
+  .mobile-more-grid button
+) {
+  background: rgba(234, 241, 243, 0.72);
+  border-color: rgba(117, 153, 170, 0.2);
+}
+
+html[data-theme="neutral"][data-mode="light"] .focus-card {
+  background:
+    radial-gradient(circle at 88% 10%, rgba(117, 153, 170, 0.2), transparent 32%),
+    linear-gradient(145deg, #fffaf2, #f3eadc);
+}
+
+html[data-theme="neutral"][data-mode="light"] .mobile-navigation {
+  background: rgba(255, 250, 242, 0.96);
+  border-color: rgba(117, 153, 170, 0.22);
 }
 
 html[data-mode="dark"] {

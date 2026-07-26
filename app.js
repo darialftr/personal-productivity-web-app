@@ -408,11 +408,12 @@ function updateCurrentDate() {
 
 function getAccountPreferences() {
   const metadata = currentUser?.user_metadata || {};
+  const hasCurrentThemePreferences = metadata.itera_theme_version === 2;
   return {
     theme: ["neutral", "rose", "ocean", "forest"].includes(metadata.itera_theme)
       ? metadata.itera_theme
       : "neutral",
-    mode: ["light", "dark", "system"].includes(metadata.itera_mode)
+    mode: hasCurrentThemePreferences && ["light", "dark", "system"].includes(metadata.itera_mode)
       ? metadata.itera_mode
       : "light"
   };
@@ -498,7 +499,8 @@ function initializeAccountSettings() {
       ...(currentUser?.user_metadata || {}),
       first_name: name,
       itera_theme: theme,
-      itera_mode: mode
+      itera_mode: mode,
+      itera_theme_version: 2
     };
 
     const { data: authData, error: authError } = await supabaseClient.auth.updateUser({
