@@ -88,9 +88,7 @@ html.app-booting .mobile-navigation {
   place-items: center;
   overflow: hidden;
   color: #49323a;
-  background:
-    linear-gradient(145deg, rgba(255, 250, 238, 0.98), rgba(255, 229, 218, 0.98) 48%, rgba(250, 207, 216, 0.98)),
-    #fff4e7;
+  background: linear-gradient(145deg, #fff0dc 0%, #f9adb5 50%, #e66a8d 100%);
   opacity: 1;
   transition: opacity 420ms ease, visibility 420ms ease;
 }
@@ -115,17 +113,14 @@ html.app-booting .mobile-navigation {
   height: 78px;
   display: grid;
   place-items: center;
+  object-fit: cover;
   margin-bottom: 20px;
-  border: 1px solid rgba(221, 83, 120, 0.22);
-  border-radius: 27px 27px 27px 10px;
-  color: white;
-  background: linear-gradient(145deg, #fff0d3 2%, #f8acae 52%, #dd436d 100%);
+  border: 0;
+  border-radius: 25px;
+  background: transparent;
   box-shadow:
-    0 22px 50px rgba(192, 65, 101, 0.22),
-    inset 0 1px 0 rgba(255, 255, 255, 0.48);
-  font-family: "DM Serif Display", serif;
-  font-size: 50px;
-  line-height: 1;
+    0 22px 50px rgba(148, 43, 76, 0.25),
+    0 0 0 1px rgba(255, 255, 255, 0.34);
   animation: launchMarkFloat 2.2s ease-in-out infinite;
 }
 
@@ -139,7 +134,7 @@ html.app-booting .mobile-navigation {
 
 .app-launch-content > p {
   margin: 10px 0 24px;
-  color: #956a74;
+  color: #7e4e5a;
   font-size: 11px;
   font-weight: 800;
   letter-spacing: 0.14em;

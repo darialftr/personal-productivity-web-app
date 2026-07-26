@@ -14,7 +14,7 @@
     content="Itera - aplicația ta personală pentru școală, studiu și organizare."
   >
 
-  <meta name="theme-color" content="#fff4e7">
+  <meta name="theme-color" content="#df5b7e">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
@@ -33,6 +33,22 @@
     rel="stylesheet"
   >
 
+  <style id="itera-launch-critical">
+    html.app-booting,
+    html.app-booting body { min-height: 100%; overflow: hidden; }
+    #appLaunchScreen {
+      position: fixed;
+      inset: 0;
+      z-index: 1000;
+      display: grid;
+      place-items: center;
+      background: linear-gradient(145deg, #fff0dc 0%, #f9adb5 50%, #e66a8d 100%) !important;
+    }
+    #appLaunchScreen .app-launch-mark {
+      background: transparent !important;
+      border-color: transparent !important;
+    }
+  </style>
   <link rel="stylesheet" href="styles.css">
 </head>
 
@@ -41,7 +57,7 @@
     <div class="app-launch-glow launch-glow-one"></div>
     <div class="app-launch-glow launch-glow-two"></div>
     <div class="app-launch-content">
-      <div class="app-launch-mark" aria-hidden="true">i</div>
+      <img class="app-launch-mark" src="itera-icon-192.png" alt="" aria-hidden="true">
       <strong>Itera</strong>
       <p>Productivity, made personal.</p>
       <div class="app-launch-progress" aria-hidden="true"><span></span></div>
