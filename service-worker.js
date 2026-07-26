@@ -1,6 +1,6 @@
 "use strict";
 
-const CACHE_NAME = "itera-shell-v2";
+const CACHE_NAME = "itera-shell-v3";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -16,7 +16,9 @@ const APP_SHELL = [
   "./auth-guard.js",
   "./push-notifications.js",
   "./manifest.webmanifest",
-  "./itera-icon.png"
+  "./itera-icon.png",
+  "./itera-icon-192.png",
+  "./itera-icon-512.png"
 ];
 
 self.addEventListener("install", (event) => {
@@ -64,8 +66,8 @@ self.addEventListener("push", (event) => {
   const title = payload.title || "Itera";
   const options = {
     body: payload.body || "E timpul pentru următorul pas.",
-    icon: "./itera-icon.png",
-    badge: "./itera-icon.png",
+    icon: "./itera-icon-192.png",
+    badge: "./itera-icon-192.png",
     tag: payload.tag || "itera-reminder",
     renotify: Boolean(payload.renotify),
     data: {
