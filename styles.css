@@ -2547,8 +2547,11 @@ html[data-mode="dark"] .pdf-canvas-wrap {
 }
 
 html[data-mode="dark"] .subject-spa-icon {
-  color: var(--text);
-  background: color-mix(in srgb, var(--subject) 24%, var(--surface-soft));
+  color: color-mix(in srgb, var(--subject) 30%, #17191d);
+  background: color-mix(in srgb, var(--subject) 22%, white);
+  border: 1px solid color-mix(in srgb, var(--subject) 34%, white);
+  font-weight: 900;
+  text-shadow: none;
 }
 
 html[data-mode="dark"] .calendar-spa-day i {
