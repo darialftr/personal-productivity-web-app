@@ -9,6 +9,7 @@
   let pdfProgressSaveTimer = null;
   let pendingPdfProgress = null;
   let pdfProgressWrite = Promise.resolve();
+  let focusTimerListener = null;
 
   async function session() {
     const { data: { session } } = await supabaseClient.auth.getSession();
@@ -141,7 +142,14 @@
       <dialog class="subject-pdf-viewer">
         <div class="pdf-viewer-shell">
           <header class="pdf-viewer-toolbar">
-            <strong data-pdf-title>Document</strong>
+            <div class="pdf-viewer-title">
+              <strong data-pdf-title>Document</strong>
+              <button type="button" class="pdf-focus-pill" data-pdf-focus-pill hidden>
+                <span aria-hidden="true"></span>
+                <b data-pdf-focus-subject>Focus</b>
+                <strong data-pdf-focus-time>00:00</strong>
+              </button>
+            </div>
             <div class="pdf-page-controls">
               <button data-pdf-prev aria-label="Pagina anterioară">‹</button>
               <label>Pagina <input data-pdf-page type="number" min="1" value="1"> <span data-pdf-count>/ 1</span></label>
@@ -263,6 +271,25 @@
     viewer.querySelector("[data-pdf-page]").addEventListener("change", event => changePdfPage(Number(event.target.value)));
     viewer.querySelector("[data-pdf-zoom-in]").addEventListener("click", () => changePdfZoom(0.15));
     viewer.querySelector("[data-pdf-zoom-out]").addEventListener("click", () => changePdfZoom(-0.15));
+    viewer.querySelector("[data-pdf-focus-pill]").addEventListener("click", () => {
+      global.IteraFocus?.togglePause();
+    });
+    focusTimerListener = event => renderPdfFocusTimer(event.detail);
+    global.addEventListener("itera:focus-timer", focusTimerListener);
+    renderPdfFocusTimer(global.IteraFocus?.getState());
+  }
+
+  function renderPdfFocusTimer(state) {
+    const pill = root?.querySelector("[data-pdf-focus-pill]");
+    if (!pill) return;
+    pill.hidden = !state?.active;
+    if (!state?.active) return;
+    pill.classList.toggle("paused", Boolean(state.paused));
+    pill.querySelector("[data-pdf-focus-subject]").textContent = state.subject || "Focus";
+    pill.querySelector("[data-pdf-focus-time]").textContent = state.time || "00:00";
+    pill.setAttribute("aria-label", state.paused
+      ? `Continuă timerul pentru ${state.subject || "focus"}`
+      : `Pune pe pauză timerul pentru ${state.subject || "focus"}`);
   }
 
   async function openPdf(filePath, title) {
@@ -428,6 +455,10 @@
 
   function unmount() {
     void flushPdfProgress();
+    if (focusTimerListener) {
+      global.removeEventListener("itera:focus-timer", focusTimerListener);
+      focusTimerListener = null;
+    }
     mounted = false;
     root = null;
     if (timerInterval) clearInterval(timerInterval);

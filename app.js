@@ -1167,6 +1167,7 @@ function toggleFocusPause() {
   document.getElementById("floatingPauseButton").textContent = focusPaused
     ? "Continuă"
     : "Pauză";
+  emitFocusTimerState();
 }
 
 function resetFocusSession() {
@@ -1202,6 +1203,24 @@ function updateFocusTimerDisplay() {
     : 0;
   document.getElementById("floatingTimerProgress").style.width =
     `${Math.max(0, progress)}%`;
+  emitFocusTimerState();
+}
+
+function getFocusTimerState() {
+  const timer = document.getElementById("floatingTimer");
+  return {
+    active: Boolean(timer?.classList.contains("visible")),
+    paused: focusPaused,
+    time: document.getElementById("floatingTimerValue")?.textContent || "00:00",
+    subject: document.getElementById("floatingTimerSubject")?.textContent || "Focus",
+    task: document.getElementById("floatingTimerTask")?.textContent || ""
+  };
+}
+
+function emitFocusTimerState() {
+  window.dispatchEvent(new CustomEvent("itera:focus-timer", {
+    detail: getFocusTimerState()
+  }));
 }
 
 async function saveCurrentFocusSession() {
@@ -2052,6 +2071,7 @@ function showFloatingTimer(subject, taskTitle) {
   document.getElementById("floatingTimerSubject").textContent = subject;
   document.getElementById("floatingTimerTask").textContent = taskTitle;
   document.getElementById("floatingPauseButton").textContent = "Pauză";
+  emitFocusTimerState();
 }
 
 function startTaskFocus(task, subject) {
@@ -2150,9 +2170,15 @@ function closeTaskSession() {
   timer.setAttribute("aria-hidden", "true");
   focusTaskId = null;
   focusTaskTitle = null;
+  emitFocusTimerState();
 }
 
-globalThis.IteraFocus = Object.freeze({ startTask: startTaskFocus });
+globalThis.IteraFocus = Object.freeze({
+  startTask: startTaskFocus,
+  getState: getFocusTimerState,
+  togglePause: toggleFocusPause,
+  finish: finishFocusSession
+});
 
 function buildNotifications() {
   const today = parseLocalDate(formatDateForInput(new Date()));
