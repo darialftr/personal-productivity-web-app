@@ -571,6 +571,7 @@ function initializeAccountSettings() {
   const desktopButton = document.getElementById("openAccountSettingsButton");
   const mobileButton = document.getElementById("mobileAccountSettingsButton");
   const form = document.getElementById("accountSettingsForm");
+  const logoutButton = document.getElementById("logoutAccountButton");
   const systemTheme = window.matchMedia?.("(prefers-color-scheme: dark)");
 
   const openSettings = () => {
@@ -668,6 +669,31 @@ function initializeAccountSettings() {
     showToast("Setările contului au fost salvate.", "✓");
     saveButton.disabled = false;
     saveButton.textContent = "Salvează setările";
+  });
+
+  logoutButton?.addEventListener("click", async () => {
+    if (!window.confirm("Sigur vrei să ieși din cont pe acest dispozitiv?")) return;
+
+    logoutButton.disabled = true;
+    logoutButton.textContent = "Se închide sesiunea…";
+    document.getElementById("accountSettingsError").textContent = "";
+
+    try {
+      await globalThis.IteraPush?.disableCurrentDevice();
+    } catch (error) {
+      console.warn("Itera push cleanup:", error);
+    }
+
+    const { error } = await supabaseClient.auth.signOut({ scope: "local" });
+    if (error) {
+      document.getElementById("accountSettingsError").textContent =
+        "Nu am putut închide sesiunea. Încearcă din nou.";
+      logoutButton.disabled = false;
+      logoutButton.textContent = "Ieși din cont";
+      return;
+    }
+
+    window.location.replace("auth.html?logged_out=1");
   });
 
   systemTheme?.addEventListener?.("change", () => {

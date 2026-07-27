@@ -49,6 +49,19 @@ async function initializeAuthPage() {
 
   if (session) {
     window.location.replace("index.html");
+    return;
+  }
+
+  const query = new URLSearchParams(window.location.search);
+  const hash = new URLSearchParams(window.location.hash.slice(1));
+  const authError = hash.get("error_description");
+
+  if (authError) {
+    showFormMessage(authError.replaceAll("+", " "), "error");
+  } else if (query.get("confirmed") === "1") {
+    showFormMessage("Email confirmat. Acum te poți autentifica în Itera.", "success");
+  } else if (query.get("logged_out") === "1") {
+    showFormMessage("Ai ieșit din cont în siguranță.", "success");
   }
 }
 
@@ -209,6 +222,7 @@ async function registerUser(
       password,
 
       options: {
+        emailRedirectTo: getAuthPageUrl("confirmed"),
         data: {
           first_name: firstName,
           itera_theme: "neutral",
@@ -233,6 +247,12 @@ async function registerUser(
   );
 
   authForm.reset();
+}
+
+function getAuthPageUrl(state) {
+  const url = new URL("auth.html", window.location.href);
+  url.searchParams.set(state, "1");
+  return url.href;
 }
 async function loginUser(email, password) {
   const { error } =
@@ -263,8 +283,7 @@ async function handleForgotPassword() {
     return;
   }
 
-  const redirectUrl =
-  "https://darialftr.github.io/personal-productivity-web-app/auth.html";
+  const redirectUrl = getAuthPageUrl("recovery");
 
   setLoadingState(true);
 

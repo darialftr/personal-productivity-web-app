@@ -5,3 +5,7 @@ verify_jwt = false
 
 [functions.send-push]
 verify_jwt = false
+
+[auth.email.template.confirmation]
+subject = "Confirmă-ți contul Itera ✦"
+content_path = "./supabase/templates/confirmation.html"

@@ -2578,6 +2578,12 @@ html[data-mode="dark"] :is(
   color: white;
 }
 
+html[data-mode="dark"] .logout-button {
+  color: #f0a0ba;
+  background: color-mix(in srgb, #d95f86 13%, var(--surface-soft));
+  border-color: color-mix(in srgb, #d95f86 34%, var(--border));
+}
+
 /* Bubbly mobile navigation */
 @media (max-width: 760px) {
   .mobile-navigation {
@@ -3883,6 +3889,25 @@ html[data-mode="dark"] {
   align-items: center;
 }
 
+.settings-session-row {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.logout-button {
+  min-height: 42px;
+  padding: 0 15px;
+  color: #a43f63;
+  background: color-mix(in srgb, #d95f86 10%, var(--surface));
+  border: 1px solid color-mix(in srgb, #d95f86 28%, var(--border));
+  border-radius: 13px;
+  font-weight: 800;
+}
+
+.logout-button:hover {
+  background: color-mix(in srgb, #d95f86 16%, var(--surface));
+}
+
 .mode-control {
   display: flex;
   gap: 3px;
@@ -4040,6 +4065,14 @@ html[data-mode="dark"] :is(input, select, textarea) {
 
   .settings-appearance-row {
     grid-template-columns: 1fr;
+  }
+
+  .settings-session-row {
+    grid-template-columns: 1fr;
+  }
+
+  .logout-button {
+    width: 100%;
   }
 
   .mode-control {

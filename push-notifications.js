@@ -117,6 +117,24 @@
     global.showToast?.("Notificarea de test a fost trimisă.", "✓");
   }
 
+  async function disableCurrentDevice() {
+    const { data: { session } } = await supabaseClient.auth.getSession();
+    if (!session) return;
+
+    const activeSubscription = currentSubscription
+      || await registration?.pushManager?.getSubscription();
+    if (!activeSubscription) return;
+
+    await supabaseClient
+      .from("push_subscriptions")
+      .update({ enabled: false, updated_at: new Date().toISOString() })
+      .eq("user_id", session.user.id)
+      .eq("endpoint", activeSubscription.endpoint);
+
+    await activeSubscription.unsubscribe();
+    currentSubscription = null;
+  }
+
   async function queueReminder({
     title,
     body,
@@ -287,6 +305,7 @@
 
   global.IteraPush = Object.freeze({
     initialize,
+    disableCurrentDevice,
     queueReminder,
     scheduleTaskReminders,
     scheduleTestEventReminders,
