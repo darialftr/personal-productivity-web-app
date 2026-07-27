@@ -5,6 +5,10 @@
   let pdfDocument = null, pdfPage = 1, pdfScale = 1.15, pdfRendering = false;
   let currentPdfPath = null;
   const pdfLastPages = new Map();
+  const PDF_PROGRESS_METADATA_KEY = "itera_pdf_progress";
+  let pdfProgressSaveTimer = null;
+  let pendingPdfProgress = null;
+  let pdfProgressWrite = Promise.resolve();
 
   async function session() {
     const { data: { session } } = await supabaseClient.auth.getSession();
@@ -246,7 +250,14 @@
 
   function bindPdfViewer() {
     const viewer = root.querySelector(".subject-pdf-viewer");
-    viewer.querySelector("[data-close-pdf-viewer]").addEventListener("click", () => viewer.close());
+    viewer.querySelector("[data-close-pdf-viewer]").addEventListener("click", () => closePdfViewer(viewer));
+    viewer.addEventListener("cancel", event => {
+      event.preventDefault();
+      closePdfViewer(viewer);
+    });
+    viewer.addEventListener("close", () => {
+      void flushPdfProgress();
+    });
     viewer.querySelector("[data-pdf-prev]").addEventListener("click", () => changePdfPage(pdfPage - 1));
     viewer.querySelector("[data-pdf-next]").addEventListener("click", () => changePdfPage(pdfPage + 1));
     viewer.querySelector("[data-pdf-page]").addEventListener("change", event => changePdfPage(Number(event.target.value)));
@@ -267,9 +278,11 @@
       return;
     }
 
-    const { data, error } = await supabaseClient.storage
-      .from("subject-files")
-      .createSignedUrl(filePath, 3600);
+    const [signedUrlResult, savedProgress] = await Promise.all([
+      supabaseClient.storage.from("subject-files").createSignedUrl(filePath, 3600),
+      loadPdfProgress(filePath)
+    ]);
+    const { data, error } = signedUrlResult;
     if (error || !data?.signedUrl) {
       errorElement.textContent = "PDF-ul nu a putut fi deschis.";
       return;
@@ -279,8 +292,11 @@
       global.pdfjsLib.GlobalWorkerOptions.workerSrc =
         "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js";
       pdfDocument = await global.pdfjsLib.getDocument(data.signedUrl).promise;
-      pdfPage = Math.min(pdfDocument.numPages, pdfLastPages.get(filePath) || 1);
-      pdfScale = 1.15;
+      pdfPage = Math.max(1, Math.min(
+        pdfDocument.numPages,
+        Number(savedProgress?.page || pdfLastPages.get(filePath) || 1)
+      ));
+      pdfScale = Math.max(0.55, Math.min(2.5, Number(savedProgress?.zoom) || 1.15));
       viewer.querySelector("[data-pdf-count]").textContent = `/ ${pdfDocument.numPages}`;
       await renderPdfPage();
     } catch (error) {
@@ -313,8 +329,75 @@
     await page.render({ canvasContext: context, viewport }).promise;
     viewer.querySelector("[data-pdf-page]").value = pdfPage;
     viewer.querySelector("[data-pdf-zoom]").textContent = `${Math.round(pdfScale * 100)}%`;
-    if (currentPdfPath) pdfLastPages.set(currentPdfPath, pdfPage);
+    if (currentPdfPath) {
+      pdfLastPages.set(currentPdfPath, pdfPage);
+      schedulePdfProgressSave(currentPdfPath, pdfPage, pdfScale);
+    }
     pdfRendering = false;
+  }
+
+  async function closePdfViewer(viewer) {
+    await flushPdfProgress();
+    viewer.close();
+    pdfDocument = null;
+    currentPdfPath = null;
+  }
+
+  async function loadPdfProgress(filePath) {
+    const { data, error } = await supabaseClient.auth.getUser();
+    if (!error && data?.user) user = data.user;
+    return user?.user_metadata?.[PDF_PROGRESS_METADATA_KEY]?.[filePath] || null;
+  }
+
+  function schedulePdfProgressSave(filePath, page, zoom) {
+    pendingPdfProgress = {
+      filePath,
+      page,
+      zoom,
+      updatedAt: new Date().toISOString()
+    };
+    clearTimeout(pdfProgressSaveTimer);
+    pdfProgressSaveTimer = setTimeout(() => {
+      void flushPdfProgress();
+    }, 700);
+  }
+
+  function flushPdfProgress() {
+    clearTimeout(pdfProgressSaveTimer);
+    pdfProgressSaveTimer = null;
+    if (!pendingPdfProgress || !user) return pdfProgressWrite;
+
+    const progress = pendingPdfProgress;
+    pendingPdfProgress = null;
+    pdfProgressWrite = pdfProgressWrite.then(async () => {
+      const { data: currentData, error: currentError } = await supabaseClient.auth.getUser();
+      const currentUser = currentData?.user || user;
+      if (currentError || !currentUser) throw currentError || new Error("Missing user");
+
+      const existing = currentUser.user_metadata?.[PDF_PROGRESS_METADATA_KEY] || {};
+      const entries = Object.entries({
+        ...existing,
+        [progress.filePath]: {
+          page: progress.page,
+          zoom: Number(progress.zoom.toFixed(2)),
+          updatedAt: progress.updatedAt
+        }
+      })
+        .sort(([, first], [, second]) =>
+          String(second.updatedAt || "").localeCompare(String(first.updatedAt || "")))
+        .slice(0, 50);
+
+      const { data: updateData, error: updateError } = await supabaseClient.auth.updateUser({
+        data: { [PDF_PROGRESS_METADATA_KEY]: Object.fromEntries(entries) }
+      });
+      if (updateError) throw updateError;
+      if (updateData?.user) user = updateData.user;
+    }).catch(error => {
+      console.error("Itera PDF progress save:", error);
+      pendingPdfProgress ||= progress;
+    });
+
+    return pdfProgressWrite;
   }
 
   async function toggleTimer(subjectId, button) {
@@ -344,6 +427,7 @@
   }
 
   function unmount() {
+    void flushPdfProgress();
     mounted = false;
     root = null;
     if (timerInterval) clearInterval(timerInterval);
@@ -354,5 +438,9 @@
   function empty(text) { return `<div class="subject-spa-empty">${text}</div>`; }
   function formatMinutes(value) { return value < 60 ? `${value}m` : `${Math.floor(value / 60)}h ${value % 60}m`; }
   function escapeHtml(value) { return String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#039;"); }
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "hidden") void flushPdfProgress();
+  });
+  global.addEventListener("pagehide", () => void flushPdfProgress());
   global.IteraSubjectsView = Object.freeze({ mountList, mountDetail, unmount });
 })(window);
