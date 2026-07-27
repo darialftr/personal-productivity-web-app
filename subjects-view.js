@@ -329,10 +329,15 @@
     }
     clearInterval(timerInterval);
     const endedAt = new Date(), duration = Math.max(1, Math.round((endedAt - timerStartedAt) / 60000));
-    await supabaseClient.from("subject_study_sessions").insert({
+    const { error } = await supabaseClient.from("subject_study_sessions").insert({
       user_id: user.id, subject_id: subjectId, started_at: timerStartedAt.toISOString(),
-      ended_at: endedAt.toISOString(), duration_minutes: duration, source: "timer"
+      ended_at: endedAt.toISOString(), duration_minutes: duration, source: "manual",
+      study_date: endedAt.toISOString().slice(0, 10)
     });
+    if (error) {
+      button.textContent = "Încearcă din nou";
+      return;
+    }
     timerStartedAt = null;
     mounted = false;
     await mountDetail(subjectId);

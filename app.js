@@ -1195,19 +1195,55 @@ async function saveCurrentFocusSession() {
   const studiedMinutes = Math.max(1, Math.round(studiedSeconds / 60));
 
   if (currentUser && focusSubjectId && studiedSeconds >= 30) {
-    const { error } = await supabaseClient.from("subject_study_sessions").insert({
+    const sessionPayload = {
       user_id: currentUser.id,
       subject_id: focusSubjectId,
       started_at: focusStartedAt?.toISOString() || new Date().toISOString(),
       ended_at: new Date().toISOString(),
       duration_minutes: studiedMinutes,
-      source: "focus-timer",
+      source: "manual",
       notes: focusTaskTitle,
       study_date: formatDateForInput(new Date())
-    });
+    };
+    let { error } = await supabaseClient
+      .from("subject_study_sessions")
+      .insert(sessionPayload);
+
+    if (error && /jwt|auth|row-level|permission/i.test(`${error.message} ${error.details || ""}`)) {
+      const { data: refreshData } = await supabaseClient.auth.refreshSession();
+      if (refreshData?.user) currentUser = refreshData.user;
+      if (refreshData?.session) {
+        ({ error } = await supabaseClient
+          .from("subject_study_sessions")
+          .insert(sessionPayload));
+      }
+    }
+
+    const canUseMinimalPayload = error && (
+      ["23514", "PGRST204", "42703"].includes(error.code) ||
+      /source|notes|study_date|column|constraint|schema/i.test(
+        `${error.message} ${error.details || ""}`
+      )
+    );
+
+    if (canUseMinimalPayload) {
+      const minimalPayload = {
+        user_id: currentUser.id,
+        subject_id: focusSubjectId,
+        duration_minutes: studiedMinutes
+      };
+      ({ error } = await supabaseClient
+        .from("subject_study_sessions")
+        .insert(minimalPayload));
+    }
 
     if (error) {
-      showToast("Timpul nu a putut fi salvat în Supabase.", "!");
+      console.error("Itera focus session save failed", {
+        code: error.code,
+        message: error.message,
+        details: error.details
+      });
+      showToast("Timpul nu a putut fi salvat. Apasă din nou pe Finalizează.", "!");
       return 0;
     }
   }
