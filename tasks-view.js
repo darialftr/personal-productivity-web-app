@@ -124,9 +124,12 @@
     const payload = { user_id: user.id, subject_id: values.subject_id || null, title: values.title.trim(),
       task_type: values.task_type, deadline_date: values.deadline_date || null, deadline_time: values.deadline_time || null,
       priority: values.priority, estimated_minutes: Number(values.estimated_minutes) || 0, notes: values.notes.trim() || null };
-    const query = id ? supabaseClient.from("tasks").update(payload).eq("id", id).eq("user_id", user.id) : supabaseClient.from("tasks").insert(payload);
-    const { error } = await query;
+    const query = id
+      ? supabaseClient.from("tasks").update(payload).eq("id", id).eq("user_id", user.id)
+      : supabaseClient.from("tasks").insert(payload);
+    const { data, error } = await query.select("*").single();
     if (error) { form.querySelector("[data-task-error]").textContent = "Task-ul nu a putut fi salvat."; return; }
+    await global.IteraPush?.scheduleTaskReminders(data);
     closeDialog(); await reload();
   }
 

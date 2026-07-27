@@ -275,6 +275,9 @@ async function loadHomeData() {
   events = (eventsResult.data || []).map(normalizeHomeEvent);
   tasks = (tasksResult.data || []).map(normalizeHomeTask);
   scheduleItems = scheduleResult.data || [];
+  globalThis.IteraPush
+    ?.syncUpcomingReminders(tasksResult.data || [], eventsResult.data || [])
+    .catch((error) => console.warn("Itera reminder sync:", error));
   populateHomeSubjects();
 }
 
@@ -925,6 +928,7 @@ async function handleQuickTaskSubmit(event) {
   }
 
   tasks.unshift(normalizeHomeTask(data));
+  await globalThis.IteraPush?.scheduleTaskReminders(data);
   closeModal("quickTaskModal");
   renderAll();
   showToast(
@@ -1010,6 +1014,7 @@ async function handleEventSubmit(event) {
   }
 
   const newEvent = normalizeHomeEvent(data);
+  await globalThis.IteraPush?.scheduleTestEventReminders(data);
   events.push(newEvent);
   events.sort(sortEvents);
   renderAll();
@@ -2112,10 +2117,26 @@ async function scheduleTaskContinuation(minutes) {
   }
 
   if (minutes > 0) {
+    const scheduledFor = new Date(Date.now() + minutes * 60000);
     window.setTimeout(() => {
       showToast(`E timpul să continui „${reminderTitle}”.`, "▶");
     }, minutes * 60000);
-    showToast(`Îți amintim peste ${minutes} minute.`, "♡");
+    const result = await globalThis.IteraPush?.queueReminder({
+      title: "Continuă sesiunea de focus",
+      body: `E timpul să continui „${reminderTitle}”.`,
+      scheduledFor,
+      targetUrl: "./index.html#/tasks",
+      tag: `task-continuation-${taskSnapshot.id}`,
+      notificationType: "task-continuation",
+      sourceId: taskSnapshot.id,
+      dedupeKey: `task-continuation-${taskSnapshot.id}-${scheduledFor.toISOString()}`
+    });
+
+    if (result?.ok) {
+      showToast(`Notificarea este programată peste ${minutes} minute.`, "♡");
+    } else {
+      showToast("Reminderul funcționează doar cât timp Itera rămâne deschisă.", "!");
+    }
     return;
   }
 

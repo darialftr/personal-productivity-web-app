@@ -1,6 +1,6 @@
 "use strict";
 
-const CACHE_NAME = "itera-shell-v21";
+const CACHE_NAME = "itera-shell-v23";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -18,7 +18,8 @@ const APP_SHELL = [
   "./manifest.webmanifest",
   "./itera-icon.png",
   "./itera-icon-192.png",
-  "./itera-icon-512.png"
+  "./itera-icon-512.png",
+  "./itera-icon-maskable-512.png"
 ];
 
 self.addEventListener("install", (event) => {

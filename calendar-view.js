@@ -146,8 +146,9 @@
       end_time: values.end_time || null, location: values.location.trim() || null, notes: values.notes.trim() || null };
     const query = id ? supabaseClient.from("calendar_events").update(payload).eq("id", id).eq("user_id", user.id)
       : supabaseClient.from("calendar_events").insert(payload);
-    const { error } = await query;
+    const { data, error } = await query.select("*").single();
     if (error) { form.querySelector("[data-event-error]").textContent = "Evenimentul nu a putut fi salvat."; return; }
+    await global.IteraPush?.scheduleTestEventReminders(data);
     selected = values.event_date; closeDialog(); await reload();
   }
 

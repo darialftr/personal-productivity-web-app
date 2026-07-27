@@ -117,6 +117,127 @@
     global.showToast?.("Notificarea de test a fost trimisă.", "✓");
   }
 
+  async function queueReminder({
+    title,
+    body,
+    scheduledFor,
+    targetUrl = "./index.html#/",
+    tag = "itera-reminder",
+    notificationType = "reminder",
+    sourceId = null,
+    dedupeKey = null
+  }) {
+    const { data: { session } } = await supabaseClient.auth.getSession();
+    if (!session) return { ok: false, error: new Error("Missing session") };
+
+    const scheduledDate = new Date(scheduledFor);
+    if (Number.isNaN(scheduledDate.getTime())) {
+      return { ok: false, error: new Error("Invalid reminder date") };
+    }
+
+    const { error } = await supabaseClient.from("notification_queue").upsert({
+      user_id: session.user.id,
+      title,
+      body,
+      target_url: targetUrl,
+      tag,
+      notification_type: notificationType,
+      source_id: sourceId,
+      dedupe_key: dedupeKey,
+      scheduled_for: scheduledDate.toISOString(),
+      status: "pending"
+    }, { onConflict: "dedupe_key", ignoreDuplicates: true });
+
+    return { ok: !error, error };
+  }
+
+  async function scheduleTaskReminders(task) {
+    if (!task?.id || !task.deadline_date || task.completed) return [];
+
+    const deadline = new Date(
+      `${task.deadline_date}T${String(task.deadline_time || "09:00").slice(0, 5)}:00`
+    );
+    if (Number.isNaN(deadline.getTime())) return [];
+
+    const isTest = task.task_type === "test";
+    const isImportant = task.priority === "high";
+    const reminderOffsets = isTest
+      ? [24 * 60, 2 * 60]
+      : isImportant
+        ? [24 * 60, 60]
+        : [60];
+    const now = Date.now();
+
+    return Promise.all(reminderOffsets
+      .map((minutesBefore) => ({
+        minutesBefore,
+        scheduledFor: new Date(deadline.getTime() - minutesBefore * 60000)
+      }))
+      .filter((reminder) => reminder.scheduledFor.getTime() > now)
+      .map((reminder) => queueReminder({
+        title: isTest ? "Test în curând" : isImportant ? "Task important" : "Reminder task",
+        body: `${task.title} · ${formatReminderDistance(reminder.minutesBefore)}`,
+        scheduledFor: reminder.scheduledFor,
+        targetUrl: "./index.html#/tasks",
+        tag: `task-${task.id}`,
+        notificationType: isTest ? "test-reminder" : "task-reminder",
+        sourceId: task.id,
+        dedupeKey: `task-${task.id}-${deadline.toISOString()}-${reminder.minutesBefore}`
+      })));
+  }
+
+  async function scheduleTestEventReminders(event) {
+    if (!event?.id || event.event_type !== "test" || !event.event_date) return [];
+    const eventDate = new Date(
+      `${event.event_date}T${String(event.start_time || "09:00").slice(0, 5)}:00`
+    );
+    if (Number.isNaN(eventDate.getTime())) return [];
+
+    const now = Date.now();
+    return Promise.all([24 * 60, 2 * 60]
+      .map((minutesBefore) => ({
+        minutesBefore,
+        scheduledFor: new Date(eventDate.getTime() - minutesBefore * 60000)
+      }))
+      .filter((reminder) => reminder.scheduledFor.getTime() > now)
+      .map((reminder) => queueReminder({
+        title: "Test în curând",
+        body: `${event.title} · ${formatReminderDistance(reminder.minutesBefore)}`,
+        scheduledFor: reminder.scheduledFor,
+        targetUrl: "./index.html#/calendar",
+        tag: `test-${event.id}`,
+        notificationType: "test-reminder",
+        sourceId: event.id,
+        dedupeKey: `test-${event.id}-${eventDate.toISOString()}-${reminder.minutesBefore}`
+      })));
+  }
+
+  async function syncUpcomingReminders(tasks = [], events = []) {
+    const now = new Date();
+    const cutoff = new Date(now.getTime() + 8 * 86400000);
+    const isUpcoming = (dateValue) => {
+      const date = new Date(`${dateValue}T23:59:59`);
+      return !Number.isNaN(date.getTime()) && date >= now && date <= cutoff;
+    };
+
+    const taskJobs = tasks
+      .filter((task) => !task.completed && isUpcoming(task.deadline_date))
+      .slice(0, 20)
+      .map(scheduleTaskReminders);
+    const eventJobs = events
+      .filter((event) => event.event_type === "test" && isUpcoming(event.event_date))
+      .slice(0, 10)
+      .map(scheduleTestEventReminders);
+
+    return Promise.all([...taskJobs, ...eventJobs]);
+  }
+
+  function formatReminderDistance(minutes) {
+    if (minutes >= 24 * 60) return "mâine";
+    if (minutes >= 60) return `în ${Math.round(minutes / 60)} ore`;
+    return `în ${minutes} minute`;
+  }
+
   async function installApp() {
     if (deferredInstallPrompt) {
       deferredInstallPrompt.prompt();
@@ -164,5 +285,11 @@
     return Uint8Array.from([...raw].map((character) => character.charCodeAt(0)));
   }
 
-  global.IteraPush = Object.freeze({ initialize });
+  global.IteraPush = Object.freeze({
+    initialize,
+    queueReminder,
+    scheduleTaskReminders,
+    scheduleTestEventReminders,
+    syncUpcomingReminders
+  });
 })(window);
