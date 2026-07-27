@@ -528,7 +528,7 @@ function getGreetingTitle(profileName, date = new Date()) {
   const hour = date.getHours();
   if (hour < 10) return `Bună dimineața, ${profileName}.`;
   if (hour < 17) return `Bună ziua, ${profileName}.`;
-  return `Noapte bună, ${profileName}.`;
+  return `Bună seara, ${profileName}.`;
 }
 
 function getAccountPreferences() {
