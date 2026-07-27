@@ -399,9 +399,15 @@ function translateAuthError(message) {
   if (
     lowerMessage.includes(
       "rate limit"
+    ) ||
+    lowerMessage.includes(
+      "email rate limit exceeded"
+    ) ||
+    lowerMessage.includes(
+      "over_email_send_rate_limit"
     )
   ) {
-    return "Ai făcut prea multe încercări. Așteaptă puțin.";
+    return "Emailurile de confirmare au atins limita temporară Supabase. Contul tău este în regulă — încearcă din nou peste aproximativ o oră.";
   }
 
   return message;
