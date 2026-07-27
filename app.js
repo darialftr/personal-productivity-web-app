@@ -456,11 +456,12 @@ function getDailyBriefing(profileName) {
     .sort((a, b) => String(a.start_time || "").localeCompare(String(b.start_time || "")));
   const todayTasks = tasks.filter((task) => task.deadline === todayString);
   const remainingTasks = todayTasks.filter((task) => !task.completed);
+  const greetingTitle = getGreetingTitle(profileName, now);
 
   if (todayTasks.length && remainingTasks.length === 0) {
     return {
-      title: `Ai terminat tot ce era planificat, ${profileName}.`,
-      subtitle: "Ziua de azi este completă. Bucură-te de progres."
+      title: greetingTitle,
+      subtitle: "Ai terminat tot ce era planificat pentru astăzi. Bucură-te de progres."
     };
   }
 
@@ -469,7 +470,7 @@ function getDailyBriefing(profileName) {
       (task) => !task.completed && /bac|recapitul/i.test(`${task.title} ${task.notes || ""}`)
     );
     return {
-      title: `Weekend cu ritmul tău, ${profileName}.`,
+      title: greetingTitle,
       subtitle: bacTask
         ? `Ai o recapitulare planificată: ${bacTask.title}.`
         : "Fără grabă. Alege o singură recapitulare care contează."
@@ -487,21 +488,27 @@ function getDailyBriefing(profileName) {
       return (score[a.priority] ?? 1) - (score[b.priority] ?? 1);
     })[0];
 
-  if (now.getHours() < 12) {
+  if (now.getHours() < 10) {
     return {
-      title: `Bună dimineața, ${profileName}.`,
+      title: greetingTitle,
       subtitle: todaySchedule.length
         ? `Azi ai ${todaySchedule.length} ${todaySchedule.length === 1 ? "oră" : "ore"} în program.`
         : "Ai o dimineață liberă pentru un început liniștit."
     };
   }
 
-  if (afterSchool && now.getHours() < 18) {
+  if (now.getHours() < 17) {
     return {
-      title: `Bine ai revenit, ${profileName}.`,
-      subtitle: nextTask
-        ? `Este un moment bun să începi „${nextTask.title}”.`
-        : "Programul de școală s-a încheiat. Poți lua o pauză."
+      title: greetingTitle,
+      subtitle: afterSchool
+        ? nextTask
+          ? `Este un moment bun să începi „${nextTask.title}”.`
+          : "Programul de școală s-a încheiat. Poți lua o pauză."
+        : todaySchedule.length
+          ? `Azi ai ${todaySchedule.length} ${todaySchedule.length === 1 ? "oră" : "ore"} în program.`
+          : nextTask
+            ? `Următorul pas recomandat este „${nextTask.title}”.`
+            : "Ai o zi mai aerisită."
     };
   }
 
@@ -510,11 +517,18 @@ function getDailyBriefing(profileName) {
     0
   );
   return {
-    title: `Bună seara, ${profileName}.`,
+    title: greetingTitle,
     subtitle: remainingMinutes
       ? `Mai ai aproximativ ${formatMinutes(remainingMinutes)} de studiu recomandat.`
       : "Poți încheia ziua fără nimic restant."
   };
+}
+
+function getGreetingTitle(profileName, date = new Date()) {
+  const hour = date.getHours();
+  if (hour < 10) return `Bună dimineața, ${profileName}.`;
+  if (hour < 17) return `Bună ziua, ${profileName}.`;
+  return `Noapte bună, ${profileName}.`;
 }
 
 function getAccountPreferences() {
@@ -1573,13 +1587,11 @@ function initializeMorningBrief() {
   const isWeekend = [0, 6].includes(new Date().getDay());
 
   document.getElementById("morningBriefTitle").textContent =
-    isWeekend
-      ? `Un weekend în ritmul tău, ${displayName}.`
-      : new Date().getHours() < 12
-        ? `Bună dimineața, ${displayName}.`
-        : `Planul de azi, ${displayName}.`;
+    getGreetingTitle(displayName, new Date());
   document.getElementById("morningBriefSummary").textContent =
-    todayTasks.length
+    isWeekend && !todayTasks.length
+      ? "Un weekend în ritmul tău. Nu ai nimic urgent planificat."
+      : todayTasks.length
       ? `Ai ${todayTasks.length} ${todayTasks.length === 1 ? "task" : "task-uri"} și aproximativ ${formatMinutes(studyMinutes)} de studiu.`
       : "Nu ai nimic urgent planificat pentru astăzi.";
   document.getElementById("morningBriefMetrics").innerHTML = `
