@@ -48,7 +48,7 @@ async function initializeAuthPage() {
   } = await supabaseClient.auth.getSession();
 
   if (session) {
-    window.location.replace("index.html");
+    await redirectAuthenticatedUser(session.user);
     return;
   }
 
@@ -237,7 +237,7 @@ async function registerUser(
   }
 
   if (data.session) {
-    window.location.replace("index.html");
+    await redirectAuthenticatedUser(data.session.user);
     return;
   }
 
@@ -255,7 +255,7 @@ function getAuthPageUrl(state) {
   return url.href;
 }
 async function loginUser(email, password) {
-  const { error } =
+  const { data, error } =
     await supabaseClient.auth.signInWithPassword({
       email,
       password
@@ -265,7 +265,30 @@ async function loginUser(email, password) {
     throw error;
   }
 
-  window.location.replace("index.html");
+  await redirectAuthenticatedUser(data.user);
+}
+
+async function redirectAuthenticatedUser(user) {
+  if (!user) {
+    window.location.replace("auth.html");
+    return;
+  }
+
+  const { data: profile, error } = await supabaseClient
+    .from("profiles")
+    .select("onboarding_completed")
+    .eq("id", user.id)
+    .maybeSingle();
+
+  if (error) {
+    console.warn("Starea onboarding-ului nu a putut fi verificată:", error);
+  }
+
+  window.location.replace(
+    profile?.onboarding_completed
+      ? "index.html"
+      : "onboarding.html"
+  );
 }
 
 async function handleForgotPassword() {
