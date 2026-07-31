@@ -58,6 +58,11 @@ let currentEnergyDate = formatDateForInput(now);
 let energySaveVersion = 0;
 let recommendedTask = null;
 let pendingDayPlan = [];
+let pendingRecoveryPlan = [];
+let focusAudioContext = null;
+let focusAudioSource = null;
+let focusAudioGain = null;
+let activeSoundscape = "none";
 const appLaunchStartedAt = Date.now();
 
 let currentUser = null;
@@ -86,11 +91,14 @@ async function initializeApp() {
   IteraPush.initialize();
   initializeEventForm();
   initializeQuickActions();
+  initializeQuickCapture();
   initializeQuickTaskForm();
-  initializeTodayMode();
   initializeOrganizer();
   initializeDayPlanner();
   initializeMorningBrief();
+  initializeWeeklyReplay();
+  initializeExamMode();
+  initializeRecoveryMode();
   initializeLaunchActions();
   window.setInterval(() => {
     resetEnergyForNewDay();
@@ -103,6 +111,11 @@ async function initializeApp() {
   hydrateDailyEnergy();
   applyAccountPreferences();
   updateCurrentDate();
+  renderAll();
+});
+
+window.addEventListener("itera:home-refresh", async () => {
+  await loadHomeData();
   renderAll();
 });
 
@@ -121,6 +134,7 @@ document.addEventListener(
 
   renderAll();
   hideAppLaunchScreen();
+  void maintainActiveExamPlans();
 }
 
 function hideAppLaunchScreen() {
@@ -144,14 +158,6 @@ function initializeShellViews() {
   IteraShell.registerView("home", {
     elementId: "homePage",
     route: "/"
-  });
-
-  IteraShell.registerView("today", {
-    elementId: "todayModePage",
-    route: "/today",
-    onEnter() {
-      renderTodayMode();
-    }
   });
 
   IteraShell.registerView("calendar", {
@@ -858,9 +864,6 @@ function initializeQuickActions() {
   document.getElementById("addTaskButton")?.addEventListener("click", () => {
     prepareQuickTaskModal("homework");
   });
-  document.getElementById("addTaskPageButton")?.addEventListener("click", () => {
-    IteraShell.navigate("tasks", { updateUrl: true });
-  });
 
   document
     .querySelectorAll("[data-quick-action]")
@@ -905,6 +908,124 @@ function initializeQuickActions() {
         );
       });
     });
+}
+
+function normalizeSearchText(value) {
+  return String(value || "")
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .toLowerCase();
+}
+
+function parseQuickCapture(value) {
+  const raw = String(value || "").trim();
+  const plain = normalizeSearchText(raw);
+  const result = {
+    title: raw,
+    type: /\b(test|simulare|examen)\b/.test(plain) ? "test" : "homework",
+    date: formatDateForInput(new Date()),
+    time: "",
+    minutes: 45,
+    priority: /\b(urgent|important|prioritate mare)\b/.test(plain) ? "high" : "medium",
+    subjectId: ""
+  };
+
+  const targetDate = new Date();
+  if (/\bmaine\b/.test(plain)) targetDate.setDate(targetDate.getDate() + 1);
+  if (/\bpoimaine\b/.test(plain)) targetDate.setDate(targetDate.getDate() + 2);
+  const weekdayAliases = ["duminica", "luni", "marti", "miercuri", "joi", "vineri", "sambata"];
+  const weekdayIndex = weekdayAliases.findIndex((day) => new RegExp(`\\b${day}\\b`).test(plain));
+  if (weekdayIndex >= 0) {
+    let offset = (weekdayIndex - targetDate.getDay() + 7) % 7;
+    if (offset === 0) offset = 7;
+    targetDate.setDate(targetDate.getDate() + offset);
+  }
+  const isoDate = plain.match(/\b(20\d{2})-(\d{1,2})-(\d{1,2})\b/);
+  const numericDate = plain.match(/\b(\d{1,2})[.\/](\d{1,2})(?:[.\/](\d{4}))?\b/);
+  if (isoDate) {
+    targetDate.setFullYear(Number(isoDate[1]), Number(isoDate[2]) - 1, Number(isoDate[3]));
+  } else if (numericDate) {
+    targetDate.setFullYear(Number(numericDate[3] || targetDate.getFullYear()), Number(numericDate[2]) - 1, Number(numericDate[1]));
+  }
+  result.date = formatDateForInput(targetDate);
+
+  const durationMatch = plain.match(/\b(\d{1,3})\s*(?:min|minute)\b/);
+  if (durationMatch) result.minutes = Math.max(5, Math.min(600, Number(durationMatch[1])));
+  const hourDuration = plain.match(/\b(\d+(?:[.,]\d+)?)\s*(?:h|ora|ore)\b/);
+  if (hourDuration && !/\b(?:la|ora)\s+\d{1,2}(?::\d{2})?\b/.test(plain)) {
+    result.minutes = Math.max(5, Math.min(600, Math.round(Number(hourDuration[1].replace(",", ".")) * 60)));
+  }
+  if (/\bo ora si (?:jumatate|jum)\b/.test(plain)) result.minutes = 90;
+  else if (/\bo ora\b/.test(plain)) result.minutes = 60;
+  const timeMatch = plain.match(/\b(?:la|ora)\s+(\d{1,2})(?:[:.](\d{2}))?\b/);
+  if (timeMatch) result.time = `${String(Math.min(23, Number(timeMatch[1]))).padStart(2, "0")}:${String(Math.min(59, Number(timeMatch[2] || 0))).padStart(2, "0")}`;
+
+  const subject = subjects.find((item) => {
+    const name = normalizeSearchText(item.name);
+    const firstWord = name.split(/\s+/)[0];
+    const shortName = firstWord.slice(0, Math.max(3, Math.min(4, firstWord.length)));
+    return plain.includes(name) || new RegExp(`\\b${shortName}`).test(plain);
+  });
+  result.subjectId = subject?.id || subjects[0]?.id || "";
+
+  const noisePatterns = [
+    /\b(tem[ăa]|task|test|simulare|examen)\b/gi,
+    /\b(azi|ast[ăa]zi|m[âa]ine|poim[âa]ine|luni|mar[țt]i|miercuri|joi|vineri|s[âa]mb[ăa]t[ăa]|duminic[ăa])\b/gi,
+    /\b(?:la|ora)\s+\d{1,2}(?:[:.]\d{2})?\b/gi,
+    /\b\d{1,3}\s*(?:min|minute)\b/gi,
+    /\b(?:o|\d+(?:[.,]\d+)?)\s*(?:h|or[ăa]|ore)(?:\s+și\s+(?:jumătate|jum))?\b/gi,
+    /\b20\d{2}-\d{1,2}-\d{1,2}\b|\b\d{1,2}[.\/]\d{1,2}(?:[.\/]\d{4})?\b/gi,
+    /\b(?:pentru|la)\s+[a-zăâîșț]+\b/gi
+  ];
+  let cleanedTitle = raw.replace(/^(?:temă|tema|task|test|simulare|examen)\s+/i, "");
+  noisePatterns.forEach((pattern) => { cleanedTitle = cleanedTitle.replace(pattern, " "); });
+  cleanedTitle = cleanedTitle.replace(/\s{2,}/g, " ").replace(/^[,.;:\s]+|[,.;:\s]+$/g, "");
+  if (cleanedTitle.length >= 3) result.title = cleanedTitle.charAt(0).toUpperCase() + cleanedTitle.slice(1);
+  return result;
+}
+
+function initializeQuickCapture() {
+  const form = document.getElementById("quickCaptureForm");
+  const input = document.getElementById("quickCaptureInput");
+  form?.addEventListener("submit", (event) => {
+    event.preventDefault();
+    if (!input.value.trim()) return;
+    const parsed = parseQuickCapture(input.value);
+    closeModal("quickAddModal");
+    prepareQuickTaskModal(parsed.type);
+    document.getElementById("quickTaskTitle").value = parsed.title;
+    document.getElementById("quickTaskSubject").value = parsed.subjectId;
+    document.getElementById("quickTaskDate").value = parsed.date;
+    document.getElementById("quickTaskTime").value = parsed.time;
+    document.getElementById("quickTaskMinutes").value = String(parsed.minutes);
+    document.getElementById("quickTaskPriority").value = parsed.priority;
+    input.value = "";
+  });
+
+  const voiceButton = document.getElementById("quickCaptureVoice");
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SpeechRecognition) {
+    if (voiceButton) voiceButton.hidden = true;
+    return;
+  }
+  voiceButton?.addEventListener("click", () => {
+    const recognition = new SpeechRecognition();
+    recognition.lang = "ro-RO";
+    recognition.interimResults = false;
+    voiceButton.disabled = true;
+    voiceButton.classList.add("listening");
+    recognition.onresult = (event) => { input.value = event.results[0][0].transcript; };
+    recognition.onend = () => {
+      voiceButton.disabled = false;
+      voiceButton.classList.remove("listening");
+    };
+    recognition.onerror = () => {
+      voiceButton.disabled = false;
+      voiceButton.classList.remove("listening");
+      showToast("Dictarea nu a pornit. Verifică permisiunea pentru microfon.", "!");
+    };
+    recognition.start();
+  });
 }
 
 function prepareQuickTaskModal(type = "homework") {
@@ -1175,6 +1296,7 @@ function startFocusSession() {
 
   updateFocusTimerDisplay();
   showFloatingTimer(subject, matchingTask?.title || "Studiu individual");
+  if (activeSoundscape !== "none") void setFocusSoundscape(activeSoundscape);
 
   focusTimerInterval = setInterval(() => {
     if (focusPaused) {
@@ -1223,6 +1345,9 @@ function toggleFocusPause() {
   document.getElementById("floatingPauseButton").textContent = focusPaused
     ? "Continuă"
     : "Pauză";
+  if (focusAudioGain) {
+    focusAudioGain.gain.setTargetAtTime(focusPaused ? 0 : 0.08, focusAudioContext.currentTime, 0.08);
+  }
   emitFocusTimerState();
 }
 
@@ -1348,6 +1473,7 @@ async function saveCurrentFocusSession() {
 async function finishFocusSession() {
   clearInterval(focusTimerInterval);
   focusPaused = true;
+  stopFocusSoundscape();
 
   if (focusTaskId) {
     document.getElementById("taskCompletionTitle").textContent =
@@ -1363,6 +1489,7 @@ async function finishFocusSession() {
   const floatingTimer = document.getElementById("floatingTimer");
   floatingTimer.classList.remove("visible");
   floatingTimer.setAttribute("aria-hidden", "true");
+  stopFocusSoundscape();
 
   showToast(
     `Sesiunea de ${studiedMinutes} min a fost salvată.`,
@@ -1737,7 +1864,11 @@ function initializeDayPlanner() {
   document.getElementById("briefPlanDayButton")?.addEventListener("click", () => {
     markMorningBriefSeen();
     closeModal("morningBriefModal");
-    openDayPlanner();
+    if (getRecoveryCandidates().length >= 3) {
+      document.getElementById("openRecoveryButton")?.click();
+    } else {
+      openDayPlanner();
+    }
   });
   document.getElementById("applyDayPlanButton")?.addEventListener("click", async (event) => {
     if (!pendingDayPlan.length || !currentUser) return;
@@ -1793,20 +1924,36 @@ function initializeMorningBrief() {
     currentUser?.user_metadata?.first_name ||
     "Itera";
   const isWeekend = [0, 6].includes(new Date().getDay());
+  const overdue = tasks.filter((task) => !task.completed && task.deadline && task.deadline < today);
+  const upcomingExam = getAllCalendarItems()
+    .filter((item) => item.date >= today && /bac|examen|simulare|admitere|cambridge|delf|permis/i.test(`${item.title} ${item.notes || ""}`))
+    .sort(sortEvents)[0];
+  const nextClass = todayClasses
+    .filter((item) => String(item.start_time || "").slice(0, 5) >= new Date().toTimeString().slice(0, 5))
+    .sort((first, second) => String(first.start_time).localeCompare(String(second.start_time)))[0];
 
   document.getElementById("morningBriefTitle").textContent =
     getGreetingTitle(displayName, new Date());
   document.getElementById("morningBriefSummary").textContent =
-    isWeekend && !todayTasks.length
+    overdue.length >= 3
+      ? `Ai ${overdue.length} lucruri rămase. Recovery Mode poate păstra doar două priorități și muta restul realist.`
+      : isWeekend && !todayTasks.length
       ? "Un weekend în ritmul tău. Nu ai nimic urgent planificat."
+      : nextClass
+      ? `Următoarea oră este ${nextClass.title}, la ${String(nextClass.start_time).slice(0, 5)}. După program ai aproximativ ${formatMinutes(studyMinutes)} planificate.`
       : todayTasks.length
       ? `Ai ${todayTasks.length} ${todayTasks.length === 1 ? "task" : "task-uri"} și aproximativ ${formatMinutes(studyMinutes)} de studiu.`
+      : upcomingExam
+      ? `Ziua este aerisită. Următorul obiectiv important este „${upcomingExam.title}”, pe ${formatReadableDate(upcomingExam.date)}.`
       : "Nu ai nimic urgent planificat pentru astăzi.";
   document.getElementById("morningBriefMetrics").innerHTML = `
     <div><strong>${todayClasses.length}</strong><span>ore</span></div>
     <div><strong>${todayTasks.length}</strong><span>task-uri</span></div>
     <div><strong>${currentEnergy}/5</strong><span>energie</span></div>
   `;
+  document.getElementById("briefPlanDayButton").textContent = overdue.length >= 3
+    ? "Simplifică planul"
+    : "Planifică ziua";
 
   document
     .querySelectorAll('[data-close-modal="morningBriefModal"]')
@@ -2054,8 +2201,8 @@ function renderOrganizerPreview() {
   preview.textContent = getOrganizerPlan().preview;
 }
 
-async function renderWeeklyReview() {
-  const panel = document.getElementById("weeklyReviewPanel");
+async function renderWeeklyReview(targetId = "weeklyReviewPanel") {
+  const panel = document.getElementById(targetId);
   if (!panel || !currentUser) return;
   const today = new Date();
   today.setHours(0, 0, 0, 0);
@@ -2136,6 +2283,383 @@ async function renderWeeklyReview() {
       <div class="heatmap-legend"><span>Mai puțin</span><i data-level="1"></i><i data-level="2"></i><i data-level="3"></i><i data-level="4"></i><span>Mai mult</span></div>
     </div>
   `;
+}
+
+function initializeWeeklyReplay() {
+  document.getElementById("openWeeklyReplayButton")?.addEventListener("click", () => {
+    openModal("weeklyReplayModal");
+    void renderWeeklyReview("weeklyReplayContent");
+  });
+}
+
+function getExamPlans() {
+  return Array.isArray(currentUser?.user_metadata?.itera_exam_plans)
+    ? currentUser.user_metadata.itera_exam_plans
+    : [];
+}
+
+function renderExamSubjectOptions() {
+  const container = document.getElementById("examSubjectOptions");
+  if (!container) return;
+  container.innerHTML = subjects.map((subject, index) => `
+    <label><input type="checkbox" value="${subject.id}" ${index < 2 ? "checked" : ""}><span>${escapeHtml(subject.name)}</span></label>
+  `).join("");
+}
+
+function getExamFormValues() {
+  return {
+    name: document.getElementById("examName").value.trim(),
+    date: document.getElementById("examDate").value,
+    sessionsPerWeek: Number(document.getElementById("examSessionsPerWeek").value || 4),
+    subjectIds: [...document.querySelectorAll("#examSubjectOptions input:checked")].map((input) => input.value)
+  };
+}
+
+function buildExamSessions(plan) {
+  if (!plan.date || !plan.subjectIds.length) return [];
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  const examDate = parseLocalDate(plan.date);
+  const daysUntil = Math.max(0, Math.ceil((examDate - start) / 86400000));
+  const horizon = Math.min(14, Math.max(0, daysUntil - 1));
+  const count = Math.min(horizon, Math.max(1, Math.ceil(horizon * plan.sessionsPerWeek / 7)));
+  if (!count) return [];
+  const step = horizon / count;
+  return Array.from({ length: count }, (_, index) => {
+    const dayOffset = Math.max(1, Math.min(horizon, Math.round(1 + index * step)));
+    const date = new Date(start);
+    date.setDate(start.getDate() + dayOffset);
+    const subjectId = plan.subjectIds[index % plan.subjectIds.length];
+    const subject = subjects.find((item) => item.id === subjectId);
+    return {
+      date: formatDateForInput(date),
+      time: [0, 6].includes(date.getDay()) ? "11:00" : "18:00",
+      subjectId,
+      subjectName: subject?.name || "Recapitulare",
+      minutes: getRecommendedSessionMinutes()
+    };
+  });
+}
+
+function updateExamPlanPreview() {
+  const preview = document.getElementById("examPlanPreview");
+  if (!preview) return;
+  const sessions = buildExamSessions(getExamFormValues());
+  preview.innerHTML = sessions.length
+    ? `<strong>${sessions.length} sesiuni în următoarele două săptămâni</strong><span>${sessions.slice(0, 3).map((item) => `${formatReadableDate(item.date)} · ${escapeHtml(item.subjectName)}`).join("<br>")}${sessions.length > 3 ? "<br>…iar restul se adaptează pe parcurs." : ""}</span>`
+    : "<span>Alege data și cel puțin o materie pentru a vedea planul.</span>";
+}
+
+function loadExamPlanIntoForm(planId = "") {
+  const form = document.getElementById("examModeForm");
+  const selector = document.getElementById("examPlanSelector");
+  const refreshButton = document.getElementById("refreshExamPlanButton");
+  const saved = getExamPlans().find((plan) => plan.id === planId);
+  selector.value = saved?.id || "";
+  if (saved) {
+    form.dataset.planId = saved.id;
+    form.dataset.planName = saved.name.toLowerCase();
+    document.getElementById("examName").value = saved.name;
+    document.getElementById("examDate").value = saved.date;
+    document.getElementById("examSessionsPerWeek").value = String(saved.sessionsPerWeek || 4);
+    document.querySelectorAll("#examSubjectOptions input").forEach((input) => {
+      input.checked = saved.subjectIds.includes(input.value);
+    });
+    document.getElementById("saveExamPlanButton").textContent = "Actualizează planul";
+  } else {
+    delete form.dataset.planId;
+    delete form.dataset.planName;
+    document.getElementById("examName").value = "";
+    document.getElementById("examDate").value = "";
+    document.getElementById("examSessionsPerWeek").value = "4";
+    document.querySelectorAll("#examSubjectOptions input").forEach((input, index) => { input.checked = index < 2; });
+    document.getElementById("saveExamPlanButton").textContent = "Creează planul";
+  }
+  if (refreshButton) refreshButton.disabled = !saved;
+  updateExamPlanPreview();
+}
+
+function initializeExamMode() {
+  const form = document.getElementById("examModeForm");
+  document.getElementById("openExamModeButton")?.addEventListener("click", () => {
+    renderExamSubjectOptions();
+    const activePlans = getExamPlans().filter((plan) => plan.date > formatDateForInput(new Date()));
+    const selector = document.getElementById("examPlanSelector");
+    selector.innerHTML = `<option value="">Plan nou</option>${activePlans.map((plan) =>
+      `<option value="${escapeHtml(plan.id)}">${escapeHtml(plan.name)} · ${formatReadableDate(plan.date)}</option>`
+    ).join("")}`;
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    document.getElementById("examDate").min = formatDateForInput(tomorrow);
+    loadExamPlanIntoForm(activePlans[0]?.id || "");
+    openModal("examModeModal");
+  });
+  document.getElementById("examPlanSelector")?.addEventListener("change", (event) => {
+    loadExamPlanIntoForm(event.currentTarget.value);
+  });
+  form?.addEventListener("input", updateExamPlanPreview);
+  form?.addEventListener("submit", createExamPlan);
+  document.getElementById("refreshExamPlanButton")?.addEventListener("click", refreshExamPlan);
+}
+
+async function createExamPlan(event) {
+  event.preventDefault();
+  const form = event.currentTarget;
+  const values = getExamFormValues();
+  const editingId = form.dataset.planName === values.name.toLowerCase()
+    ? form.dataset.planId
+    : null;
+  const plan = {
+    ...values,
+    id: editingId || crypto.randomUUID?.() || `${Date.now()}-${Math.random().toString(16).slice(2)}`,
+    createdAt: editingId
+      ? getExamPlans().find((item) => item.id === editingId)?.createdAt || new Date().toISOString()
+      : new Date().toISOString(),
+    updatedAt: new Date().toISOString()
+  };
+  if (!plan.subjectIds.length) {
+    showToast("Alege cel puțin o materie.", "!");
+    return;
+  }
+  const sessions = buildExamSessions(plan);
+  if (!sessions.length) {
+    showToast("Data examenului trebuie să fie în viitor.", "!");
+    return;
+  }
+  const button = document.getElementById("saveExamPlanButton");
+  button.disabled = true;
+  button.textContent = editingId ? "Actualizez planul…" : "Creez planul…";
+  const marker = `[Itera Exam:${plan.id}]`;
+  const [oldTasksResult, oldEventsResult] = editingId
+    ? await Promise.all([
+        supabaseClient.from("tasks").select("id").eq("user_id", currentUser.id).eq("completed", false).ilike("notes", `%${marker}%`),
+        supabaseClient.from("calendar_events").select("id").eq("user_id", currentUser.id).ilike("notes", `%${marker}%`)
+      ])
+    : [{ data: [], error: null }, { data: [], error: null }];
+  if (oldTasksResult.error || oldEventsResult.error) {
+    button.disabled = false;
+    button.textContent = editingId ? "Actualizează planul" : "Creează planul";
+    showToast("Planul existent nu a putut fi citit.", "!");
+    return;
+  }
+  const taskPayloads = sessions.map((session) => ({
+    user_id: currentUser.id,
+    subject_id: session.subjectId,
+    title: `${plan.name} · ${session.subjectName}`,
+    task_type: "homework",
+    deadline_date: session.date,
+    deadline_time: session.time,
+    estimated_minutes: session.minutes,
+    priority: "medium",
+    notes: `${marker} Recapitulare adaptivă.`,
+    completed: false,
+    progress: 0
+  }));
+  const [taskResult, eventResult] = await Promise.all([
+    supabaseClient.from("tasks").insert(taskPayloads).select("id"),
+    supabaseClient.from("calendar_events").insert({
+      user_id: currentUser.id,
+      subject_id: plan.subjectIds[0] || null,
+      title: plan.name,
+      event_type: "test",
+      event_date: plan.date,
+      notes: marker
+    }).select("id").single()
+  ]);
+  let metadataError = null;
+  if (!taskResult.error && !eventResult.error) {
+    const plans = [...getExamPlans().filter((item) => item.id !== plan.id && item.name.toLowerCase() !== plan.name.toLowerCase()), plan].slice(-8);
+    const { data, error } = await supabaseClient.auth.updateUser({ data: { itera_exam_plans: plans } });
+    metadataError = error;
+    if (!error && data?.user) currentUser = data.user;
+  }
+  button.disabled = false;
+  button.textContent = editingId ? "Actualizează planul" : "Creează planul";
+  if (taskResult.error || eventResult.error || metadataError) {
+    if (!taskResult.error && taskResult.data?.length) {
+      await supabaseClient.from("tasks").delete().eq("user_id", currentUser.id)
+        .in("id", taskResult.data.map((item) => item.id));
+    }
+    if (!eventResult.error && eventResult.data?.id) {
+      await supabaseClient.from("calendar_events").delete().eq("user_id", currentUser.id)
+        .eq("id", eventResult.data.id);
+    }
+    showToast("Planul nu a putut fi creat complet.", "!");
+    return;
+  }
+  if (editingId) {
+    const cleanupResults = await Promise.all([
+      oldTasksResult.data?.length
+        ? supabaseClient.from("tasks").delete().eq("user_id", currentUser.id).in("id", oldTasksResult.data.map((item) => item.id))
+        : Promise.resolve({ error: null }),
+      oldEventsResult.data?.length
+        ? supabaseClient.from("calendar_events").delete().eq("user_id", currentUser.id).in("id", oldEventsResult.data.map((item) => item.id))
+        : Promise.resolve({ error: null })
+    ]);
+    if (cleanupResults.some((result) => result.error)) {
+      showToast("Planul nou este salvat, dar au rămas câteva intrări vechi.", "!");
+    }
+  }
+  await loadHomeData();
+  closeModal("examModeModal");
+  renderAll();
+  showToast("Exam Mode este activ. Primele două săptămâni sunt planificate.", "✓");
+}
+
+async function refreshExamPlan() {
+  const selectedId = document.getElementById("examPlanSelector")?.value || "";
+  const name = document.getElementById("examName").value.trim().toLowerCase();
+  const plan = getExamPlans().find((item) => item.id === selectedId)
+    || getExamPlans().find((item) => item.name.toLowerCase() === name);
+  if (!plan) {
+    showToast("Alege mai întâi un plan existent.", "!");
+    return;
+  }
+  const today = formatDateForInput(new Date());
+  const marker = `[Itera Exam:${plan.id}]`;
+  const allExamTasks = tasks.filter((task) => String(task.notes || "").includes(marker));
+  const examTasks = allExamTasks.filter((task) => !task.completed);
+  const overdue = examTasks.filter((task) => task.deadline < today);
+  const replacements = buildExamSessions(plan);
+  if (!replacements.length) {
+    showToast("Examenul este prea aproape pentru o redistribuire automată.", "!");
+    return;
+  }
+  const updateResults = await Promise.all(overdue.map(async (task, index) => {
+    const slot = replacements[index % replacements.length];
+    const result = await supabaseClient.from("tasks")
+      .update({ deadline_date: slot.date, deadline_time: slot.time })
+      .eq("id", task.id)
+      .eq("user_id", currentUser.id);
+    return { ...result, task };
+  }));
+  const occupied = new Set(
+    allExamTasks.filter((task) => task.deadline >= today)
+      .map((task) => `${task.deadline}:${task.subject_id}`)
+  );
+  overdue.forEach((task, index) => {
+    const slot = replacements[index % replacements.length];
+    occupied.add(`${slot.date}:${task.subject_id}`);
+  });
+  const missingCandidates = replacements.filter((slot) => !occupied.has(`${slot.date}:${slot.subjectId}`));
+  const scheduledAfterMoves = allExamTasks.filter((task) => task.deadline >= today).length + overdue.length;
+  const missing = missingCandidates.slice(0, Math.max(0, replacements.length - scheduledAfterMoves));
+  const insertResult = missing.length
+    ? await supabaseClient.from("tasks").insert(missing.map((slot) => ({
+        user_id: currentUser.id,
+        subject_id: slot.subjectId,
+        title: `${plan.name} · ${slot.subjectName}`,
+        task_type: "homework",
+        deadline_date: slot.date,
+        deadline_time: slot.time,
+        estimated_minutes: slot.minutes,
+        priority: "medium",
+        notes: `${marker} Recapitulare adaptivă.`,
+        completed: false,
+        progress: 0
+      }))).select("id")
+    : { data: [], error: null };
+  if (updateResults.some((result) => result.error) || insertResult.error) {
+    const rollbackOperations = updateResults
+      .filter((result) => !result.error)
+      .map(({ task }) => supabaseClient.from("tasks")
+        .update({ deadline_date: task.deadline, deadline_time: task.deadline_time || null })
+        .eq("id", task.id)
+        .eq("user_id", currentUser.id));
+    if (!insertResult.error && insertResult.data?.length) {
+      rollbackOperations.push(
+        supabaseClient.from("tasks").delete().eq("user_id", currentUser.id)
+          .in("id", insertResult.data.map((item) => item.id))
+      );
+    }
+    await Promise.all(rollbackOperations);
+    showToast("Unele recapitulări nu au putut fi mutate.", "!");
+    return;
+  }
+  if (!overdue.length && !missing.length) {
+    showToast("Planul este deja la zi.", "✓");
+    return;
+  }
+  await loadHomeData();
+  updateExamPlanPreview();
+  renderAll();
+  showToast(
+    overdue.length
+      ? "Recapitulările restante au fost redistribuite și planul a fost completat."
+      : "Următoarele două săptămâni au fost completate.",
+    "✓"
+  );
+}
+
+async function maintainActiveExamPlans() {
+  if (!currentUser) return;
+  const today = formatDateForInput(new Date());
+  const activePlans = getExamPlans().filter((plan) => plan.date > today);
+  let movedCount = 0;
+  let addedCount = 0;
+
+  for (const plan of activePlans) {
+    const marker = `[Itera Exam:${plan.id}]`;
+    const allPlanTasks = tasks.filter((task) => String(task.notes || "").includes(marker));
+    const planTasks = allPlanTasks.filter((task) => !task.completed);
+    const overdue = planTasks.filter((task) => task.deadline < today);
+    const slots = buildExamSessions(plan);
+    if (!slots.length) continue;
+    const occupied = new Set(
+      allPlanTasks.filter((task) => task.deadline >= today)
+        .map((task) => `${task.deadline}:${task.subject_id}`)
+    );
+
+    let movedForPlan = 0;
+    for (const task of overdue) {
+      const preferredIndex = slots.findIndex((slot) =>
+        slot.subjectId === task.subject_id && !occupied.has(`${slot.date}:${slot.subjectId}`)
+      );
+      const fallbackIndex = slots.findIndex((slot) => !occupied.has(`${slot.date}:${slot.subjectId}`));
+      const slot = slots[preferredIndex >= 0 ? preferredIndex : fallbackIndex];
+      if (!slot) continue;
+      const { error } = await supabaseClient.from("tasks")
+        .update({ deadline_date: slot.date, deadline_time: slot.time })
+        .eq("id", task.id)
+        .eq("user_id", currentUser.id);
+      if (!error) {
+        occupied.add(`${slot.date}:${task.subject_id}`);
+        movedCount += 1;
+        movedForPlan += 1;
+      }
+    }
+
+    const scheduledCount = allPlanTasks.filter((task) => task.deadline >= today).length + movedForPlan;
+    const missingSlots = slots
+      .filter((slot) => !occupied.has(`${slot.date}:${slot.subjectId}`))
+      .slice(0, Math.max(0, slots.length - scheduledCount));
+    if (missingSlots.length) {
+      const { data, error } = await supabaseClient.from("tasks").insert(missingSlots.map((slot) => ({
+        user_id: currentUser.id,
+        subject_id: slot.subjectId,
+        title: `${plan.name} · ${slot.subjectName}`,
+        task_type: "homework",
+        deadline_date: slot.date,
+        deadline_time: slot.time,
+        estimated_minutes: slot.minutes,
+        priority: "medium",
+        notes: `${marker} Recapitulare adaptivă.`,
+        completed: false,
+        progress: 0
+      }))).select("id");
+      if (!error) addedCount += data?.length || missingSlots.length;
+    }
+  }
+
+  if (movedCount || addedCount) {
+    await loadHomeData();
+    renderAll();
+    const updates = [
+      movedCount ? `${movedCount} ${movedCount === 1 ? "sesiune mutată" : "sesiuni mutate"}` : "",
+      addedCount ? `${addedCount} ${addedCount === 1 ? "sesiune nouă" : "sesiuni noi"}` : ""
+    ].filter(Boolean).join(" și ");
+    showToast(`Exam Mode s-a adaptat: ${updates}.`, "✓");
+  }
 }
 
 function renderGoalCountdowns() {
@@ -2220,6 +2744,132 @@ function renderAchievement() {
   }
 }
 
+function getRecoveryCandidates() {
+  const today = formatDateForInput(new Date());
+  return tasks
+    .filter((task) => !task.completed && task.deadline && task.deadline <= today)
+    .sort(sortTasksForPlan);
+}
+
+function buildRecoveryPlan() {
+  const candidates = getRecoveryCandidates();
+  const today = formatDateForInput(new Date());
+  const protectedTasks = candidates.filter((task) => task.type === "test" || task.task_type === "test" || task.priority === "high");
+  const flexibleTasks = candidates.filter((task) => !protectedTasks.includes(task));
+  const keepToday = flexibleTasks.slice(0, Math.max(0, 2 - protectedTasks.length));
+  const move = flexibleTasks.slice(keepToday.length);
+  const dayLoads = Array.from({ length: 5 }, (_, index) => {
+    const date = getTomorrowDate(index + 1);
+    return {
+      date,
+      minutes: tasks.filter((task) => !task.completed && task.deadline === date)
+        .reduce((sum, task) => sum + getTaskMinutes(task), 0)
+    };
+  });
+  const updates = [
+    ...protectedTasks.map((task) => ({
+      task,
+      date: task.deadline,
+      time: task.deadlineTime || null,
+      protected: true
+    })),
+    ...keepToday.map((task) => ({ task, date: today, time: null, protected: false })),
+    ...move.map((task) => {
+      dayLoads.sort((first, second) => first.minutes - second.minutes);
+      const target = dayLoads[0];
+      target.minutes += getTaskMinutes(task);
+      return { task, date: target.date, time: null, protected: false };
+    })
+  ];
+  const candidateIds = new Set(candidates.map((task) => task.id));
+  const busyByDate = new Map();
+  updates.filter((entry) => !entry.protected).forEach((entry) => {
+    if (!busyByDate.has(entry.date)) {
+      busyByDate.set(entry.date, mergeIntervals(
+        getDayIntervals(entry.date).filter((item) => !candidateIds.has(item.id))
+      ));
+    }
+    const date = parseLocalDate(entry.date);
+    const isToday = entry.date === today;
+    const earliest = isToday
+      ? roundToQuarter(new Date().getHours() * 60 + new Date().getMinutes() + 15)
+      : ([0, 6].includes(date.getDay()) ? 10 * 60 : 16 * 60);
+    const busy = busyByDate.get(entry.date);
+    const slot = findAvailableSlot(earliest, getTaskMinutes(entry.task), busy, 22 * 60);
+    if (slot !== null) {
+      entry.time = formatClockMinutes(slot);
+      busy.push({ start: slot, end: slot + getTaskMinutes(entry.task) });
+      busy.sort((first, second) => first.start - second.start);
+    }
+  });
+  return { candidates, protectedTasks, keepToday, move, updates };
+}
+
+function renderRecoveryCard() {
+  const card = document.getElementById("recoveryCard");
+  if (!card) return;
+  const candidates = getRecoveryCandidates();
+  const minutes = candidates.reduce((sum, task) => sum + getTaskMinutes(task), 0);
+  const overloaded = candidates.length >= 3 || minutes > getEnergyCapacity();
+  card.hidden = !overloaded;
+  if (!overloaded) return;
+  document.getElementById("recoveryTitle").textContent = `${candidates.length} lucruri cer atenție în același timp.`;
+  document.getElementById("recoveryDescription").textContent =
+    `Planul are ${formatMinutes(minutes)}. Testele și prioritățile mari rămân fixe; restul poate fi distribuit realist.`;
+}
+
+function initializeRecoveryMode() {
+  document.getElementById("openRecoveryButton")?.addEventListener("click", () => {
+    const plan = buildRecoveryPlan();
+    pendingRecoveryPlan = plan.updates;
+    document.getElementById("recoverySummary").textContent =
+      `${plan.protectedTasks.length ? `${plan.protectedTasks.length} priorități rămân fixe. ` : ""}Păstrăm ${plan.keepToday.length} astăzi și redistribuim ${plan.move.length}. Nimic nu este șters.`;
+    document.getElementById("recoveryPlanList").innerHTML = plan.updates.map((entry) => `
+      <div class="recovery-plan-row ${entry.date === formatDateForInput(new Date()) ? "keep" : "move"}">
+        <span>${entry.protected ? "Rămâne fix" : entry.date === formatDateForInput(new Date()) ? `Astăzi${entry.time ? ` · ${entry.time}` : ""}` : `${formatReadableDate(entry.date)}${entry.time ? ` · ${entry.time}` : ""}`}</span>
+        <strong>${escapeHtml(entry.task.title)}</strong>
+        <small>${escapeHtml(entry.task.subject || "Fără materie")} · ${getTaskMinutes(entry.task)} min</small>
+      </div>
+    `).join("");
+    openModal("recoveryModal");
+  });
+  document.getElementById("applyRecoveryButton")?.addEventListener("click", applyRecoveryPlan);
+}
+
+async function applyRecoveryPlan(event) {
+  const changes = pendingRecoveryPlan.filter((entry) => !entry.protected);
+  if (!changes.length) {
+    showToast("Toate elementele sunt priorități fixe; nu am mutat nimic.", "✓");
+    closeModal("recoveryModal");
+    return;
+  }
+  event.currentTarget.disabled = true;
+  event.currentTarget.textContent = "Simplific planul…";
+  const results = await Promise.all(changes.map((entry) =>
+    supabaseClient.from("tasks")
+      .update({ deadline_date: entry.date, deadline_time: entry.time })
+      .eq("id", entry.task.id)
+      .eq("user_id", currentUser.id)
+  ));
+  event.currentTarget.disabled = false;
+  event.currentTarget.textContent = "Aplică planul simplificat";
+  if (results.some((result) => result.error)) {
+    await Promise.all(changes.map((entry) =>
+      supabaseClient.from("tasks")
+        .update({ deadline_date: entry.task.deadline, deadline_time: entry.task.deadlineTime || null })
+        .eq("id", entry.task.id)
+        .eq("user_id", currentUser.id)
+    ));
+    showToast("Planul nu a putut fi actualizat complet.", "!");
+    return;
+  }
+  pendingRecoveryPlan = [];
+  await loadHomeData();
+  closeModal("recoveryModal");
+  renderAll();
+  showToast("Planul a fost simplificat fără să mutăm testele sau prioritățile mari.", "✓");
+}
+
 function initializeFloatingTimer() {
   const timer = document.getElementById("floatingTimer");
   const dragHandle = document.getElementById("floatingTimerDrag");
@@ -2237,11 +2887,25 @@ function initializeFloatingTimer() {
   document.getElementById("taskCompletedYes").addEventListener("click", completeFocusedTask);
   document.getElementById("taskCompletedNo").addEventListener("click", () => {
     document.getElementById("taskResumeOptions").hidden = false;
+    const suggestion = getSmartResumeSuggestion();
+    const button = document.getElementById("smartResumeButton");
+    button.dataset.date = suggestion.date;
+    button.dataset.time = suggestion.time;
+    document.getElementById("smartResumeLabel").textContent =
+      `${formatReadableDate(suggestion.date)}, ${suggestion.time}`;
+  });
+  document.getElementById("smartResumeButton")?.addEventListener("click", (event) => {
+    scheduleSmartTaskContinuation(event.currentTarget.dataset.date, event.currentTarget.dataset.time);
   });
   document.querySelectorAll("[data-resume-minutes]").forEach((button) => {
     button.addEventListener("click", () => {
       scheduleTaskContinuation(Number(button.dataset.resumeMinutes));
     });
+  });
+  activeSoundscape = currentUser?.user_metadata?.itera_soundscape || "none";
+  syncSoundscapeButtons();
+  document.querySelectorAll("[data-soundscape]").forEach((button) => {
+    button.addEventListener("click", () => setFocusSoundscape(button.dataset.soundscape, true));
   });
 
   dragHandle.addEventListener("pointerdown", (event) => {
@@ -2271,6 +2935,130 @@ function initializeFloatingTimer() {
   });
 }
 
+function getSmartResumeSuggestion() {
+  const duration = Math.max(15, Math.ceil(focusInitialSeconds / 60));
+  for (let offset = 0; offset < 8; offset += 1) {
+    const date = new Date();
+    date.setDate(date.getDate() + offset);
+    const dateString = formatDateForInput(date);
+    const isWeekend = [0, 6].includes(date.getDay());
+    const earliest = offset === 0
+      ? roundToQuarter(new Date().getHours() * 60 + new Date().getMinutes() + 30)
+      : (isWeekend ? 10 * 60 : 16 * 60);
+    const busy = mergeIntervals(
+      getDayIntervals(dateString).filter((item) => !(item.kind === "task" && item.id === focusTaskId))
+    );
+    const slot = findAvailableSlot(earliest, duration, busy, 22 * 60);
+    if (slot !== null) return { date: dateString, time: formatClockMinutes(slot) };
+  }
+  return { date: getTomorrowDate(), time: "18:00" };
+}
+
+async function scheduleSmartTaskContinuation(date, time) {
+  if (!focusTaskId || !date || !time) return;
+  const actionButton = document.getElementById("smartResumeButton");
+  actionButton.disabled = true;
+  const taskId = focusTaskId;
+  const title = focusTaskTitle;
+  const studiedMinutes = await saveCurrentFocusSession();
+  if (!studiedMinutes) {
+    actionButton.disabled = false;
+    return;
+  }
+  const { error } = await supabaseClient.from("tasks")
+    .update({ deadline_date: date, deadline_time: time })
+    .eq("id", taskId)
+    .eq("user_id", currentUser.id);
+  if (error) {
+    actionButton.disabled = false;
+    showToast("Task-ul nu a putut fi reprogramat.", "!");
+    return;
+  }
+  const scheduledFor = new Date(`${date}T${time}:00`);
+  const reminderResult = await globalThis.IteraPush?.queueReminder({
+    title: "E timpul să continui",
+    body: `Ai rezervat acest interval pentru „${title}”.`,
+    scheduledFor,
+    targetUrl: "./index.html#/tasks",
+    tag: `smart-resume-${taskId}`,
+    notificationType: "task-continuation",
+    sourceId: taskId,
+    dedupeKey: `smart-resume-${taskId}-${scheduledFor.toISOString()}`
+  });
+  actionButton.disabled = false;
+  closeTaskSession();
+  await loadHomeData();
+  renderAll();
+  showToast(
+    reminderResult?.ok
+      ? `Task reprogramat pe ${formatReadableDate(date)}, la ${time}, cu notificare.`
+      : `Task reprogramat pe ${formatReadableDate(date)}, la ${time}. Activează notificările pentru reminder.`,
+    reminderResult?.ok ? "✓" : "!"
+  );
+}
+
+function syncSoundscapeButtons() {
+  document.querySelectorAll("[data-soundscape]").forEach((button) => {
+    button.classList.toggle("active", button.dataset.soundscape === activeSoundscape);
+  });
+}
+
+function stopFocusSoundscape() {
+  try { focusAudioSource?.stop(); } catch (_) {}
+  focusAudioSource = null;
+  if (focusAudioGain) focusAudioGain.disconnect();
+  focusAudioGain = null;
+}
+
+async function setFocusSoundscape(kind, persist = false) {
+  activeSoundscape = ["rain", "cafe"].includes(kind) ? kind : "none";
+  syncSoundscapeButtons();
+  stopFocusSoundscape();
+
+  if (activeSoundscape !== "none") {
+    const AudioContext = window.AudioContext || window.webkitAudioContext;
+    if (!AudioContext) {
+      activeSoundscape = "none";
+      syncSoundscapeButtons();
+      return;
+    }
+    focusAudioContext ||= new AudioContext();
+    await focusAudioContext.resume();
+    const seconds = 4;
+    const buffer = focusAudioContext.createBuffer(2, focusAudioContext.sampleRate * seconds, focusAudioContext.sampleRate);
+    for (let channel = 0; channel < buffer.numberOfChannels; channel += 1) {
+      const data = buffer.getChannelData(channel);
+      let smooth = 0;
+      for (let index = 0; index < data.length; index += 1) {
+        const white = Math.random() * 2 - 1;
+        smooth = activeSoundscape === "rain" ? smooth * 0.82 + white * 0.18 : smooth * 0.96 + white * 0.04;
+        data[index] = smooth * (activeSoundscape === "rain" ? 0.7 : 1.2);
+      }
+    }
+    const source = focusAudioContext.createBufferSource();
+    const filter = focusAudioContext.createBiquadFilter();
+    const gain = focusAudioContext.createGain();
+    source.buffer = buffer;
+    source.loop = true;
+    filter.type = activeSoundscape === "rain" ? "highpass" : "lowpass";
+    filter.frequency.value = activeSoundscape === "rain" ? 650 : 900;
+    gain.gain.value = focusPaused ? 0 : 0.08;
+    source.connect(filter).connect(gain).connect(focusAudioContext.destination);
+    source.start();
+    focusAudioSource = source;
+    focusAudioGain = gain;
+  }
+
+  if (persist && currentUser) {
+    const { data, error } = await supabaseClient.auth.updateUser({ data: { itera_soundscape: activeSoundscape } });
+    if (error) {
+      showToast("Sunetul funcționează acum, dar preferința nu a putut fi salvată.", "!");
+      return;
+    }
+    if (data?.user) currentUser = data.user;
+  }
+}
+
 function showFloatingTimer(subject, taskTitle) {
   const timer = document.getElementById("floatingTimer");
   timer.classList.remove("minimized");
@@ -2294,6 +3082,7 @@ function startTaskFocus(task, subject) {
   focusSessionSaved = false;
   updateFocusTimerDisplay();
   showFloatingTimer(subject?.name || "Fără materie", task.title);
+  if (activeSoundscape !== "none") void setFocusSoundscape(activeSoundscape);
 
   focusTimerInterval = setInterval(() => {
     if (focusPaused) return;
@@ -2378,6 +3167,7 @@ function closeTaskSession() {
   timer.setAttribute("aria-hidden", "true");
   focusTaskId = null;
   focusTaskTitle = null;
+  stopFocusSoundscape();
   emitFocusTimerState();
 }
 
@@ -2475,10 +3265,10 @@ function renderAll() {
   renderTodayTasks();
   renderUpcomingEvents();
   renderNowRecommendation();
-  renderTodayMode();
   renderGoalCountdowns();
   renderOrganizerPreview();
   renderAchievement();
+  renderRecoveryCard();
   renderNotifications();
   updateAppBadge();
 }
@@ -2698,110 +3488,6 @@ function renderTodayTasks() {
     taskEvents,
     "Nu ai task-uri pentru astăzi."
   );
-}
-
-function initializeTodayMode() {
-  document.getElementById("openTodayModeButton")?.addEventListener("click", () => openPage("today"));
-  document.getElementById("todayModePlanButton")?.addEventListener("click", openDayPlanner);
-  document.getElementById("todayModeAddButton")?.addEventListener("click", () => prepareQuickTaskModal("homework"));
-  document.getElementById("todayModeStartButton")?.addEventListener("click", startRecommendedFocusSession);
-  document.getElementById("resolveConflictsButton")?.addEventListener("click", () => openPage("calendar"));
-}
-
-function renderTodayMode() {
-  const root = document.getElementById("todayModePage");
-  if (!root || !currentUser) return;
-
-  const today = formatDateForInput(new Date());
-  const openTodayTasks = tasks
-    .filter((task) => !task.completed && task.deadline === today)
-    .sort(sortTasksForPlan);
-  const totalMinutes = openTodayTasks.reduce((sum, task) => sum + getTaskMinutes(task), 0);
-  const plan = buildDayPlan();
-  const dateLabel = new Intl.DateTimeFormat("ro-RO", {
-    weekday: "long",
-    day: "numeric",
-    month: "long"
-  }).format(new Date());
-
-  document.getElementById("todayModeDate").textContent = capitalizeFirstLetter(dateLabel);
-  document.getElementById("todayModeEnergy").textContent = `${currentEnergy}/5`;
-  document.getElementById("todayModeTaskCount").textContent = String(openTodayTasks.length);
-  document.getElementById("todayModeMinutes").textContent = formatMinutes(totalMinutes);
-  document.getElementById("todayModeCapacity").textContent = formatMinutes(plan.availableMinutes);
-  document.getElementById("todayModeBrief").textContent = openTodayTasks.length
-    ? `${openTodayTasks.length} ${openTodayTasks.length === 1 ? "lucru important" : "lucruri importante"}, așezate într-un ritm realist.`
-    : "Nu ai nimic urgent. Ziua poate rămâne aerisită.";
-
-  const nowTitle = document.getElementById("todayModeNowTitle");
-  const nowReason = document.getElementById("todayModeNowReason");
-  const startButton = document.getElementById("todayModeStartButton");
-  if (recommendedTask) {
-    nowTitle.textContent = recommendedTask.title;
-    nowReason.textContent = `${recommendedTask.subject || "Fără materie"} · ${getTaskMinutes(recommendedTask)} minute estimate`;
-    startButton.hidden = false;
-  } else {
-    nowTitle.textContent = "Tot ce era planificat este gata.";
-    nowReason.textContent = "Păstrează restul zilei liber sau pornește o recapitulare ușoară.";
-    startButton.hidden = true;
-  }
-
-  const timeline = document.getElementById("todayModeTimeline");
-  const intervals = getDayIntervals(today).slice(0, 10);
-  timeline.innerHTML = intervals.length
-    ? intervals.map((item) => `
-      <div class="today-mode-entry">
-        <time>${escapeHtml(formatClockMinutes(item.start))}</time>
-        <span class="today-mode-entry-dot"></span>
-        <div>
-          <strong>${escapeHtml(item.title)}</strong>
-          <small>${escapeHtml({
-            schedule: "Program",
-            event: "Calendar",
-            task: "Task"
-          }[item.kind] || "Activitate")} · până la ${escapeHtml(formatClockMinutes(item.end))}</small>
-        </div>
-      </div>
-    `).join("")
-    : '<div class="today-mode-empty"><p>Programul este liber. Poți adăuga doar ce contează.</p></div>';
-
-  const taskList = document.getElementById("todayModeTaskList");
-  taskList.innerHTML = openTodayTasks.length
-    ? openTodayTasks.map((task) => `
-      <div class="today-mode-entry">
-        <time>${escapeHtml(task.deadlineTime || "—")}</time>
-        <span class="today-mode-entry-dot"></span>
-        <div>
-          <strong>${escapeHtml(task.title)}</strong>
-          <small>${escapeHtml(task.subject || "Fără materie")} · ${getTaskMinutes(task)} min</small>
-        </div>
-        <button type="button" data-today-focus="${task.id}">Start</button>
-      </div>
-    `).join("")
-    : '<div class="today-mode-empty"><p>Ai terminat tot ce era planificat pentru astăzi.</p></div>';
-
-  taskList.querySelectorAll("[data-today-focus]").forEach((button) => {
-    button.addEventListener("click", () => {
-      const task = tasks.find((item) => item.id === button.dataset.todayFocus);
-      const subject = subjects.find((item) => item.id === task?.subject_id);
-      if (task) startTaskFocus(task, subject);
-    });
-  });
-
-  const conflicts = getScheduleConflicts(today);
-  const conflictCard = document.getElementById("todayConflictCard");
-  conflictCard.hidden = conflicts.length === 0;
-  document.getElementById("todayConflictList").innerHTML = conflicts.slice(0, 3).map((conflict) => `
-    <div class="today-conflict-item">
-      <strong>${escapeHtml(conflict.first.title)} + ${escapeHtml(conflict.second.title)}</strong>
-      <span>${escapeHtml(conflict.start)}–${escapeHtml(conflict.end)}</span>
-    </div>
-  `).join("");
-
-  if (plan.unscheduled.length) {
-    document.getElementById("todayModeBrief").textContent =
-      `${plan.unscheduled.length} ${plan.unscheduled.length === 1 ? "task nu încape" : "task-uri nu încap"} realist astăzi. Itera le poate reprograma.`;
-  }
 }
 
 function updateAppBadge() {

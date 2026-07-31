@@ -6,10 +6,14 @@
   let currentPdfPath = null;
   const pdfLastPages = new Map();
   const PDF_PROGRESS_METADATA_KEY = "itera_pdf_progress";
+  const PDF_ANNOTATIONS_METADATA_KEY = "itera_pdf_annotations";
+  let currentPdfSubjectId = null;
+  let currentPdfTitle = "Document";
   let pdfProgressSaveTimer = null;
   let pendingPdfProgress = null;
   let pdfProgressWrite = Promise.resolve();
   let focusTimerListener = null;
+  let pdfNoteDirty = false;
 
   async function session() {
     const { data: { session } } = await supabaseClient.auth.getSession();
@@ -162,7 +166,20 @@
               <button data-close-pdf-viewer aria-label="Închide">×</button>
             </div>
           </header>
-          <div class="pdf-canvas-wrap"><canvas data-pdf-canvas></canvas></div>
+          <div class="pdf-study-actions">
+            <button type="button" data-pdf-bookmark>◇ Marchează pagina</button>
+            <button type="button" data-pdf-note-toggle>✎ Notiță</button>
+            <button type="button" data-pdf-task>+ Repetă pagina</button>
+          </div>
+          <div class="pdf-study-layout">
+            <div class="pdf-canvas-wrap"><canvas data-pdf-canvas></canvas></div>
+            <aside class="pdf-notes-panel" data-pdf-notes-panel hidden>
+              <div><strong>Notiță la pagina <span data-pdf-note-page>1</span></strong><button type="button" data-pdf-note-close aria-label="Închide notița">×</button></div>
+              <textarea data-pdf-note rows="10" placeholder="Idei, formule sau lucruri de repetat…"></textarea>
+              <button type="button" class="primary-small-button" data-pdf-note-save>Salvează notița</button>
+              <small data-pdf-note-status></small>
+            </aside>
+          </div>
           <p class="subjects-spa-error" data-viewer-error></p>
         </div>
       </dialog>`;
@@ -172,7 +189,7 @@
     root.querySelector("[data-close-pdf-upload]").addEventListener("click", () => root.querySelector(".subject-pdf-upload").close());
     root.querySelector("[data-pdf-form]").addEventListener("submit", event => uploadPdf(event, id));
     root.querySelectorAll("[data-open-pdf]").forEach(button => button.addEventListener("click", () => {
-      if (button.dataset.filePath) openPdf(button.dataset.filePath, button.dataset.resourceTitle);
+      if (button.dataset.filePath) openPdf(button.dataset.filePath, button.dataset.resourceTitle, id);
     }));
     bindPdfViewer();
   }
@@ -271,6 +288,18 @@
     viewer.querySelector("[data-pdf-page]").addEventListener("change", event => changePdfPage(Number(event.target.value)));
     viewer.querySelector("[data-pdf-zoom-in]").addEventListener("click", () => changePdfZoom(0.15));
     viewer.querySelector("[data-pdf-zoom-out]").addEventListener("click", () => changePdfZoom(-0.15));
+    viewer.querySelector("[data-pdf-note-toggle]").addEventListener("click", () => {
+      const panel = viewer.querySelector("[data-pdf-notes-panel]");
+      panel.hidden = !panel.hidden;
+      if (!panel.hidden) renderPdfAnnotation();
+    });
+    viewer.querySelector("[data-pdf-note-close]").addEventListener("click", () => {
+      viewer.querySelector("[data-pdf-notes-panel]").hidden = true;
+    });
+    viewer.querySelector("[data-pdf-bookmark]").addEventListener("click", togglePdfBookmark);
+    viewer.querySelector("[data-pdf-note-save]").addEventListener("click", savePdfNote);
+    viewer.querySelector("[data-pdf-note]").addEventListener("input", () => { pdfNoteDirty = true; });
+    viewer.querySelector("[data-pdf-task]").addEventListener("click", createPdfReviewTask);
     viewer.querySelector("[data-pdf-focus-pill]").addEventListener("click", () => {
       global.IteraFocus?.togglePause();
     });
@@ -292,12 +321,14 @@
       : `Pune pe pauză timerul pentru ${state.subject || "focus"}`);
   }
 
-  async function openPdf(filePath, title) {
+  async function openPdf(filePath, title, subjectId) {
     const viewer = root.querySelector(".subject-pdf-viewer");
     const errorElement = viewer.querySelector("[data-viewer-error]");
     errorElement.textContent = "";
     viewer.querySelector("[data-pdf-title]").textContent = title;
     currentPdfPath = filePath;
+    currentPdfTitle = title || "Document";
+    currentPdfSubjectId = subjectId || null;
     viewer.showModal();
 
     if (!global.pdfjsLib) {
@@ -326,6 +357,7 @@
       pdfScale = Math.max(0.55, Math.min(2.5, Number(savedProgress?.zoom) || 1.15));
       viewer.querySelector("[data-pdf-count]").textContent = `/ ${pdfDocument.numPages}`;
       await renderPdfPage();
+      await renderPdfAnnotation();
     } catch (error) {
       errorElement.textContent = "PDF-ul nu a putut fi randat.";
     }
@@ -333,6 +365,10 @@
 
   async function changePdfPage(nextPage) {
     if (!pdfDocument || pdfRendering) return;
+    if (!await persistPdfNoteIfDirty()) {
+      root.querySelector("[data-pdf-note-status]").textContent = "Salvează notița înainte să schimbi pagina.";
+      return;
+    }
     pdfPage = Math.max(1, Math.min(pdfDocument.numPages, Number(nextPage) || 1));
     await renderPdfPage();
   }
@@ -347,27 +383,154 @@
     if (!pdfDocument) return;
     pdfRendering = true;
     const viewer = root.querySelector(".subject-pdf-viewer");
-    const page = await pdfDocument.getPage(pdfPage);
-    const viewport = page.getViewport({ scale: pdfScale });
-    const canvas = viewer.querySelector("[data-pdf-canvas]");
-    const context = canvas.getContext("2d");
-    canvas.width = viewport.width;
-    canvas.height = viewport.height;
-    await page.render({ canvasContext: context, viewport }).promise;
-    viewer.querySelector("[data-pdf-page]").value = pdfPage;
-    viewer.querySelector("[data-pdf-zoom]").textContent = `${Math.round(pdfScale * 100)}%`;
-    if (currentPdfPath) {
-      pdfLastPages.set(currentPdfPath, pdfPage);
-      schedulePdfProgressSave(currentPdfPath, pdfPage, pdfScale);
+    try {
+      const page = await pdfDocument.getPage(pdfPage);
+      const viewport = page.getViewport({ scale: pdfScale });
+      const canvas = viewer.querySelector("[data-pdf-canvas]");
+      const context = canvas.getContext("2d");
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+      await page.render({ canvasContext: context, viewport }).promise;
+      viewer.querySelector("[data-pdf-page]").value = pdfPage;
+      viewer.querySelector("[data-pdf-zoom]").textContent = `${Math.round(pdfScale * 100)}%`;
+      viewer.querySelector("[data-pdf-note-page]").textContent = String(pdfPage);
+      viewer.querySelector("[data-viewer-error]").textContent = "";
+      if (currentPdfPath) {
+        pdfLastPages.set(currentPdfPath, pdfPage);
+        schedulePdfProgressSave(currentPdfPath, pdfPage, pdfScale);
+      }
+      await renderPdfAnnotation();
+    } catch (error) {
+      viewer.querySelector("[data-viewer-error]").textContent = "Pagina nu a putut fi afișată. Încearcă din nou.";
+    } finally {
+      pdfRendering = false;
     }
-    pdfRendering = false;
   }
 
   async function closePdfViewer(viewer) {
-    await flushPdfProgress();
+    if (!await persistPdfNoteIfDirty()) {
+      viewer.querySelector("[data-pdf-note-status]").textContent = "Notița nu a putut fi salvată. Încearcă din nou.";
+      viewer.querySelector("[data-pdf-notes-panel]").hidden = false;
+      return;
+    }
+    const progressSaved = await flushPdfProgress();
+    if (progressSaved === false) {
+      viewer.querySelector("[data-viewer-error]").textContent =
+        "Pagina curentă nu a putut fi salvată. Verifică internetul și încearcă din nou.";
+      return;
+    }
     viewer.close();
     pdfDocument = null;
     currentPdfPath = null;
+    currentPdfSubjectId = null;
+  }
+
+  function getPdfAnnotations() {
+    return user?.user_metadata?.[PDF_ANNOTATIONS_METADATA_KEY] || {};
+  }
+
+  async function renderPdfAnnotation() {
+    const viewer = root?.querySelector(".subject-pdf-viewer");
+    if (!viewer || !currentPdfPath) return;
+    const annotations = getPdfAnnotations();
+    const annotation = annotations[currentPdfPath]?.pages?.[pdfPage] || {};
+    viewer.querySelector("[data-pdf-note]").value = annotation.note || "";
+    pdfNoteDirty = false;
+    viewer.querySelector("[data-pdf-note-page]").textContent = String(pdfPage);
+    const bookmark = viewer.querySelector("[data-pdf-bookmark]");
+    bookmark.classList.toggle("active", Boolean(annotation.bookmarked));
+    bookmark.textContent = annotation.bookmarked ? "◆ Pagină marcată" : "◇ Marchează pagina";
+    viewer.querySelector("[data-pdf-note-status]").textContent = annotation.updatedAt ? "Salvat în Itera" : "";
+  }
+
+  async function writePdfAnnotation(patch) {
+    if (!currentPdfPath || !user) return false;
+    const { data: freshData, error: freshError } = await supabaseClient.auth.getUser();
+    if (freshError) return false;
+    if (freshData?.user) user = freshData.user;
+    const annotations = getPdfAnnotations();
+    const documentData = annotations[currentPdfPath] || { title: currentPdfTitle, pages: {} };
+    const previous = documentData.pages?.[pdfPage] || {};
+    const nextPages = Object.entries({
+      ...(documentData.pages || {}),
+      [pdfPage]: { ...previous, ...patch, updatedAt: new Date().toISOString() }
+    })
+      .sort(([, first], [, second]) => String(second.updatedAt || "").localeCompare(String(first.updatedAt || "")))
+      .slice(0, 100);
+    const nextDocument = {
+      ...documentData,
+      title: currentPdfTitle,
+      updatedAt: new Date().toISOString(),
+      pages: Object.fromEntries(nextPages)
+    };
+    const entries = Object.entries({ ...annotations, [currentPdfPath]: nextDocument })
+      .sort(([, first], [, second]) => String(second.updatedAt || "").localeCompare(String(first.updatedAt || "")))
+      .slice(0, 25);
+    const { data, error } = await supabaseClient.auth.updateUser({
+      data: { [PDF_ANNOTATIONS_METADATA_KEY]: Object.fromEntries(entries) }
+    });
+    if (data?.user) user = data.user;
+    return !error;
+  }
+
+  async function savePdfNote() {
+    const viewer = root.querySelector(".subject-pdf-viewer");
+    const status = viewer.querySelector("[data-pdf-note-status]");
+    status.textContent = "Se salvează…";
+    const ok = await writePdfAnnotation({ note: viewer.querySelector("[data-pdf-note]").value.trim() });
+    if (ok) pdfNoteDirty = false;
+    status.textContent = ok ? "Salvat în Itera" : "Notița nu a putut fi salvată";
+  }
+
+  async function persistPdfNoteIfDirty() {
+    if (!pdfNoteDirty || !root || !currentPdfPath) return true;
+    const viewer = root.querySelector(".subject-pdf-viewer");
+    const ok = await writePdfAnnotation({ note: viewer.querySelector("[data-pdf-note]").value.trim() });
+    if (ok) pdfNoteDirty = false;
+    return ok;
+  }
+
+  async function togglePdfBookmark() {
+    const annotations = getPdfAnnotations();
+    const current = Boolean(annotations[currentPdfPath]?.pages?.[pdfPage]?.bookmarked);
+    await writePdfAnnotation({ bookmarked: !current });
+    await renderPdfAnnotation();
+  }
+
+  async function createPdfReviewTask() {
+    if (!currentPdfSubjectId || !user) return;
+    const button = root.querySelector("[data-pdf-task]");
+    if (button.disabled) return;
+    button.disabled = true;
+    button.textContent = "Se creează…";
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const { error } = await supabaseClient.from("tasks").insert({
+      user_id: user.id,
+      subject_id: currentPdfSubjectId,
+      title: `Repetă ${currentPdfTitle} · pagina ${pdfPage}`,
+      task_type: "homework",
+      deadline_date: formatLocalDate(tomorrow),
+      estimated_minutes: 25,
+      priority: "medium",
+      notes: `Creat din PDF, pagina ${pdfPage}.`,
+      completed: false,
+      progress: 0
+    });
+    button.textContent = error ? "Nu s-a putut salva" : "✓ Task creat pentru mâine";
+    if (!error) {
+      window.dispatchEvent(new CustomEvent("itera:task-updated"));
+      window.dispatchEvent(new CustomEvent("itera:home-refresh"));
+    }
+    window.setTimeout(() => {
+      if (!button) return;
+      button.disabled = false;
+      button.textContent = "+ Repetă pagina";
+    }, 2200);
+  }
+
+  function formatLocalDate(date) {
+    return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
   }
 
   async function loadPdfProgress(filePath) {
@@ -397,31 +560,41 @@
     const progress = pendingPdfProgress;
     pendingPdfProgress = null;
     pdfProgressWrite = pdfProgressWrite.then(async () => {
-      const { data: currentData, error: currentError } = await supabaseClient.auth.getUser();
-      const currentUser = currentData?.user || user;
-      if (currentError || !currentUser) throw currentError || new Error("Missing user");
-
-      const existing = currentUser.user_metadata?.[PDF_PROGRESS_METADATA_KEY] || {};
-      const entries = Object.entries({
-        ...existing,
-        [progress.filePath]: {
-          page: progress.page,
-          zoom: Number(progress.zoom.toFixed(2)),
-          updatedAt: progress.updatedAt
+      let lastError = null;
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        const { data: currentData, error: currentError } = await supabaseClient.auth.getUser();
+        const currentUser = currentData?.user || user;
+        if (currentError || !currentUser) {
+          lastError = currentError || new Error("Missing user");
+        } else {
+          const existing = currentUser.user_metadata?.[PDF_PROGRESS_METADATA_KEY] || {};
+          const entries = Object.entries({
+            ...existing,
+            [progress.filePath]: {
+              page: progress.page,
+              zoom: Number(progress.zoom.toFixed(2)),
+              updatedAt: progress.updatedAt
+            }
+          })
+            .sort(([, first], [, second]) =>
+              String(second.updatedAt || "").localeCompare(String(first.updatedAt || "")))
+            .slice(0, 50);
+          const { data: updateData, error: updateError } = await supabaseClient.auth.updateUser({
+            data: { [PDF_PROGRESS_METADATA_KEY]: Object.fromEntries(entries) }
+          });
+          if (!updateError) {
+            if (updateData?.user) user = updateData.user;
+            return true;
+          }
+          lastError = updateError;
         }
-      })
-        .sort(([, first], [, second]) =>
-          String(second.updatedAt || "").localeCompare(String(first.updatedAt || "")))
-        .slice(0, 50);
-
-      const { data: updateData, error: updateError } = await supabaseClient.auth.updateUser({
-        data: { [PDF_PROGRESS_METADATA_KEY]: Object.fromEntries(entries) }
-      });
-      if (updateError) throw updateError;
-      if (updateData?.user) user = updateData.user;
+        if (attempt === 0) await supabaseClient.auth.refreshSession();
+      }
+      throw lastError || new Error("PDF progress save failed");
     }).catch(error => {
       console.error("Itera PDF progress save:", error);
       pendingPdfProgress ||= progress;
+      return false;
     });
 
     return pdfProgressWrite;
@@ -442,7 +615,7 @@
     const { error } = await supabaseClient.from("subject_study_sessions").insert({
       user_id: user.id, subject_id: subjectId, started_at: timerStartedAt.toISOString(),
       ended_at: endedAt.toISOString(), duration_minutes: duration, source: "manual",
-      study_date: endedAt.toISOString().slice(0, 10)
+      study_date: formatLocalDate(endedAt)
     });
     if (error) {
       button.textContent = "Încearcă din nou";

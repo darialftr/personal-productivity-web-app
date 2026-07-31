@@ -2387,6 +2387,26 @@ textarea:focus-visible {
   clip: rect(0 0 0 0);
 }
 
+/* Itera adaptive study tools */
+.weekly-replay-trigger { width:100%; margin:4px 0 18px; padding:11px 13px; display:flex; align-items:center; justify-content:space-between; gap:12px; border:1px solid var(--border); border-radius:14px; color:var(--text); background:color-mix(in srgb,var(--primary-soft) 52%,transparent); font:inherit; font-size:.78rem; font-weight:750; }
+.recovery-card { grid-column:1/-1; display:grid; grid-template-columns:auto 1fr auto; align-items:center; gap:15px; padding:18px 20px; border:1px solid color-mix(in srgb,var(--primary) 28%,var(--border)); border-radius:22px; background:linear-gradient(120deg,color-mix(in srgb,var(--primary-soft) 70%,var(--surface)),var(--surface)); box-shadow:var(--shadow); }
+.recovery-card[hidden]{display:none}.recovery-card strong,.recovery-card small{display:block}.recovery-card small{margin-top:3px;color:var(--muted)}
+.recovery-symbol{display:grid;place-items:center;width:42px;height:42px;border-radius:14px;color:var(--primary);background:var(--primary-soft);font-size:1.25rem}
+.quick-capture{margin:4px 0 20px;padding:14px;border:1px solid color-mix(in srgb,var(--primary) 24%,var(--border));border-radius:18px;background:color-mix(in srgb,var(--primary-soft) 42%,var(--surface))}
+.quick-capture>label{display:block;margin-bottom:8px;color:var(--text);font-size:.8rem;font-weight:750}.quick-capture>small{display:block;margin-top:7px;color:var(--muted);font-size:.7rem;line-height:1.45}
+.quick-capture-control{display:grid;grid-template-columns:1fr auto auto;gap:7px}.quick-capture-control input{min-width:0}.quick-capture-control button{width:44px;min-height:44px;border:0;border-radius:13px;color:#fff;background:var(--primary);font-size:1.05rem}.quick-capture-control button:first-of-type{color:var(--primary);background:var(--surface);border:1px solid var(--border)}
+.quick-capture-control button.listening{animation:quick-capture-pulse 1s infinite}@keyframes quick-capture-pulse{50%{transform:scale(.92);box-shadow:0 0 0 7px var(--primary-soft)}}
+.soundscape-picker{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:10px}.soundscape-picker button{min-height:34px;padding:6px 8px;border:1px solid var(--border);border-radius:11px;color:var(--muted);background:var(--surface);font:inherit;font-size:.7rem;font-weight:700}.soundscape-picker button.active{color:var(--primary);border-color:var(--primary);background:var(--primary-soft)}
+.smart-resume-option{grid-column:1/-1;display:flex!important;align-items:center;justify-content:space-between;gap:12px;text-align:left;color:var(--text)!important;border-color:var(--primary)!important;background:var(--primary-soft)!important}.smart-resume-option span{font-size:.68rem;color:var(--muted)}
+.weekly-replay-card,.exam-mode-card,.recovery-modal-card{width:min(720px,calc(100vw - 30px))}.modal-intro{margin:-4px 0 18px;color:var(--muted);line-height:1.6}
+.exam-subject-picker{margin:0;padding:14px;border:1px solid var(--border);border-radius:16px}.exam-subject-picker legend{padding:0 6px;color:var(--muted);font-size:.75rem;font-weight:750}.exam-subject-picker>div{display:flex;flex-wrap:wrap;gap:8px}.exam-subject-picker label{position:relative}.exam-subject-picker input{position:absolute;opacity:0;pointer-events:none}.exam-subject-picker span{display:block;padding:9px 12px;border:1px solid var(--border);border-radius:999px;color:var(--muted);background:var(--surface);font-size:.78rem;font-weight:700}.exam-subject-picker input:checked+span{color:var(--primary);border-color:var(--primary);background:var(--primary-soft)}
+.exam-plan-preview{min-height:78px;padding:14px 16px;border-radius:16px;background:color-mix(in srgb,var(--primary-soft) 45%,var(--surface))}.exam-plan-preview strong,.exam-plan-preview span{display:block}.exam-plan-preview span{margin-top:5px;color:var(--muted);font-size:.78rem;line-height:1.6}
+.recovery-plan-list{display:grid;gap:8px;max-height:44vh;margin:18px 0;overflow:auto}.recovery-plan-row{display:grid;grid-template-columns:105px 1fr auto;align-items:center;gap:12px;padding:12px 14px;border:1px solid var(--border);border-radius:14px;background:var(--surface)}.recovery-plan-row>span{color:var(--primary);font-size:.72rem;font-weight:800}.recovery-plan-row>small{color:var(--muted)}
+.pdf-study-actions{display:flex;gap:7px;padding:8px 12px;border-bottom:1px solid var(--border);background:var(--surface)}.pdf-study-actions button{min-height:36px;padding:7px 11px;border:1px solid var(--border);border-radius:11px;color:var(--text);background:var(--surface);font:inherit;font-size:.72rem;font-weight:700}.pdf-study-actions button.active{color:var(--primary);border-color:var(--primary);background:var(--primary-soft)}
+.pdf-study-layout{display:grid;grid-template-columns:minmax(0,1fr) auto;min-height:0;flex:1}.pdf-study-layout .pdf-canvas-wrap{min-width:0}.pdf-notes-panel{width:min(310px,38vw);padding:15px;border-left:1px solid var(--border);background:var(--surface)}.pdf-notes-panel[hidden]{display:none}.pdf-notes-panel>div{display:flex;align-items:center;justify-content:space-between;gap:10px}.pdf-notes-panel>div button{border:0;color:var(--muted);background:transparent;font-size:1.2rem}.pdf-notes-panel textarea{width:100%;margin:14px 0 10px;resize:vertical}.pdf-notes-panel small{display:block;min-height:1em;margin-top:8px;color:var(--muted)}
+html[data-mode="dark"] .quick-capture,html[data-mode="dark"] .recovery-card,html[data-mode="dark"] .exam-plan-preview{background:color-mix(in srgb,var(--primary-soft) 26%,var(--surface))}
+@media(max-width:720px){.recovery-card{grid-template-columns:auto 1fr}.recovery-card>button{grid-column:1/-1;width:100%}.weekly-replay-trigger{margin-bottom:12px}.card-heading-actions{flex-wrap:wrap;justify-content:flex-end}.exam-mode-card .form-layout{grid-template-columns:1fr}.exam-mode-card .full-field{grid-column:1}.exam-mode-card .form-actions,.recovery-modal-card .form-actions{display:grid;grid-template-columns:1fr}.recovery-plan-row{grid-template-columns:88px 1fr}.recovery-plan-row small{grid-column:2}.pdf-study-actions{overflow-x:auto}.pdf-study-actions button{flex:0 0 auto}.pdf-study-layout{display:block;overflow:auto}.pdf-notes-panel{position:absolute;inset:auto 8px 8px;z-index:3;width:auto;max-height:48%;overflow:auto;border:1px solid var(--border);border-radius:16px;box-shadow:var(--shadow)}}
+
 /* Final dark-mode contrast layer */
 html[data-mode="dark"] {
   --accent-text: color-mix(in srgb, var(--primary) 72%, white);
@@ -4957,7 +4977,7 @@ a {
 .pdf-viewer-shell {
   height: 100%;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
+  grid-template-rows: auto auto minmax(0, 1fr) auto;
 }
 
 .pdf-viewer-toolbar {

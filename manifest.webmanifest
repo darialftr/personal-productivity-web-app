@@ -15,10 +15,10 @@
   "prefer_related_applications": false,
   "shortcuts": [
     {
-      "name": "Astăzi",
-      "short_name": "Astăzi",
-      "description": "Vezi doar planul și task-urile de astăzi.",
-      "url": "./index.html#/today",
+      "name": "Acasă",
+      "short_name": "Acasă",
+      "description": "Deschide dashboard-ul Itera.",
+      "url": "./index.html#/",
       "icons": [
         {
           "src": "itera-icon-192.png?v=3",
@@ -31,7 +31,7 @@
       "name": "Adaugă un task",
       "short_name": "Task nou",
       "description": "Deschide direct formularul pentru un task nou.",
-      "url": "./index.html?action=add-task#/today",
+      "url": "./index.html?action=add-task#/",
       "icons": [
         {
           "src": "itera-icon-192.png?v=3",
@@ -44,7 +44,7 @@
       "name": "Start focus",
       "short_name": "Focus",
       "description": "Pornește sesiunea recomandată de Itera.",
-      "url": "./index.html?action=focus#/today",
+      "url": "./index.html?action=focus#/",
       "icons": [
         {
           "src": "itera-icon-192.png?v=3",
@@ -57,7 +57,7 @@
       "name": "Planifică realist",
       "short_name": "Planifică",
       "description": "Așază task-urile în intervalele libere ale zilei.",
-      "url": "./index.html?action=plan#/today",
+      "url": "./index.html?action=plan#/",
       "icons": [
         {
           "src": "itera-icon-192.png?v=3",
