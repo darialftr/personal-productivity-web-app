@@ -82,6 +82,10 @@
           <span class="nav-icon">⌂</span>
           <span>Acasă</span>
         </button>
+        <a class="nav-item" href="#/today" data-page="today">
+          <span class="nav-icon">●</span>
+          <span>Astăzi</span>
+        </a>
         <a class="nav-item" href="#/schedule" data-page="schedule">
   <span class="nav-icon">▦</span>
   <span>Orar</span>
@@ -183,6 +187,9 @@
           </div>
           <button class="primary-small-button" id="startRecommendedSession">
             Pornește sesiunea
+          </button>
+          <button class="today-mode-link" id="openTodayModeButton">
+            Mod Astăzi
           </button>
         </section>
 
@@ -382,6 +389,74 @@
         </section>
       </section>
 
+      <!-- TODAY MODE -->
+      <section
+        class="page-section today-mode-page"
+        id="todayModePage"
+        data-app-view="today"
+      >
+        <header class="today-mode-header">
+          <div>
+            <p class="eyebrow" id="todayModeDate">Astăzi</p>
+            <h2>Doar ce contează acum.</h2>
+            <p id="todayModeBrief">Un plan simplu, fără restul aplicației.</p>
+          </div>
+          <div class="today-mode-actions">
+            <button class="secondary-button" id="todayModePlanButton">Planifică realist</button>
+            <button class="primary-small-button" id="todayModeAddButton"><span aria-hidden="true">+</span> Task</button>
+          </div>
+        </header>
+
+        <section class="today-mode-status" id="todayModeStatus">
+          <div><span>Energie</span><strong id="todayModeEnergy">3/5</strong></div>
+          <div><span>Task-uri</span><strong id="todayModeTaskCount">0</strong></div>
+          <div><span>Timp estimat</span><strong id="todayModeMinutes">0m</strong></div>
+          <div><span>Spațiu liber</span><strong id="todayModeCapacity">—</strong></div>
+        </section>
+
+        <section class="today-mode-now" id="todayModeNow">
+          <span class="today-mode-now-mark" aria-hidden="true">▶</span>
+          <div>
+            <p class="card-kicker">Următorul pas</p>
+            <h3 id="todayModeNowTitle">Îți pregătim următoarea activitate.</h3>
+            <p id="todayModeNowReason">Analizăm energia, programul și deadline-urile.</p>
+          </div>
+          <button class="primary-button" id="todayModeStartButton">Start focus</button>
+        </section>
+
+        <div class="today-mode-grid">
+          <article class="soft-card today-mode-panel">
+            <div class="card-heading-row">
+              <div><p class="card-kicker">Linia zilei</p><h3>Program</h3></div>
+              <a class="text-button" href="#/schedule">Orar</a>
+            </div>
+            <div class="today-mode-timeline" id="todayModeTimeline"></div>
+          </article>
+
+          <article class="soft-card today-mode-panel">
+            <div class="card-heading-row">
+              <div><p class="card-kicker">De făcut</p><h3>Task-uri</h3></div>
+              <a class="text-button" href="#/tasks">Toate</a>
+            </div>
+            <div class="today-mode-tasks" id="todayModeTaskList"></div>
+          </article>
+        </div>
+
+        <section class="today-conflict-card" id="todayConflictCard" hidden>
+          <div class="today-conflict-heading">
+            <span aria-hidden="true">!</span>
+            <div><p class="card-kicker">Conflict detector</p><h3>Două lucruri vor același timp.</h3></div>
+          </div>
+          <div id="todayConflictList"></div>
+          <button class="text-button" id="resolveConflictsButton">Deschide calendarul</button>
+        </section>
+
+        <p class="today-widget-note">
+          <strong>Itera Quick View</strong>
+          Această pagină este optimizată pentru shortcut-ul aplicației și pentru deschidere rapidă de pe telefon sau desktop.
+        </p>
+      </section>
+
       <!-- SCHEDULE PAGE -->
       <section
         class="page-section"
@@ -487,6 +562,7 @@
         <button class="modal-close-button" data-close-modal="mobileMoreModal" aria-label="Închide">×</button>
       </div>
       <nav class="mobile-more-grid">
+        <a href="#/today" data-mobile-route><span>●</span><strong>Astăzi</strong></a>
         <a href="#/schedule" data-mobile-route><span>▦</span><strong>Orar</strong></a>
         <a href="#/subjects" data-mobile-route><span>◇</span><strong>Materii</strong></a>
         <a href="#/grades" data-mobile-route><span>☆</span><strong>Note</strong></a>

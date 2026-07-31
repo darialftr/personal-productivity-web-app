@@ -123,6 +123,17 @@
       return;
     }
     const id = data.id;
+    const overlap = items.find(item =>
+      item.id !== id &&
+      Number(item.day_of_week) === Number(data.day_of_week) &&
+      data.start_time < String(item.end_time).slice(0, 5) &&
+      data.end_time > String(item.start_time).slice(0, 5)
+    );
+    if (overlap) {
+      form.querySelector("[data-schedule-error]").textContent =
+        `Intervalul se suprapune cu „${overlap.title}” (${String(overlap.start_time).slice(0, 5)}–${String(overlap.end_time).slice(0, 5)}).`;
+      return;
+    }
     const payload = { user_id: user.id, subject_id: data.subject_id || null, title: data.title.trim(),
       item_type: data.item_type, day_of_week: Number(data.day_of_week), start_time: data.start_time,
       end_time: data.end_time, location: data.location.trim() || null, notes: data.notes.trim() || null };

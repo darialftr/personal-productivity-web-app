@@ -87,9 +87,11 @@ async function initializeApp() {
   initializeEventForm();
   initializeQuickActions();
   initializeQuickTaskForm();
+  initializeTodayMode();
   initializeOrganizer();
   initializeDayPlanner();
   initializeMorningBrief();
+  initializeLaunchActions();
   window.setInterval(() => {
     resetEnergyForNewDay();
     updateCurrentDate();
@@ -142,6 +144,14 @@ function initializeShellViews() {
   IteraShell.registerView("home", {
     elementId: "homePage",
     route: "/"
+  });
+
+  IteraShell.registerView("today", {
+    elementId: "todayModePage",
+    route: "/today",
+    onEnter() {
+      renderTodayMode();
+    }
   });
 
   IteraShell.registerView("calendar", {
@@ -330,6 +340,7 @@ function normalizeHomeEvent(event) {
     subjectId: event.subject_id,
     date: event.event_date,
     time: String(event.start_time || "").slice(0, 5),
+    endTime: String(event.end_time || "").slice(0, 5),
     duration: 0,
     priority: "medium",
     notes: event.notes || "",
@@ -923,6 +934,25 @@ async function handleQuickTaskSubmit(event) {
   const deadlineDate = document.getElementById("quickTaskDate").value;
   const deadlineTime = document.getElementById("quickTaskTime").value || null;
   const taskType = document.getElementById("quickTaskType").value || "homework";
+  const estimatedMinutes = Number(document.getElementById("quickTaskMinutes").value) || 45;
+
+  if (deadlineTime) {
+    const candidate = {
+      ...normalizeInterval(deadlineTime, "", estimatedMinutes),
+      title
+    };
+    const overlap = getDayIntervals(deadlineDate).find(
+      (item) => candidate.start < item.end && candidate.end > item.start
+    );
+    if (
+      overlap &&
+      !window.confirm(
+        `„${title}” se suprapune cu „${overlap.title}”. Vrei să îl adaugi totuși?`
+      )
+    ) {
+      return;
+    }
+  }
 
   saveButton.disabled = true;
   saveButton.textContent = "Se salvează…";
@@ -937,7 +967,7 @@ async function handleQuickTaskSubmit(event) {
       deadline_date: deadlineDate,
       deadline_time: deadlineTime,
       priority: document.getElementById("quickTaskPriority").value,
-      estimated_minutes: Number(document.getElementById("quickTaskMinutes").value) || 45,
+      estimated_minutes: estimatedMinutes,
       notes: document.getElementById("quickTaskNotes").value.trim() || null,
       completed: false,
       progress: 0
@@ -1495,44 +1525,172 @@ function roundToQuarter(totalMinutes) {
   return Math.ceil(totalMinutes / 15) * 15;
 }
 
+function getEnergyCapacity() {
+  return { 1: 45, 2: 90, 3: 150, 4: 210, 5: 270 }[currentEnergy] || 150;
+}
+
+function normalizeInterval(start, end, fallbackDuration = 60) {
+  const startMinutes = getMinutesFromTime(start);
+  const explicitEnd = end ? getMinutesFromTime(end) : startMinutes + fallbackDuration;
+  return {
+    start: startMinutes,
+    end: Math.max(startMinutes + 5, explicitEnd)
+  };
+}
+
+function getDayIntervals(dateString, options = {}) {
+  const date = parseLocalDate(dateString);
+  const dayOfWeek = date.getDay();
+  const includeTasks = options.includeTasks !== false;
+  const intervals = [];
+
+  scheduleItems
+    .filter((item) => Number(item.day_of_week) === dayOfWeek && item.start_time)
+    .forEach((item) => {
+      intervals.push({
+        ...normalizeInterval(item.start_time, item.end_time),
+        id: item.id,
+        kind: "schedule",
+        title: item.title,
+        time: String(item.start_time).slice(0, 5)
+      });
+    });
+
+  events
+    .filter((event) => event.date === dateString && event.time)
+    .forEach((event) => {
+      intervals.push({
+        ...normalizeInterval(event.time, event.endTime, 60),
+        id: event.id,
+        kind: "event",
+        title: event.title,
+        time: event.time
+      });
+    });
+
+  if (includeTasks) {
+    tasks
+      .filter((task) => !task.completed && task.deadline === dateString && task.deadlineTime)
+      .forEach((task) => {
+        intervals.push({
+          ...normalizeInterval(task.deadlineTime, "", getTaskMinutes(task)),
+          id: task.id,
+          kind: "task",
+          title: task.title,
+          time: task.deadlineTime
+        });
+      });
+  }
+
+  return intervals.sort((first, second) => first.start - second.start || first.end - second.end);
+}
+
+function mergeIntervals(intervals) {
+  return intervals.reduce((merged, interval) => {
+    const previous = merged.at(-1);
+    if (!previous || interval.start > previous.end) {
+      merged.push({ start: interval.start, end: interval.end });
+    } else {
+      previous.end = Math.max(previous.end, interval.end);
+    }
+    return merged;
+  }, []);
+}
+
+function getScheduleConflicts(dateString) {
+  const intervals = getDayIntervals(dateString);
+  const conflicts = [];
+
+  intervals.forEach((first, index) => {
+    intervals.slice(index + 1).forEach((second) => {
+      if (second.start >= first.end) return;
+      if (first.id === second.id && first.kind === second.kind) return;
+      conflicts.push({
+        first,
+        second,
+        start: formatClockMinutes(Math.max(first.start, second.start)),
+        end: formatClockMinutes(Math.min(first.end, second.end))
+      });
+    });
+  });
+
+  return conflicts;
+}
+
+function findAvailableSlot(cursor, duration, busyIntervals, dayEnd) {
+  let candidate = cursor;
+  for (const interval of busyIntervals) {
+    if (interval.end <= candidate) continue;
+    if (candidate + duration <= interval.start) {
+      return candidate;
+    }
+    candidate = roundToQuarter(interval.end + 10);
+  }
+  return candidate + duration <= dayEnd ? candidate : null;
+}
+
+function getAvailableStudyMinutes(dateString = formatDateForInput(new Date())) {
+  const isToday = dateString === formatDateForInput(new Date());
+  const start = isToday
+    ? roundToQuarter(new Date().getHours() * 60 + new Date().getMinutes() + 10)
+    : 8 * 60;
+  const end = 22 * 60 + 30;
+  const busy = mergeIntervals(getDayIntervals(dateString, { includeTasks: false }));
+  let cursor = start;
+  let free = 0;
+
+  busy.forEach((interval) => {
+    if (interval.end <= cursor || interval.start >= end) return;
+    free += Math.max(0, Math.min(interval.start, end) - cursor);
+    cursor = Math.max(cursor, Math.min(interval.end + 10, end));
+  });
+  free += Math.max(0, end - cursor);
+  return Math.max(0, Math.min(free, getEnergyCapacity()));
+}
+
 function buildDayPlan() {
   const today = formatDateForInput(new Date());
   const dayTasks = tasks
     .filter((task) => !task.completed && task.deadline && task.deadline <= today)
     .sort(sortTasksForPlan);
-  const energyCapacity = { 1: 45, 2: 90, 3: 150, 4: 210, 5: 270 }[currentEnergy] || 150;
+  const energyCapacity = getEnergyCapacity();
   const currentDate = new Date();
   let cursor = roundToQuarter(currentDate.getHours() * 60 + currentDate.getMinutes() + 10);
-  const lastClass = scheduleItems
-    .filter((item) => Number(item.day_of_week) === currentDate.getDay())
-    .sort((a, b) => String(a.end_time || a.start_time || "").localeCompare(String(b.end_time || b.start_time || "")))
-    .at(-1);
-
-  if (lastClass) {
-    const classEnd = getMinutesFromTime(lastClass.end_time || lastClass.start_time);
-    if (classEnd > cursor) cursor = roundToQuarter(classEnd + 30);
-  }
-
+  const dayEnd = 22 * 60 + 30;
+  const busyIntervals = mergeIntervals(getDayIntervals(today, { includeTasks: false }));
   const plan = [];
   let plannedMinutes = 0;
+  const unscheduled = [];
+
   for (const task of dayTasks) {
-    const duration = Math.min(getTaskMinutes(task), getRecommendedSessionMinutes());
-    if (plan.length && plannedMinutes + duration > energyCapacity) break;
-    if (cursor + duration > 22 * 60 + 30) break;
+    const duration = getTaskMinutes(task);
+    if (plannedMinutes + duration > energyCapacity) {
+      unscheduled.push(task);
+      continue;
+    }
+    const slot = findAvailableSlot(cursor, duration, busyIntervals, dayEnd);
+    if (slot === null) {
+      unscheduled.push(task);
+      continue;
+    }
     plan.push({
       task,
-      start: formatClockMinutes(cursor),
-      end: formatClockMinutes(cursor + duration),
+      start: formatClockMinutes(slot),
+      end: formatClockMinutes(slot + duration),
       duration
     });
     plannedMinutes += duration;
-    cursor = roundToQuarter(cursor + duration + 10);
+    busyIntervals.push({ start: slot, end: slot + duration });
+    busyIntervals.sort((first, second) => first.start - second.start);
+    cursor = roundToQuarter(slot + duration + 10);
   }
 
   return {
     entries: plan,
     totalTasks: dayTasks.length,
-    plannedMinutes
+    plannedMinutes,
+    unscheduled,
+    availableMinutes: getAvailableStudyMinutes(today)
   };
 }
 
@@ -1556,7 +1714,7 @@ function openDayPlanner() {
     applyButton.hidden = true;
   } else {
     intro.textContent =
-      `Am așezat ${plan.entries.length} din ${plan.totalTasks} ${plan.totalTasks === 1 ? "task" : "task-uri"} în limita energiei ${currentEnergy}/5 · ${formatMinutes(plan.plannedMinutes)}.`;
+      `Am găsit intervale libere pentru ${plan.entries.length} din ${plan.totalTasks} ${plan.totalTasks === 1 ? "task" : "task-uri"} · ${formatMinutes(plan.plannedMinutes)} în ritmul energiei ${currentEnergy}/5.${plan.unscheduled.length ? ` ${plan.unscheduled.length} rămân pentru reprogramare.` : ""}`;
     list.innerHTML = plan.entries.map((entry, index) => `
       ${index ? '<div class="day-plan-break"><span></span>Pauză scurtă</div>' : ""}
       <div class="day-plan-row">
@@ -1688,11 +1846,26 @@ function getOrganizerPlan() {
   const tomorrowTasks = openTasks.filter((task) => task.deadline === tomorrow).sort(sortTasksForPlan);
   const todayMinutes = todayTasks.reduce((sum, task) => sum + getTaskMinutes(task), 0);
   const tomorrowMinutes = tomorrowTasks.reduce((sum, task) => sum + getTaskMinutes(task), 0);
-  const energyCapacity = { 1: 45, 2: 90, 3: 150, 4: 210, 5: 270 }[currentEnergy] || 150;
+  const energyCapacity = getEnergyCapacity();
+  const tomorrowCapacity = getAvailableStudyMinutes(tomorrow);
   const tomorrowClasses = scheduleItems.filter(
     (item) => Number(item.day_of_week) === parseLocalDate(tomorrow).getDay()
   ).length;
+  const todayConflicts = getScheduleConflicts(today);
+  const tomorrowConflicts = getScheduleConflicts(tomorrow);
   const insights = [];
+
+  if (todayConflicts.length) {
+    const conflict = todayConflicts[0];
+    insights.push(
+      `Astăzi „${conflict.first.title}” și „${conflict.second.title}” se suprapun între ${conflict.start} și ${conflict.end}.`
+    );
+  } else if (tomorrowConflicts.length) {
+    const conflict = tomorrowConflicts[0];
+    insights.push(
+      `Mâine „${conflict.first.title}” și „${conflict.second.title}” se suprapun între ${conflict.start} și ${conflict.end}.`
+    );
+  }
 
   if (overdueTasks.length) {
     insights.push(
@@ -1721,7 +1894,7 @@ function getOrganizerPlan() {
 
   if (tomorrowTasks.length) {
     insights.push(
-      `Mâine ai ${tomorrowTasks.length} ${tomorrowTasks.length === 1 ? "task" : "task-uri"}, ${formatMinutes(tomorrowMinutes)} în total${tomorrowClasses ? `, plus ${tomorrowClasses} ore în program` : ""}.`
+      `Mâine ai ${tomorrowTasks.length} ${tomorrowTasks.length === 1 ? "task" : "task-uri"}, ${formatMinutes(tomorrowMinutes)} în total și aproximativ ${formatMinutes(tomorrowCapacity)} disponibile${tomorrowClasses ? `, după ${tomorrowClasses} ore din program` : ""}.`
     );
   } else {
     insights.push("Mâine nu ai task-uri planificate.");
@@ -1729,7 +1902,7 @@ function getOrganizerPlan() {
 
   const tomorrowIsHeavy =
     tomorrowTasks.length >= 4 ||
-    tomorrowMinutes > 180 ||
+    tomorrowMinutes > tomorrowCapacity ||
     (tomorrowClasses >= 5 && tomorrowMinutes > 120);
   let action = null;
 
@@ -1744,9 +1917,13 @@ function getOrganizerPlan() {
       return {
         date,
         count: dayTasks.length,
-        minutes: dayTasks.reduce((sum, task) => sum + getTaskMinutes(task), 0)
+        minutes: dayTasks.reduce((sum, task) => sum + getTaskMinutes(task), 0),
+        capacity: getAvailableStudyMinutes(date)
       };
-    }).sort((a, b) => a.minutes - b.minutes || a.count - b.count);
+    }).map((day) => ({
+      ...day,
+      loadRatio: day.minutes / Math.max(30, day.capacity)
+    })).sort((a, b) => a.loadRatio - b.loadRatio || a.minutes - b.minutes || a.count - b.count);
     const targetDay = candidateDays[0];
 
     if (movable.length && targetDay) {
@@ -1763,7 +1940,9 @@ function getOrganizerPlan() {
 
   const nextTask = [...overdueTasks, ...todayTasks, ...tomorrowTasks]
     .sort(sortTasksForPlan)[0] || null;
-  const headline = action
+  const headline = todayConflicts.length || tomorrowConflicts.length
+    ? "Am găsit un conflict în program."
+    : action
     ? "Am găsit o zi care merită echilibrată."
     : nextTask
       ? "Planul tău are un următor pas clar."
@@ -1773,7 +1952,10 @@ function getOrganizerPlan() {
     : nextTask
       ? `Următorul pas recomandat este „${nextTask.title}”.`
       : "Nu este nevoie să mutăm nimic acum.";
-  const preview = action
+  const firstDetectedConflict = todayConflicts[0] || tomorrowConflicts[0];
+  const preview = firstDetectedConflict
+    ? `Am găsit o suprapunere: „${firstDetectedConflict.first.title}” și „${firstDetectedConflict.second.title}”, între ${firstDetectedConflict.start} și ${firstDetectedConflict.end}.`
+    : action
     ? `Mâine este încărcat. Pot muta ${action.taskIds.length === 1 ? "un task" : "două task-uri"} într-o zi mai liberă.`
     : todayTasks.length
       ? `Începe cu „${todayTasks[0].title}”. Planul de azi are ${formatMinutes(todayMinutes)}.`
@@ -2293,10 +2475,12 @@ function renderAll() {
   renderTodayTasks();
   renderUpcomingEvents();
   renderNowRecommendation();
+  renderTodayMode();
   renderGoalCountdowns();
   renderOrganizerPreview();
   renderAchievement();
   renderNotifications();
+  updateAppBadge();
 }
 
 function getTodayEvents() {
@@ -2514,6 +2698,146 @@ function renderTodayTasks() {
     taskEvents,
     "Nu ai task-uri pentru astăzi."
   );
+}
+
+function initializeTodayMode() {
+  document.getElementById("openTodayModeButton")?.addEventListener("click", () => openPage("today"));
+  document.getElementById("todayModePlanButton")?.addEventListener("click", openDayPlanner);
+  document.getElementById("todayModeAddButton")?.addEventListener("click", () => prepareQuickTaskModal("homework"));
+  document.getElementById("todayModeStartButton")?.addEventListener("click", startRecommendedFocusSession);
+  document.getElementById("resolveConflictsButton")?.addEventListener("click", () => openPage("calendar"));
+}
+
+function renderTodayMode() {
+  const root = document.getElementById("todayModePage");
+  if (!root || !currentUser) return;
+
+  const today = formatDateForInput(new Date());
+  const openTodayTasks = tasks
+    .filter((task) => !task.completed && task.deadline === today)
+    .sort(sortTasksForPlan);
+  const totalMinutes = openTodayTasks.reduce((sum, task) => sum + getTaskMinutes(task), 0);
+  const plan = buildDayPlan();
+  const dateLabel = new Intl.DateTimeFormat("ro-RO", {
+    weekday: "long",
+    day: "numeric",
+    month: "long"
+  }).format(new Date());
+
+  document.getElementById("todayModeDate").textContent = capitalizeFirstLetter(dateLabel);
+  document.getElementById("todayModeEnergy").textContent = `${currentEnergy}/5`;
+  document.getElementById("todayModeTaskCount").textContent = String(openTodayTasks.length);
+  document.getElementById("todayModeMinutes").textContent = formatMinutes(totalMinutes);
+  document.getElementById("todayModeCapacity").textContent = formatMinutes(plan.availableMinutes);
+  document.getElementById("todayModeBrief").textContent = openTodayTasks.length
+    ? `${openTodayTasks.length} ${openTodayTasks.length === 1 ? "lucru important" : "lucruri importante"}, așezate într-un ritm realist.`
+    : "Nu ai nimic urgent. Ziua poate rămâne aerisită.";
+
+  const nowTitle = document.getElementById("todayModeNowTitle");
+  const nowReason = document.getElementById("todayModeNowReason");
+  const startButton = document.getElementById("todayModeStartButton");
+  if (recommendedTask) {
+    nowTitle.textContent = recommendedTask.title;
+    nowReason.textContent = `${recommendedTask.subject || "Fără materie"} · ${getTaskMinutes(recommendedTask)} minute estimate`;
+    startButton.hidden = false;
+  } else {
+    nowTitle.textContent = "Tot ce era planificat este gata.";
+    nowReason.textContent = "Păstrează restul zilei liber sau pornește o recapitulare ușoară.";
+    startButton.hidden = true;
+  }
+
+  const timeline = document.getElementById("todayModeTimeline");
+  const intervals = getDayIntervals(today).slice(0, 10);
+  timeline.innerHTML = intervals.length
+    ? intervals.map((item) => `
+      <div class="today-mode-entry">
+        <time>${escapeHtml(formatClockMinutes(item.start))}</time>
+        <span class="today-mode-entry-dot"></span>
+        <div>
+          <strong>${escapeHtml(item.title)}</strong>
+          <small>${escapeHtml({
+            schedule: "Program",
+            event: "Calendar",
+            task: "Task"
+          }[item.kind] || "Activitate")} · până la ${escapeHtml(formatClockMinutes(item.end))}</small>
+        </div>
+      </div>
+    `).join("")
+    : '<div class="today-mode-empty"><p>Programul este liber. Poți adăuga doar ce contează.</p></div>';
+
+  const taskList = document.getElementById("todayModeTaskList");
+  taskList.innerHTML = openTodayTasks.length
+    ? openTodayTasks.map((task) => `
+      <div class="today-mode-entry">
+        <time>${escapeHtml(task.deadlineTime || "—")}</time>
+        <span class="today-mode-entry-dot"></span>
+        <div>
+          <strong>${escapeHtml(task.title)}</strong>
+          <small>${escapeHtml(task.subject || "Fără materie")} · ${getTaskMinutes(task)} min</small>
+        </div>
+        <button type="button" data-today-focus="${task.id}">Start</button>
+      </div>
+    `).join("")
+    : '<div class="today-mode-empty"><p>Ai terminat tot ce era planificat pentru astăzi.</p></div>';
+
+  taskList.querySelectorAll("[data-today-focus]").forEach((button) => {
+    button.addEventListener("click", () => {
+      const task = tasks.find((item) => item.id === button.dataset.todayFocus);
+      const subject = subjects.find((item) => item.id === task?.subject_id);
+      if (task) startTaskFocus(task, subject);
+    });
+  });
+
+  const conflicts = getScheduleConflicts(today);
+  const conflictCard = document.getElementById("todayConflictCard");
+  conflictCard.hidden = conflicts.length === 0;
+  document.getElementById("todayConflictList").innerHTML = conflicts.slice(0, 3).map((conflict) => `
+    <div class="today-conflict-item">
+      <strong>${escapeHtml(conflict.first.title)} + ${escapeHtml(conflict.second.title)}</strong>
+      <span>${escapeHtml(conflict.start)}–${escapeHtml(conflict.end)}</span>
+    </div>
+  `).join("");
+
+  if (plan.unscheduled.length) {
+    document.getElementById("todayModeBrief").textContent =
+      `${plan.unscheduled.length} ${plan.unscheduled.length === 1 ? "task nu încape" : "task-uri nu încap"} realist astăzi. Itera le poate reprograma.`;
+  }
+}
+
+function updateAppBadge() {
+  const today = formatDateForInput(new Date());
+  const remaining = tasks.filter((task) => !task.completed && task.deadline && task.deadline <= today).length;
+  if (typeof navigator.setAppBadge === "function") {
+    if (remaining) {
+      navigator.setAppBadge(remaining).catch(() => {});
+    } else {
+      navigator.clearAppBadge?.().catch(() => {});
+    }
+  }
+}
+
+function initializeLaunchActions() {
+  const params = new URLSearchParams(window.location.search);
+  const action = params.get("action");
+  if (!action) return;
+
+  window.setTimeout(() => {
+    if (action === "add-task") {
+      prepareQuickTaskModal("homework");
+    } else if (action === "focus") {
+      startRecommendedFocusSession();
+    } else if (action === "plan") {
+      openDayPlanner();
+    }
+
+    params.delete("action");
+    const query = params.toString();
+    window.history.replaceState(
+      window.history.state,
+      "",
+      `${window.location.pathname}${query ? `?${query}` : ""}${window.location.hash}`
+    );
+  }, 500);
 }
 
 function renderTaskCollection(

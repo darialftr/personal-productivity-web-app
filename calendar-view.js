@@ -22,7 +22,7 @@
     const [subjectResult, eventResult, taskResult] = await Promise.all([
       supabaseClient.from("subjects").select("id,name,color").eq("user_id", user.id).eq("is_active", true).order("position"),
       supabaseClient.from("calendar_events").select("*").eq("user_id", user.id).order("event_date").order("start_time"),
-      supabaseClient.from("tasks").select("id,subject_id,title,task_type,deadline_date,deadline_time,priority,completed")
+      supabaseClient.from("tasks").select("id,subject_id,title,task_type,deadline_date,deadline_time,priority,estimated_minutes,completed")
         .eq("user_id", user.id).not("deadline_date", "is", null)
     ]);
     if (!mounted) return;
@@ -141,6 +141,24 @@
     if (values.start_time && values.end_time && values.start_time >= values.end_time) {
       form.querySelector("[data-event-error]").textContent = "Ora de final trebuie să fie după ora de început."; return;
     }
+    if (values.start_time) {
+      const candidateEnd = values.end_time || addMinutes(values.start_time, 60);
+      const overlap = allItems(values.event_date).find(item => {
+        if (item.source === "event" && item.id === id) return false;
+        if (item.source === "task" && item.completed) return false;
+        if (!item.start_time) return false;
+        const itemStart = String(item.start_time).slice(0, 5);
+        const itemEnd = item.end_time
+          ? String(item.end_time).slice(0, 5)
+          : addMinutes(itemStart, item.source === "task" ? Number(item.estimated_minutes || 30) : 60);
+        return values.start_time < itemEnd && candidateEnd > itemStart;
+      });
+      if (overlap) {
+        form.querySelector("[data-event-error]").textContent =
+          `Intervalul se suprapune cu „${overlap.title}” (${String(overlap.start_time).slice(0, 5)}).`;
+        return;
+      }
+    }
     const payload = { user_id: user.id, subject_id: values.subject_id || null, title: values.title.trim(),
       event_type: values.event_type, event_date: values.event_date, start_time: values.start_time || null,
       end_time: values.end_time || null, location: values.location.trim() || null, notes: values.notes.trim() || null };
@@ -161,6 +179,11 @@
 
   function subjectName(id) { return subjects.find(item => item.id === id)?.name || ""; }
   function subjectColor(id) { return subjects.find(item => item.id === id)?.color || "#f3a9c5"; }
+  function addMinutes(value, minutes) {
+    const [hours, mins] = String(value || "00:00").slice(0, 5).split(":").map(Number);
+    const total = Math.min(1439, hours * 60 + mins + minutes);
+    return `${String(Math.floor(total / 60)).padStart(2, "0")}:${String(total % 60).padStart(2, "0")}`;
+  }
   function isoDate(date) { return date.toISOString().slice(0, 10); }
   function formatDate(value) { return new Intl.DateTimeFormat("ro-RO", { day: "numeric", month: "long", year: "numeric" }).format(new Date(`${value}T12:00:00`)); }
   function escapeHtml(value) { return String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#039;"); }
