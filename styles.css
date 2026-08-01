@@ -2391,10 +2391,10 @@ textarea:focus-visible {
 .admission-command-hero {
   isolation: isolate;
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr);
   align-items: center;
   gap: clamp(24px, 5vw, 72px);
-  min-height: 300px;
+  min-height: 240px;
   padding: clamp(28px, 5vw, 54px);
   background:
     radial-gradient(circle at 88% 22%, color-mix(in srgb, var(--primary) 20%, transparent), transparent 34%),
@@ -2435,108 +2435,6 @@ textarea:focus-visible {
   margin-top: 24px;
 }
 
-.admission-readiness {
-  display: grid;
-  justify-items: center;
-  gap: 12px;
-  width: 168px;
-  color: var(--text);
-  text-align: center;
-}
-
-.admission-readiness > div {
-  width: 142px;
-  height: 142px;
-  display: grid;
-  place-content: center;
-  border-radius: 50%;
-  background:
-    radial-gradient(circle, var(--surface) 57%, transparent 59%),
-    conic-gradient(var(--primary) calc(var(--readiness) * 1%), color-mix(in srgb, var(--primary-soft) 62%, var(--border)) 0);
-  box-shadow: 0 16px 42px color-mix(in srgb, var(--primary) 16%, transparent);
-}
-
-.admission-readiness > div > strong,
-.admission-readiness > div > span {
-  display: block;
-}
-
-.admission-readiness > div > strong {
-  font-family: "DM Serif Display", serif;
-  font-size: 2rem;
-  font-weight: 400;
-  line-height: 1;
-}
-
-.admission-readiness > div > span {
-  margin-top: 5px;
-  color: var(--muted);
-  font-size: 0.66rem;
-  font-weight: 800;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-
-.admission-readiness small {
-  color: var(--muted);
-  font-size: 0.72rem;
-  line-height: 1.45;
-}
-
-.admission-readiness small em {
-  display: block;
-  margin-top: 3px;
-  font-size: 0.6rem;
-  font-style: normal;
-  letter-spacing: 0.04em;
-}
-
-.admission-signal-grid {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
-  gap: 12px;
-  margin: 14px 0;
-}
-
-.admission-signal-grid article {
-  min-width: 0;
-  padding: 18px 20px;
-  border: 1px solid var(--border);
-  border-radius: 20px;
-  background: color-mix(in srgb, var(--surface) 88%, transparent);
-  box-shadow: 0 12px 34px color-mix(in srgb, var(--text) 7%, transparent);
-}
-
-.admission-signal-grid span,
-.admission-signal-grid strong,
-.admission-signal-grid small {
-  display: block;
-}
-
-.admission-signal-grid span {
-  overflow: hidden;
-  color: var(--muted);
-  font-size: 0.68rem;
-  font-weight: 800;
-  letter-spacing: 0.08em;
-  text-overflow: ellipsis;
-  text-transform: uppercase;
-  white-space: nowrap;
-}
-
-.admission-signal-grid strong {
-  margin: 8px 0 3px;
-  font-family: "DM Serif Display", serif;
-  font-size: clamp(1.75rem, 3vw, 2.35rem);
-  font-weight: 400;
-  line-height: 1;
-}
-
-.admission-signal-grid small {
-  color: var(--muted);
-  font-size: 0.72rem;
-}
-
 .admission-command-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -2546,6 +2444,10 @@ textarea:focus-visible {
 .admission-command-grid > .progress-spa-panel {
   min-width: 0;
   margin: 0;
+}
+
+.admission-upcoming {
+  grid-column: 1 / -1;
 }
 
 .admission-next-card {
@@ -2571,26 +2473,6 @@ textarea:focus-visible {
   max-width: 560px;
   color: var(--muted);
   line-height: 1.55;
-}
-
-.admission-score-track {
-  height: 7px;
-  margin: 24px 0 8px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: color-mix(in srgb, var(--primary-soft) 68%, var(--border));
-}
-
-.admission-score-track i {
-  display: block;
-  height: 100%;
-  border-radius: inherit;
-  background: linear-gradient(90deg, var(--primary), var(--primary-dark));
-  transition: width 450ms cubic-bezier(.2,.8,.2,1);
-}
-
-.admission-next-card > small {
-  color: var(--muted);
 }
 
 .admission-panel-heading {
@@ -2732,16 +2614,10 @@ html[data-mode="dark"] .admission-command-hero {
     linear-gradient(135deg, color-mix(in srgb, var(--surface) 96%, black), color-mix(in srgb, var(--primary-soft) 22%, var(--surface)));
 }
 
-html[data-mode="dark"] :is(.admission-signal-grid article, .admission-next-card, .admission-pathway, .admission-upcoming, .admission-goals-panel) {
+html[data-mode="dark"] :is(.admission-next-card, .admission-pathway, .admission-upcoming, .admission-goals-panel) {
   color: var(--text);
   background-color: var(--surface);
   border-color: var(--border);
-}
-
-html[data-mode="dark"] .admission-readiness > div {
-  background:
-    radial-gradient(circle, var(--surface) 57%, transparent 59%),
-    conic-gradient(var(--primary) calc(var(--readiness) * 1%), color-mix(in srgb, var(--primary-soft) 45%, var(--border)) 0);
 }
 
 @media (max-width: 820px) {
@@ -2750,23 +2626,15 @@ html[data-mode="dark"] .admission-readiness > div {
     min-height: 0;
   }
 
-  .admission-readiness {
-    width: auto;
-    grid-template-columns: auto minmax(0, 1fr);
-    justify-items: start;
-    text-align: left;
-  }
-
-  .admission-readiness > div {
-    width: 112px;
-    height: 112px;
-  }
-
   .admission-command-grid {
     grid-template-columns: minmax(0, 1fr);
   }
 
   .admission-goals-panel {
+    grid-column: 1;
+  }
+
+  .admission-upcoming {
     grid-column: 1;
   }
 }
@@ -2797,29 +2665,6 @@ html[data-mode="dark"] .admission-readiness > div {
     width: 100%;
     justify-content: center;
     text-align: center;
-  }
-
-  .admission-signal-grid {
-    gap: 7px;
-  }
-
-  .admission-signal-grid article {
-    padding: 14px 10px;
-    border-radius: 16px;
-  }
-
-  .admission-signal-grid span {
-    font-size: 0.56rem;
-    letter-spacing: 0.04em;
-  }
-
-  .admission-signal-grid strong {
-    font-size: 1.45rem;
-  }
-
-  .admission-signal-grid small {
-    font-size: 0.62rem;
-    line-height: 1.25;
   }
 
   .admission-next-card {

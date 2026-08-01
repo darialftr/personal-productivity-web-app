@@ -81,11 +81,10 @@
     root = document.getElementById("admissionViewRoot");
     root.innerHTML = '<div class="progress-spa-state">Se încarcă planul…</div>';
     if (!await getSession() || !mounted) return;
-    const [profileResult, taskResult, eventResult, sessionResult] = await Promise.all([
+    const [profileResult, taskResult, eventResult] = await Promise.all([
       supabaseClient.from("profiles").select("*").eq("id", user.id).maybeSingle(),
       supabaseClient.from("tasks").select("id,title,completed,deadline_date,priority,notes,task_type").eq("user_id", user.id),
-      supabaseClient.from("calendar_events").select("id,title,event_date,event_type,notes").eq("user_id", user.id),
-      supabaseClient.from("subject_study_sessions").select("duration_minutes,started_at").eq("user_id", user.id)
+      supabaseClient.from("calendar_events").select("id,title,event_date,event_type,notes").eq("user_id", user.id)
     ]);
     if (!mounted) return;
     if (profileResult.error) {
@@ -95,8 +94,7 @@
     renderAdmission(
       profileResult.data || {},
       taskResult.error ? [] : taskResult.data || [],
-      eventResult.error ? [] : eventResult.data || [],
-      sessionResult.error ? [] : sessionResult.data || []
+      eventResult.error ? [] : eventResult.data || []
     );
   }
 
@@ -124,7 +122,7 @@
     };
   }
 
-  function renderAdmission(profile, tasks = [], events = [], sessions = []) {
+  function renderAdmission(profile, tasks = [], events = []) {
     const studyGoals = normalizeList(profile.study_goals);
     const personalGoals = normalizeList(profile.personal_goals);
     const settings = getAdmissionSettings();
@@ -136,13 +134,6 @@
       item.event_type === "university" || keyword.test(`${item.title || ""} ${item.notes || ""}`)
     );
     const today = localDateString(new Date());
-    const monthAgo = new Date();
-    monthAgo.setDate(monthAgo.getDate() - 30);
-    const recentMinutes = sessions.reduce((sum, item) => {
-      const startedAt = item.started_at ? new Date(item.started_at) : null;
-      return startedAt && startedAt >= monthAgo ? sum + Number(item.duration_minutes || 0) : sum;
-    }, 0);
-    const readiness = calculateAdmissionReadiness(settings, studyGoals, admissionTasks, recentMinutes);
     const targetDate = settings.targetDate ? parseLocalDate(settings.targetDate) : null;
     const daysLeft = targetDate ? Math.ceil((targetDate - parseLocalDate(today)) / 86400000) : null;
     const openTasks = admissionTasks.filter(item => !item.completed).sort((a, b) =>
@@ -150,9 +141,6 @@
     );
     const nextMilestone = settings.checklist.find(item => !item.completed);
     const nextMove = openTasks[0]?.title || nextMilestone?.label || studyGoals[0] || "Configurează primul pas concret";
-    const scoreGap = settings.currentScore !== null && settings.targetScore !== null
-      ? Math.max(0, settings.targetScore - settings.currentScore)
-      : null;
     const upcoming = [
       ...openTasks.filter(item => item.deadline_date).map(item => ({
         id: `task-${item.id}`, title: item.title, date: item.deadline_date, type: "Task"
@@ -162,37 +150,26 @@
       }))
     ].sort((a, b) => a.date.localeCompare(b.date)).slice(0, 5);
 
-    admissionContext = { profile, tasks, events, sessions, settings };
+    admissionContext = { profile, tasks, events, settings };
     root.innerHTML = `
       <header class="progress-spa-header"><div><p class="eyebrow">Viitorul tău</p><h2>Planul de admitere</h2>
-      <p>Un centru de comandă calm pentru următorul tău pas important.</p></div><button class="primary-small-button" data-edit-admission>Editează planul</button></header>
+      <p>Direcția ta, fără informație în plus.</p></div><button class="primary-small-button" data-edit-admission>Editează planul</button></header>
       <section class="admission-spa-hero admission-command-hero">
         <div class="admission-command-copy"><p class="eyebrow">Obiectiv principal</p>
           <h3>${escapeHtml(profile.university || "Alege universitatea sau facultatea dorită")}</h3>
           <p>${targetDate ? `${daysLeft >= 0 ? `${daysLeft} ${daysLeft === 1 ? "zi" : "zile"} rămase` : "Data țintă a trecut"} · ${formatAdmissionDate(settings.targetDate)}` : "Adaugă data admiterii pentru un countdown personalizat."}</p>
           <div class="admission-hero-actions">
-            <button class="primary-small-button" data-admission-next>${openTasks.length ? "Deschide următorul task" : nextMilestone ? "Continuă traseul" : "Configurează planul"}</button>
+            <button class="primary-small-button" data-admission-next>${openTasks.length ? "Deschide următorul task" : nextMilestone ? "Vezi următorul pas" : "Configurează planul"}</button>
             <button class="text-button" data-edit-admission>Actualizează</button>
           </div>
         </div>
-        <div class="admission-readiness" style="--readiness:${readiness.score}" aria-label="Pregătire ${readiness.score}%">
-          <div><strong>${readiness.score}%</strong><span>pregătire</span></div>
-          <small>${escapeHtml(readiness.label)}<em>traseu · taskuri · studiu · scor</em></small>
-        </div>
-      </section>
-      <section class="admission-signal-grid">
-        <article><span>Countdown</span><strong>${daysLeft === null ? "—" : Math.max(0, daysLeft)}</strong><small>${daysLeft === null ? "setează data" : daysLeft === 1 ? "zi rămasă" : "zile rămase"}</small></article>
-        <article><span>Score Lab</span><strong>${settings.currentScore === null ? "—" : formatScore(settings.currentScore)}</strong><small>${settings.targetScore === null ? "setează scorul țintă" : scoreGap ? `${formatScore(scoreGap)} până la țintă` : "ținta este atinsă"}</small></article>
-        <article><span>Momentum · 30 zile</span><strong>${formatStudyTime(recentMinutes)}</strong><small>${admissionTasks.filter(item => item.completed).length} task-uri finalizate</small></article>
       </section>
       <div class="admission-command-grid">
         <section class="progress-spa-panel admission-next-card">
           <p class="eyebrow">Următorul pas</p><h3>${escapeHtml(nextMove)}</h3>
-          <p>${openTasks.length ? "Este cel mai apropiat task de admitere încă deschis." : nextMilestone ? "Un pas clar, fără să te uiți la întregul plan." : "Adaugă un milestone și Itera îl va scoate în față."}</p>
-          <div class="admission-score-track"><i style="width:${settings.currentScore === null || settings.targetScore === null ? 0 : Math.min(100, settings.currentScore / settings.targetScore * 100)}%"></i></div>
-          <small>${settings.targetScore === null ? "Score Lab se activează după ce setezi ținta." : `Țintă: ${formatScore(settings.targetScore)}`}</small>
+          <p>${openTasks.length ? "Este cel mai apropiat task de admitere încă deschis." : nextMilestone ? "Un pas clar, fără să te uiți la întregul plan." : "Adaugă un pas și Itera îl va scoate în față."}</p>
         </section>
-        <section class="progress-spa-panel admission-pathway"><div class="admission-panel-heading"><div><p class="eyebrow">Pathway</p><h3>Traseul tău</h3></div><span>${settings.checklist.filter(item => item.completed).length}/${settings.checklist.length}</span></div>
+        <section class="progress-spa-panel admission-pathway"><div class="admission-panel-heading"><div><p class="eyebrow">Plan simplu</p><h3>Pașii tăi</h3></div><span>${settings.checklist.filter(item => item.completed).length}/${settings.checklist.length}</span></div>
           <div class="admission-milestone-list">${settings.checklist.map(item => milestoneRow(item)).join("")}</div>
           <p class="admission-live-status" data-admission-status aria-live="polite"></p>
         </section>
@@ -205,10 +182,8 @@
       <dialog class="progress-spa-dialog"><form data-admission-form>
         <div class="progress-spa-dialog-head"><h3>Editează planul</h3><button type="button" class="icon-button" data-close-admission>×</button></div>
         <label>Universitate / facultate<input name="university" value="${escapeHtml(profile.university || "")}"></label>
-        <div class="progress-spa-fields"><label>Data admiterii<input name="target_date" type="date" value="${escapeHtml(settings.targetDate)}"></label>
-        <label>Scor țintă<input name="target_score" type="number" min="1" max="10" step=".01" value="${settings.targetScore ?? ""}" placeholder="Ex: 9.50"></label></div>
-        <label>Scor estimat acum<input name="current_score" type="number" min="1" max="10" step=".01" value="${settings.currentScore ?? ""}" placeholder="Ex: 8.75"></label>
-        <label>Milestone-uri<textarea name="checklist" rows="4" placeholder="Un pas pe fiecare rând">${escapeHtml(settings.checklist.map(item => item.label).join("\n"))}</textarea></label>
+        <label>Data admiterii<input name="target_date" type="date" value="${escapeHtml(settings.targetDate)}"></label>
+        <label>Pași importanți<textarea name="checklist" rows="4" placeholder="Un pas pe fiecare rând">${escapeHtml(settings.checklist.map(item => item.label).join("\n"))}</textarea></label>
         <label>Obiective de studiu<textarea name="study_goals" rows="4" placeholder="Un obiectiv pe fiecare rând">${escapeHtml(studyGoals.join("\n"))}</textarea></label>
         <label>Obiective personale<textarea name="personal_goals" rows="4" placeholder="Un obiectiv pe fiecare rând">${escapeHtml(personalGoals.join("\n"))}</textarea></label>
         <p class="progress-spa-error" data-admission-error></p><button class="primary-button">Salvează planul</button>
@@ -255,7 +230,7 @@
       return;
     }
     if (data?.user) user = data.user;
-    renderAdmission(admissionContext.profile, admissionContext.tasks, admissionContext.events, admissionContext.sessions);
+    renderAdmission(admissionContext.profile, admissionContext.tasks, admissionContext.events);
   }
 
   async function saveAdmission(event) {
@@ -266,8 +241,8 @@
     const previousByLabel = new Map(previousSettings.checklist.map(item => [item.label.toLowerCase(), item]));
     const nextSettings = {
       targetDate: values.target_date || "",
-      currentScore: normalizeScore(values.current_score),
-      targetScore: normalizeScore(values.target_score),
+      currentScore: previousSettings.currentScore,
+      targetScore: previousSettings.targetScore,
       checklist: lines(values.checklist).slice(0, 10).map((label, index) => {
         const previous = previousByLabel.get(label.toLowerCase());
         return previous || { id: global.crypto?.randomUUID?.() || `milestone-${Date.now()}-${index}`, label, completed: false };
@@ -301,27 +276,6 @@
     await mountAdmission();
   }
 
-  function calculateAdmissionReadiness(settings, studyGoals, tasks, recentMinutes) {
-    const checklistRatio = settings.checklist.length
-      ? settings.checklist.filter(item => item.completed).length / settings.checklist.length
-      : 0;
-    const taskRatio = tasks.length ? tasks.filter(item => item.completed).length / tasks.length : 0;
-    const scoreRatio = settings.currentScore !== null && settings.targetScore
-      ? Math.min(1, settings.currentScore / settings.targetScore)
-      : 0;
-    const score = Math.round(
-      checklistRatio * 40 +
-      taskRatio * 20 +
-      Math.min(1, recentMinutes / 600) * 20 +
-      scoreRatio * 15 +
-      (studyGoals.length ? 5 : 0)
-    );
-    return {
-      score: Math.max(0, Math.min(100, score)),
-      label: score >= 80 ? "Foarte aproape de ritmul țintă" : score >= 55 ? "Planul prinde contur" : score >= 25 ? "Construiești fundația" : "Începe cu primul pas"
-    };
-  }
-
   function normalizeList(value) {
     if (Array.isArray(value)) return value.map(item => String(item).trim()).filter(Boolean);
     return typeof value === "string" ? lines(value) : [];
@@ -338,7 +292,6 @@
     const date = parseLocalDate(text);
     return Number.isNaN(date.getTime()) || localDateString(date) !== text ? "" : text;
   }
-  function formatScore(value) { return Number(value).toFixed(2).replace(".", ","); }
   function localDateString(date) {
     return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
   }
@@ -351,10 +304,6 @@
   }
   function formatCompactDate(value) {
     return new Intl.DateTimeFormat("ro-RO", { day: "2-digit", month: "short" }).format(parseLocalDate(value));
-  }
-  function formatStudyTime(minutes) {
-    const total = Math.max(0, Math.round(Number(minutes) || 0));
-    return total < 60 ? `${total}m` : `${Math.floor(total / 60)}h ${total % 60 ? `${total % 60}m` : ""}`.trim();
   }
   function cssEscape(value) {
     return global.CSS?.escape ? global.CSS.escape(String(value)) : String(value).replace(/[^a-zA-Z0-9_-]/g, "\\$&");
