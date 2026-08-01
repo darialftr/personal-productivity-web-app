@@ -91,14 +91,26 @@
 
   function renderTask(task) {
     const subject = subjects.find(item => item.id === task.subject_id);
+    const deadlineLabel = task.deadline_date ? formatTaskDate(task.deadline_date) : "";
     return `<div class="tasks-swipe-row" data-task-row="${task.id}">
       <button class="tasks-swipe-delete" data-swipe-delete="${task.id}" aria-label="Șterge ${escapeHtml(task.title)}">Șterge</button>
       <article class="tasks-spa-item ${task.completed ? "completed" : ""}" data-swipe-surface style="--subject:${subject?.color || "#f3a9c5"}">
       <button class="tasks-spa-check" data-toggle-task="${task.id}" aria-label="Schimbă starea">${task.completed ? "✓" : ""}</button>
-      <div><strong>${escapeHtml(task.title)}</strong><small>${escapeHtml(subject?.name || "Fără materie")}${task.deadline_date ? ` · ${task.deadline_date}` : ""}${task.deadline_time ? ` · ${String(task.deadline_time).slice(0, 5)}` : ""}</small></div>
+      <div><strong>${escapeHtml(task.title)}</strong><small>${escapeHtml(subject?.name || "Fără materie")}${deadlineLabel ? ` · ${escapeHtml(deadlineLabel)}` : ""}${task.deadline_time ? ` · ${String(task.deadline_time).slice(0, 5)}` : ""}</small></div>
       <span class="tasks-spa-badge priority-${escapeHtml(task.priority || "medium")}">${task.estimated_minutes || 0}m</span>
       ${task.completed ? "" : `<button class="tasks-spa-start" data-start-task="${task.id}"><span class="tasks-play-icon" aria-hidden="true"></span> Start</button>`}
       <button class="tasks-spa-edit" data-edit-task="${task.id}">Editează</button></article></div>`;
+  }
+
+  function formatTaskDate(value) {
+    const date = new Date(`${value}T12:00:00`);
+    if (Number.isNaN(date.getTime())) return value;
+    const includeYear = date.getFullYear() !== new Date().getFullYear();
+    return new Intl.DateTimeFormat("ro-RO", {
+      day: "numeric",
+      month: "short",
+      ...(includeYear ? { year: "numeric" } : {})
+    }).format(date).replace(".", "");
   }
 
   function bindEvents() {
