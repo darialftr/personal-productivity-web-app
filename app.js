@@ -1053,9 +1053,26 @@ async function handleQuickTaskSubmit(event) {
   const title = document.getElementById("quickTaskTitle").value.trim();
   const subjectId = document.getElementById("quickTaskSubject").value || null;
   const deadlineDate = document.getElementById("quickTaskDate").value;
-  const deadlineTime = document.getElementById("quickTaskTime").value || null;
+  let deadlineTime = document.getElementById("quickTaskTime").value || null;
+  const automaticTime = !deadlineTime;
   const taskType = document.getElementById("quickTaskType").value || "homework";
   const estimatedMinutes = Number(document.getElementById("quickTaskMinutes").value) || 45;
+  const priority = document.getElementById("quickTaskPriority").value;
+
+  if (!deadlineTime) {
+    const targetDate = parseLocalDate(deadlineDate);
+    const priorityDelay = priority === "high" ? 0 : priority === "low" ? 120 : 60;
+    const preferredStart = ([0, 6].includes(targetDate.getDay()) ? 10 * 60 : 16 * 60) + priorityDelay;
+    const earliest = deadlineDate === formatDateForInput(new Date())
+      ? Math.max(preferredStart, roundToQuarter(new Date().getHours() * 60 + new Date().getMinutes() + 10))
+      : preferredStart;
+    const slot = findAvailableSlot(earliest, estimatedMinutes, mergeIntervals(getDayIntervals(deadlineDate)), 22 * 60);
+    if (slot === null) {
+      showToast("Nu am găsit un interval liber până la 22:00. Alege tu o oră.", "!");
+      return;
+    }
+    deadlineTime = formatClockMinutes(slot);
+  }
 
   if (deadlineTime) {
     const candidate = {
@@ -1087,7 +1104,7 @@ async function handleQuickTaskSubmit(event) {
       task_type: taskType,
       deadline_date: deadlineDate,
       deadline_time: deadlineTime,
-      priority: document.getElementById("quickTaskPriority").value,
+      priority,
       estimated_minutes: estimatedMinutes,
       notes: document.getElementById("quickTaskNotes").value.trim() || null,
       completed: false,
@@ -1109,7 +1126,7 @@ async function handleQuickTaskSubmit(event) {
   closeModal("quickTaskModal");
   renderAll();
   showToast(
-    `${taskType === "test" ? "Testul" : "Tema"} apare acum în Task-uri, Calendar și Materii.`,
+    `${taskType === "test" ? "Testul" : "Tema"} apare acum în Task-uri, Calendar și Materii.${automaticTime ? ` Itera a ales ora ${deadlineTime}.` : ""}`,
     "✓"
   );
 }
@@ -2974,16 +2991,17 @@ async function scheduleSmartTaskContinuation(date, time) {
     showToast("Task-ul nu a putut fi reprogramat.", "!");
     return;
   }
-  const scheduledFor = new Date(`${date}T${time}:00`);
+  const startTime = new Date(`${date}T${time}:00`);
+  const scheduledFor = new Date(startTime.getTime() - 60000);
   const reminderResult = await globalThis.IteraPush?.queueReminder({
-    title: "E timpul să continui",
-    body: `Ai rezervat acest interval pentru „${title}”.`,
+    title: "Continui într-un minut",
+    body: `${title} · ${time}`,
     scheduledFor,
     targetUrl: "./index.html#/tasks",
     tag: `smart-resume-${taskId}`,
-    notificationType: "task-continuation",
+    notificationType: "task-start",
     sourceId: taskId,
-    dedupeKey: `smart-resume-${taskId}-${scheduledFor.toISOString()}`
+    dedupeKey: `task-start-${taskId}-${date}-${time}`
   });
   actionButton.disabled = false;
   closeTaskSession();

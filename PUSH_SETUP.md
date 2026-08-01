@@ -7,6 +7,9 @@
 1. `supabase-push-setup.sql`
 2. după publicarea funcțiilor, `supabase-push-cron.sql`
 
+Rulează din nou ambele fișiere după actualizarea din august 2026. Joburile rulează acum
+la fiecare minut, iar reminderul de start este creat cu exact un minut înainte.
+
 În al doilea fișier înlocuiește:
 
 - `PROJECT_REF` cu `yxpghxgasfokxxzbtcax`

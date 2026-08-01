@@ -68,6 +68,16 @@ Deno.serve(async (request) => {
     let failed = 0;
 
     for (const notification of queue || []) {
+      const delayMs = Date.now() - new Date(notification.scheduled_for).getTime();
+      if (notification.notification_type === "task-start" && delayMs > 2 * 60 * 1000) {
+        await admin.from("notification_queue").update({
+          status: "cancelled",
+          last_error: "Reminder expired before delivery.",
+          updated_at: new Date().toISOString()
+        }).eq("id", notification.id);
+        continue;
+      }
+
       await admin.from("notification_queue")
         .update({ status: "processing", updated_at: new Date().toISOString() })
         .eq("id", notification.id);
@@ -78,6 +88,7 @@ Deno.serve(async (request) => {
         body: notification.body,
         url: notification.target_url,
         tag: notification.tag,
+        notificationType: notification.notification_type,
         notificationId: notification.id
       });
 
@@ -124,6 +135,7 @@ async function sendToSubscriptions(
 ) {
   let sent = 0;
   let failed = 0;
+  const ttl = payload.notificationType === "task-start" ? 120 : 3600;
 
   await Promise.all(subscriptions.map(async (subscription) => {
     try {
@@ -133,7 +145,7 @@ async function sendToSubscriptions(
           p256dh: subscription.p256dh,
           auth: subscription.auth_key
         }
-      }, JSON.stringify(payload), { TTL: 3600 });
+      }, JSON.stringify(payload), { TTL: ttl });
       sent += 1;
     } catch (error) {
       failed += 1;

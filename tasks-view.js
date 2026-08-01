@@ -1,8 +1,13 @@
 "use strict";
 
 (function (global) {
-  let root, user, subjects = [], tasks = [], filter = "all", search = "", mounted = false;
-  const today = () => new Date().toISOString().slice(0, 10);
+  let root, user, subjects = [], tasks = [], scheduleItems = [], calendarEvents = [];
+  let filter = "all", search = "", mounted = false;
+  const localDate = (date = new Date()) => {
+    const offset = date.getTimezoneOffset() * 60000;
+    return new Date(date.getTime() - offset).toISOString().slice(0, 10);
+  };
+  const today = () => localDate();
 
   async function mount() {
     root = document.getElementById("tasksViewRoot");
@@ -18,9 +23,11 @@
   function unmount() { mounted = false; root = null; }
 
   async function reload() {
-    const [subjectResult, taskResult] = await Promise.all([
+    const [subjectResult, taskResult, scheduleResult, eventResult] = await Promise.all([
       supabaseClient.from("subjects").select("id,name,color").eq("user_id", user.id).eq("is_active", true).order("position"),
-      supabaseClient.from("tasks").select("*").eq("user_id", user.id).order("created_at", { ascending: false })
+      supabaseClient.from("tasks").select("*").eq("user_id", user.id).order("created_at", { ascending: false }),
+      supabaseClient.from("schedule_items").select("day_of_week,start_time,end_time").eq("user_id", user.id),
+      supabaseClient.from("calendar_events").select("event_date,start_time,end_time").eq("user_id", user.id)
     ]);
     if (!mounted) return;
     if (subjectResult.error || taskResult.error) {
@@ -29,6 +36,8 @@
     }
     subjects = subjectResult.data || [];
     tasks = taskResult.data || [];
+    scheduleItems = scheduleResult.data || [];
+    calendarEvents = eventResult.data || [];
     render();
   }
 
@@ -50,7 +59,8 @@
     root.innerHTML = `
       <header class="tasks-spa-header"><div><p class="eyebrow">Organizare</p><h2>Task-urile tale</h2>
         <p>${open} task-uri active · sincronizate cu Supabase</p></div>
-        <button class="primary-small-button" data-add-task><span aria-hidden="true">+</span> Task</button></header>
+        <div class="tasks-spa-header-actions"><button class="secondary-button tasks-auto-plan" data-auto-plan><span class="tasks-plan-icon" aria-hidden="true"></span> Planifică automat</button>
+        <button class="primary-small-button" data-add-task><span class="tasks-add-icon" aria-hidden="true"></span> Task</button></div></header>
       <section class="tasks-spa-toolbar">
         <input type="search" value="${escapeHtml(search)}" placeholder="Caută un task…" data-task-search>
         <div class="tasks-spa-filters">${[
@@ -58,6 +68,7 @@
           ["test", "Teste"], ["completed", "Finalizate"]
         ].map(([value, label]) => `<button class="${filter === value ? "active" : ""}" data-task-filter="${value}">${label}</button>`).join("")}</div>
       </section>
+      <p class="tasks-swipe-hint">Glisează un task spre stânga pentru a-l șterge rapid.</p>
       <section class="tasks-spa-list">${list.length ? list.map(renderTask).join("") :
         '<div class="tasks-spa-empty"><strong>Niciun task aici.</strong><span>Ai spațiu pentru următorul pas.</span></div>'}</section>
       <dialog class="tasks-spa-dialog"><form data-task-form>
@@ -67,12 +78,12 @@
         <div class="tasks-spa-fields">
           <label>Materie<select name="subject_id"><option value="">Fără materie</option>${subjects.map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join("")}</select></label>
           <label>Tip<select name="task_type"><option value="homework">Homework</option><option value="test">Test</option><option value="project">Proiect</option><option value="study">Studiu</option><option value="other">Altceva</option></select></label>
-          <label>Deadline<input name="deadline_date" type="date"></label><label>Ora<input name="deadline_time" type="time"></label>
+          <label>Deadline<input name="deadline_date" type="date"></label><label>Ora<input name="deadline_time" type="time"><small class="tasks-time-hint">Las-o liberă și Itera alege ora după prioritate.</small></label>
           <label>Prioritate<select name="priority"><option value="low">Scăzută</option><option value="medium">Medie</option><option value="high">Ridicată</option></select></label>
           <label>Minute estimate<input name="estimated_minutes" type="number" min="0" value="30"></label>
         </div><label>Notițe<textarea name="notes" rows="3"></textarea></label>
         <p class="tasks-spa-error" data-task-error></p>
-        <div class="tasks-spa-actions"><button type="button" class="secondary-button" data-delete-task hidden>Șterge</button>
+        <div class="tasks-spa-actions"><button type="button" class="secondary-button tasks-delete-dialog" data-delete-task hidden>Șterge</button>
         <button type="submit" class="primary-button">Salvează</button></div>
       </form></dialog>`;
     bindEvents();
@@ -80,16 +91,19 @@
 
   function renderTask(task) {
     const subject = subjects.find(item => item.id === task.subject_id);
-    return `<article class="tasks-spa-item ${task.completed ? "completed" : ""}" style="--subject:${subject?.color || "#f3a9c5"}">
+    return `<div class="tasks-swipe-row" data-task-row="${task.id}">
+      <button class="tasks-swipe-delete" data-swipe-delete="${task.id}" aria-label="Șterge ${escapeHtml(task.title)}">Șterge</button>
+      <article class="tasks-spa-item ${task.completed ? "completed" : ""}" data-swipe-surface style="--subject:${subject?.color || "#f3a9c5"}">
       <button class="tasks-spa-check" data-toggle-task="${task.id}" aria-label="Schimbă starea">${task.completed ? "✓" : ""}</button>
-      <div><strong>${escapeHtml(task.title)}</strong><small>${escapeHtml(subject?.name || "Fără materie")}${task.deadline_date ? ` · ${task.deadline_date}` : ""}</small></div>
-      <span class="tasks-spa-badge">${task.estimated_minutes || 0}m</span>
-      ${task.completed ? "" : `<button class="tasks-spa-start" data-start-task="${task.id}">▶ Start</button>`}
-      <button class="tasks-spa-edit" data-edit-task="${task.id}">Editează</button></article>`;
+      <div><strong>${escapeHtml(task.title)}</strong><small>${escapeHtml(subject?.name || "Fără materie")}${task.deadline_date ? ` · ${task.deadline_date}` : ""}${task.deadline_time ? ` · ${String(task.deadline_time).slice(0, 5)}` : ""}</small></div>
+      <span class="tasks-spa-badge priority-${escapeHtml(task.priority || "medium")}">${task.estimated_minutes || 0}m</span>
+      ${task.completed ? "" : `<button class="tasks-spa-start" data-start-task="${task.id}"><span class="tasks-play-icon" aria-hidden="true"></span> Start</button>`}
+      <button class="tasks-spa-edit" data-edit-task="${task.id}">Editează</button></article></div>`;
   }
 
   function bindEvents() {
     root.querySelector("[data-add-task]").addEventListener("click", () => openDialog());
+    root.querySelector("[data-auto-plan]").addEventListener("click", autoScheduleOpenTasks);
     root.querySelector("[data-close-task]").addEventListener("click", closeDialog);
     root.querySelector("[data-task-form]").addEventListener("submit", saveTask);
     root.querySelector("[data-delete-task]").addEventListener("click", deleteTask);
@@ -102,6 +116,8 @@
       if (task && global.IteraFocus) global.IteraFocus.startTask(task, subject);
     }));
     root.querySelectorAll("[data-edit-task]").forEach(button => button.addEventListener("click", () => openDialog(tasks.find(task => task.id === button.dataset.editTask))));
+    root.querySelectorAll("[data-swipe-delete]").forEach(button => button.addEventListener("click", () => deleteTaskById(button.dataset.swipeDelete)));
+    bindSwipeRows();
   }
 
   function openDialog(task) {
@@ -118,33 +134,225 @@
 
   function closeDialog() { root.querySelector("dialog").close(); }
 
+  function minutesFromTime(value) {
+    if (!value) return null;
+    const [hours, minutes] = String(value).slice(0, 5).split(":").map(Number);
+    return Number.isFinite(hours) && Number.isFinite(minutes) ? hours * 60 + minutes : null;
+  }
+
+  function clockFromMinutes(value) {
+    const safe = Math.max(0, Math.min(1439, Math.round(value)));
+    return `${String(Math.floor(safe / 60)).padStart(2, "0")}:${String(safe % 60).padStart(2, "0")}`;
+  }
+
+  function mergeIntervals(intervals) {
+    return intervals
+      .filter(item => Number.isFinite(item.start) && Number.isFinite(item.end) && item.end > item.start)
+      .sort((a, b) => a.start - b.start)
+      .reduce((merged, interval) => {
+        const last = merged.at(-1);
+        if (!last || interval.start > last.end) merged.push({ ...interval });
+        else last.end = Math.max(last.end, interval.end);
+        return merged;
+      }, []);
+  }
+
+  function busyIntervals(dateValue, excludedIds = new Set()) {
+    const date = new Date(`${dateValue}T12:00:00`);
+    const dayOfWeek = date.getDay() === 0 ? 7 : date.getDay();
+    const scheduleBusy = scheduleItems
+      .filter(item => Number(item.day_of_week) === dayOfWeek)
+      .map(item => ({ start: minutesFromTime(item.start_time), end: minutesFromTime(item.end_time) }));
+    const eventBusy = calendarEvents
+      .filter(item => item.event_date === dateValue && item.start_time)
+      .map(item => {
+        const start = minutesFromTime(item.start_time);
+        return { start, end: minutesFromTime(item.end_time) ?? start + 60 };
+      });
+    const taskBusy = tasks
+      .filter(item => !item.completed && item.deadline_date === dateValue && item.deadline_time && !excludedIds.has(item.id))
+      .map(item => {
+        const start = minutesFromTime(item.deadline_time);
+        return { start, end: start + Math.max(15, Number(item.estimated_minutes) || 30) };
+      });
+    return mergeIntervals([...scheduleBusy, ...eventBusy, ...taskBusy]);
+  }
+
+  function findAutomaticTime(task, extraBusy = []) {
+    if (!task.deadline_date) return null;
+    const date = new Date(`${task.deadline_date}T12:00:00`);
+    const weekend = [0, 6].includes(date.getDay());
+    const priorityDelay = task.priority === "high" ? 0 : task.priority === "low" ? 120 : 60;
+    let cursor = (weekend ? 10 * 60 : 16 * 60) + priorityDelay;
+    if (task.deadline_date === today()) {
+      const now = new Date();
+      cursor = Math.max(cursor, Math.ceil((now.getHours() * 60 + now.getMinutes() + 10) / 15) * 15);
+    }
+    const duration = Math.max(15, Number(task.estimated_minutes) || 30);
+    const latestEnd = 22 * 60;
+    const excludedIds = new Set(task.id ? [task.id] : []);
+    const occupied = mergeIntervals([...busyIntervals(task.deadline_date, excludedIds), ...extraBusy]);
+    for (const interval of occupied) {
+      if (cursor + duration <= interval.start) break;
+      if (cursor < interval.end) cursor = Math.ceil(interval.end / 15) * 15;
+    }
+    return cursor + duration <= latestEnd ? clockFromMinutes(cursor) : null;
+  }
+
   async function saveTask(event) {
     event.preventDefault();
     const form = event.currentTarget, values = Object.fromEntries(new FormData(form)), id = values.id;
+    const submitButton = form.querySelector('[type="submit"]');
+    form.querySelector("[data-task-error]").textContent = "";
     const payload = { user_id: user.id, subject_id: values.subject_id || null, title: values.title.trim(),
       task_type: values.task_type, deadline_date: values.deadline_date || null, deadline_time: values.deadline_time || null,
       priority: values.priority, estimated_minutes: Number(values.estimated_minutes) || 0, notes: values.notes.trim() || null };
+    if (payload.deadline_date && !payload.deadline_time) {
+      payload.deadline_time = findAutomaticTime({ ...payload, id });
+      if (!payload.deadline_time) {
+        form.querySelector("[data-task-error]").textContent = "Nu am găsit un interval liber până la 22:00. Alege o oră sau mută deadline-ul.";
+        return;
+      }
+    }
+    submitButton.disabled = true;
+    submitButton.textContent = "Se salvează…";
     const query = id
       ? supabaseClient.from("tasks").update(payload).eq("id", id).eq("user_id", user.id)
       : supabaseClient.from("tasks").insert(payload);
     const { data, error } = await query.select("*").single();
-    if (error) { form.querySelector("[data-task-error]").textContent = "Task-ul nu a putut fi salvat."; return; }
+    if (error) {
+      submitButton.disabled = false;
+      submitButton.textContent = "Salvează";
+      form.querySelector("[data-task-error]").textContent = "Task-ul nu a putut fi salvat.";
+      return;
+    }
     await global.IteraPush?.scheduleTaskReminders(data);
+    if (!values.deadline_time && data.deadline_time) {
+      global.showToast?.(`Itera l-a planificat la ${String(data.deadline_time).slice(0, 5)}.`, "✓");
+    }
     closeDialog(); await reload();
+  }
+
+  async function autoScheduleOpenTasks() {
+    const button = root.querySelector("[data-auto-plan]");
+    const candidates = tasks
+      .filter(task => !task.completed && task.deadline_date && !task.deadline_time)
+      .sort((a, b) => {
+        const priority = { high: 0, medium: 1, low: 2 };
+        return a.deadline_date.localeCompare(b.deadline_date)
+          || (priority[a.priority] ?? 1) - (priority[b.priority] ?? 1)
+          || String(a.created_at).localeCompare(String(b.created_at));
+      });
+    if (!candidates.length) {
+      global.showToast?.("Toate taskurile au deja o oră.", "✓");
+      return;
+    }
+
+    button.disabled = true;
+    button.textContent = "Planific...";
+    const plannedBusy = new Map();
+    let planned = 0;
+    for (const task of candidates) {
+      const extraBusy = plannedBusy.get(task.deadline_date) || [];
+      const deadlineTime = findAutomaticTime(task, extraBusy);
+      if (!deadlineTime) continue;
+      const { data, error } = await supabaseClient.from("tasks")
+        .update({ deadline_time: deadlineTime })
+        .eq("id", task.id).eq("user_id", user.id).select("*").single();
+      if (error) continue;
+      const start = minutesFromTime(deadlineTime);
+      extraBusy.push({ start, end: start + Math.max(15, Number(task.estimated_minutes) || 30) });
+      plannedBusy.set(task.deadline_date, extraBusy);
+      planned += 1;
+      await global.IteraPush?.scheduleTaskReminders(data);
+    }
+    global.showToast?.(planned
+      ? `${planned} ${planned === 1 ? "task planificat" : "taskuri planificate"} după prioritate.`
+      : "Nu am găsit intervale libere până la 22:00.", planned ? "✓" : "!");
+    await reload();
+  }
+
+  function bindSwipeRows() {
+    let openRow = null;
+    root.querySelectorAll("[data-swipe-surface]").forEach(surface => {
+      let startX = 0, startY = 0, deltaX = 0, dragging = false, suppressClick = false;
+      surface.addEventListener("pointerdown", event => {
+        if (event.pointerType === "mouse" && event.button !== 0) return;
+        startX = event.clientX; startY = event.clientY; deltaX = 0; dragging = true;
+        surface.setPointerCapture?.(event.pointerId);
+      });
+      surface.addEventListener("pointermove", event => {
+        if (!dragging) return;
+        const horizontal = event.clientX - startX;
+        const vertical = event.clientY - startY;
+        if (Math.abs(vertical) > Math.abs(horizontal) && Math.abs(vertical) > 8) {
+          dragging = false;
+          if (surface.hasPointerCapture?.(event.pointerId)) surface.releasePointerCapture(event.pointerId);
+          return;
+        }
+        if (horizontal >= 0) return;
+        if (Math.abs(horizontal) > 8) suppressClick = true;
+        deltaX = Math.max(-92, horizontal);
+        surface.style.transform = `translateX(${deltaX}px)`;
+      });
+      const finish = (event) => {
+        if (!dragging) return;
+        dragging = false;
+        if (surface.hasPointerCapture?.(event?.pointerId)) surface.releasePointerCapture(event.pointerId);
+        const row = surface.closest("[data-task-row]");
+        const shouldOpen = deltaX < -48;
+        if (openRow && openRow !== row) closeSwipeRow(openRow);
+        row.classList.toggle("swipe-open", shouldOpen);
+        surface.style.transform = shouldOpen ? "translateX(-88px)" : "";
+        openRow = shouldOpen ? row : null;
+      };
+      surface.addEventListener("pointerup", event => finish(event));
+      surface.addEventListener("pointercancel", event => finish(event));
+      surface.addEventListener("click", event => {
+        if (!suppressClick) return;
+        event.preventDefault();
+        event.stopPropagation();
+        suppressClick = false;
+      }, true);
+    });
+  }
+
+  function closeSwipeRow(row) {
+    row?.classList.remove("swipe-open");
+    const surface = row?.querySelector("[data-swipe-surface]");
+    if (surface) surface.style.transform = "";
   }
 
   async function toggleTask(id) {
     const task = tasks.find(item => item.id === id), completed = !task.completed;
     const { error } = await supabaseClient.from("tasks").update({ completed, progress: completed ? 100 : 0,
       completed_at: completed ? new Date().toISOString() : null }).eq("id", id).eq("user_id", user.id);
-    if (!error) await reload();
+    if (!error) {
+      await global.IteraPush?.scheduleTaskReminders({ ...task, completed });
+      await reload();
+    }
   }
 
   async function deleteTask() {
     const id = root.querySelector("[data-task-form]").elements.id.value;
     if (!id) return;
+    await deleteTaskById(id, true);
+  }
+
+  async function deleteTaskById(id, fromDialog = false) {
+    const deleteButton = root.querySelector(`[data-swipe-delete="${id}"]`)
+      || (fromDialog ? root.querySelector("[data-delete-task]") : null);
+    if (deleteButton) { deleteButton.disabled = true; deleteButton.textContent = "…"; }
+    await global.IteraPush?.cancelTaskReminders(id);
     const { error } = await supabaseClient.from("tasks").delete().eq("id", id).eq("user_id", user.id);
-    if (!error) { closeDialog(); await reload(); }
+    if (!error) {
+      if (fromDialog) closeDialog();
+      global.showToast?.("Task șters.", "✓");
+      await reload();
+    } else {
+      if (deleteButton) { deleteButton.disabled = false; deleteButton.textContent = "Șterge"; }
+      global.showToast?.("Task-ul nu a putut fi șters.", "!");
+    }
   }
 
   function escapeHtml(value) {

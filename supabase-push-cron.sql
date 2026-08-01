@@ -1,25 +1,42 @@
 -- Rulează după ce funcțiile Edge `send-push` și `push-config` sunt publicate.
 -- Înlocuiește PROJECT_REF și CRON_SECRET înainte de Run.
 
-select vault.create_secret(
-  'https://PROJECT_REF.supabase.co/functions/v1/send-push',
-  'itera_push_function_url'
-);
+do $$
+begin
+  if not exists (select 1 from vault.decrypted_secrets where name = 'itera_push_function_url') then
+    perform vault.create_secret(
+      'https://PROJECT_REF.supabase.co/functions/v1/send-push',
+      'itera_push_function_url'
+    );
+  end if;
+  if not exists (select 1 from vault.decrypted_secrets where name = 'itera_push_cron_secret') then
+    perform vault.create_secret('CRON_SECRET', 'itera_push_cron_secret');
+  end if;
+end;
+$$;
 
-select vault.create_secret(
-  'CRON_SECRET',
-  'itera_push_cron_secret'
-);
+do $$
+declare
+  existing_job record;
+begin
+  for existing_job in
+    select jobid from cron.job
+    where jobname in ('itera-enqueue-reminders', 'itera-send-push')
+  loop
+    perform cron.unschedule(existing_job.jobid);
+  end loop;
+end;
+$$;
 
 select cron.schedule(
   'itera-enqueue-reminders',
-  '*/10 * * * *',
+  '* * * * *',
   $$ select public.enqueue_due_task_notifications(); $$
 );
 
 select cron.schedule(
   'itera-send-push',
-  '*/2 * * * *',
+  '* * * * *',
   $$
   select net.http_post(
     url := (

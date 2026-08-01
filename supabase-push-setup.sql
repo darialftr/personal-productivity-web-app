@@ -82,7 +82,20 @@ on public.notification_queue for insert
 to authenticated
 with check (auth.uid() = user_id);
 
--- Creează notificări pentru task-urile cu termen astăzi sau mâine.
+drop policy if exists "Users update own reminders" on public.notification_queue;
+create policy "Users update own reminders"
+on public.notification_queue for update
+to authenticated
+using (auth.uid() = user_id)
+with check (auth.uid() = user_id);
+
+-- Oprește reminderele vechi, care erau trimise la deadline sau la următorul cron lent.
+update public.notification_queue
+set status = 'cancelled', updated_at = now()
+where status = 'pending'
+  and notification_type in ('task-deadline', 'task-continuation');
+
+-- Menține în coadă reminderul exact, cu un minut înainte de ora task-ului.
 create or replace function public.enqueue_due_task_notifications()
 returns integer
 language plpgsql
@@ -105,24 +118,32 @@ begin
   )
   select
     task.user_id,
-    case
-      when task.deadline_date = current_date then 'Task pentru astăzi'
-      else 'Task pentru mâine'
-    end,
-    task.title || ' · ' || coalesce(task.estimated_minutes, 30) || ' minute estimate',
+    'Începe într-un minut',
+    task.title || ' · ' || left(task.deadline_time::text, 5),
     './index.html#/tasks',
     'task-' || task.id::text,
-    'task-deadline',
+    'task-start',
     task.id,
-    'task-' || task.id::text || '-' || task.deadline_date::text,
-    now()
+    'task-start-' || task.id::text || '-' || task.deadline_date::text || '-' || left(task.deadline_time::text, 5),
+    ((task.deadline_date + task.deadline_time) at time zone coalesce(preference.timezone, 'Europe/Bucharest')) - interval '1 minute'
   from public.tasks task
   left join public.notification_preferences preference
     on preference.user_id = task.user_id
   where task.completed = false
-    and task.deadline_date between current_date and current_date + 1
+    and task.deadline_date is not null
+    and task.deadline_time is not null
+    and ((task.deadline_date + task.deadline_time) at time zone coalesce(preference.timezone, 'Europe/Bucharest'))
+      between now() and now() + interval '8 days'
     and coalesce(preference.task_reminders, true)
-  on conflict (dedupe_key) do nothing;
+  on conflict (dedupe_key) do update set
+    title = excluded.title,
+    body = excluded.body,
+    scheduled_for = excluded.scheduled_for,
+    status = case
+      when public.notification_queue.status = 'sent' then public.notification_queue.status
+      else 'pending'
+    end,
+    updated_at = now();
 
   get diagnostics inserted_count = row_count;
   return inserted_count;

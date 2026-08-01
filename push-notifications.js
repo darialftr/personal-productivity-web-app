@@ -153,6 +153,16 @@
       return { ok: false, error: new Error("Invalid reminder date") };
     }
 
+    if (dedupeKey) {
+      const { data: existing } = await supabaseClient
+        .from("notification_queue")
+        .select("status")
+        .eq("user_id", session.user.id)
+        .eq("dedupe_key", dedupeKey)
+        .maybeSingle();
+      if (existing?.status === "sent") return { ok: true, alreadySent: true };
+    }
+
     const { error } = await supabaseClient.from("notification_queue").upsert({
       user_id: session.user.id,
       title,
@@ -164,13 +174,30 @@
       dedupe_key: dedupeKey,
       scheduled_for: scheduledDate.toISOString(),
       status: "pending"
-    }, { onConflict: "dedupe_key", ignoreDuplicates: true });
+    }, { onConflict: "dedupe_key", ignoreDuplicates: false });
 
     return { ok: !error, error };
   }
 
+  async function cancelTaskReminders(taskId) {
+    if (!taskId) return { ok: true };
+    const { data: { session } } = await supabaseClient.auth.getSession();
+    if (!session) return { ok: false, error: new Error("Missing session") };
+
+    const { error } = await supabaseClient
+      .from("notification_queue")
+      .update({ status: "cancelled", updated_at: new Date().toISOString() })
+      .eq("user_id", session.user.id)
+      .eq("source_id", taskId)
+      .in("notification_type", ["task-reminder", "task-start", "task-deadline", "task-continuation"])
+      .in("status", ["pending", "failed"]);
+    return { ok: !error, error };
+  }
+
   async function scheduleTaskReminders(task) {
-    if (!task?.id || !task.deadline_date || task.completed) return [];
+    if (!task?.id) return [];
+    await cancelTaskReminders(task.id);
+    if (!task.deadline_date || !task.deadline_time || task.completed) return [];
 
     const deadline = new Date(
       `${task.deadline_date}T${String(task.deadline_time || "09:00").slice(0, 5)}:00`
@@ -180,10 +207,10 @@
     const isTest = task.task_type === "test";
     const isImportant = task.priority === "high";
     const reminderOffsets = isTest
-      ? [24 * 60, 2 * 60]
+      ? [24 * 60, 2 * 60, 1]
       : isImportant
-        ? [24 * 60, 60]
-        : [60];
+        ? [24 * 60, 60, 1]
+        : [1];
     const now = Date.now();
 
     return Promise.all(reminderOffsets
@@ -191,16 +218,26 @@
         minutesBefore,
         scheduledFor: new Date(deadline.getTime() - minutesBefore * 60000)
       }))
-      .filter((reminder) => reminder.scheduledFor.getTime() > now)
+      .filter((reminder) => deadline.getTime() > now && (
+        reminder.scheduledFor.getTime() > now || reminder.minutesBefore === 1
+      ))
       .map((reminder) => queueReminder({
-        title: isTest ? "Test în curând" : isImportant ? "Task important" : "Reminder task",
-        body: `${task.title} · ${formatReminderDistance(reminder.minutesBefore)}`,
-        scheduledFor: reminder.scheduledFor,
+        title: reminder.minutesBefore === 1
+          ? "Începe într-un minut"
+          : isTest ? "Test în curând" : isImportant ? "Task important" : "Reminder task",
+        body: reminder.minutesBefore === 1
+          ? `${task.title} · ${String(task.deadline_time).slice(0, 5)}`
+          : `${task.title} · ${formatReminderDistance(reminder.minutesBefore)}`,
+        scheduledFor: reminder.scheduledFor.getTime() > now
+          ? reminder.scheduledFor
+          : new Date(now + 3000),
         targetUrl: "./index.html#/tasks",
         tag: `task-${task.id}`,
-        notificationType: isTest ? "test-reminder" : "task-reminder",
+        notificationType: reminder.minutesBefore === 1 ? "task-start" : "task-reminder",
         sourceId: task.id,
-        dedupeKey: `task-${task.id}-${deadline.toISOString()}-${reminder.minutesBefore}`
+        dedupeKey: reminder.minutesBefore === 1
+          ? `task-start-${task.id}-${task.deadline_date}-${String(task.deadline_time).slice(0, 5)}`
+          : `task-${task.id}-${deadline.toISOString()}-${reminder.minutesBefore}`
       })));
   }
 
@@ -307,6 +344,7 @@
     initialize,
     disableCurrentDevice,
     queueReminder,
+    cancelTaskReminders,
     scheduleTaskReminders,
     scheduleTestEventReminders,
     syncUpcomingReminders
