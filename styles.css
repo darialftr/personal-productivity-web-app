@@ -5994,3 +5994,1003 @@ html[data-mode="dark"] .admission-next-card {
     background: color-mix(in srgb, var(--surface) 92%, var(--primary-soft));
   }
 }
+
+/* Compact phone layout: more useful information above the fold. */
+@media (max-width: 430px) {
+  body {
+    padding-bottom: calc(72px + env(safe-area-inset-bottom));
+  }
+
+  .main-content {
+    padding: max(10px, env(safe-area-inset-top)) 10px 22px;
+  }
+
+  .topbar {
+    gap: 8px;
+    margin-bottom: 11px;
+  }
+
+  .topbar .eyebrow {
+    margin-bottom: 3px;
+    font-size: .62rem;
+  }
+
+  .topbar h1,
+  .page-title-row h1 {
+    max-width: none;
+    font-size: clamp(24px, 7.4vw, 29px);
+    line-height: 1.03;
+  }
+
+  .daily-briefing-text {
+    display: -webkit-box;
+    overflow: hidden;
+    margin-top: 5px;
+    font-size: .7rem;
+    line-height: 1.3;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+
+  .topbar #openQuickAddButton {
+    width: 40px;
+    height: 40px;
+    min-height: 40px;
+    border-radius: 14px;
+  }
+
+  .topbar #openQuickAddButton > span {
+    font-size: 23px;
+  }
+
+  .now-recommendation {
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 8px;
+    margin-bottom: 10px;
+    padding: 11px 12px;
+    border-radius: 18px;
+  }
+
+  .now-recommendation-copy {
+    min-width: 0;
+  }
+
+  .now-recommendation .card-kicker {
+    font-size: .58rem;
+  }
+
+  .now-recommendation h2 {
+    overflow: hidden;
+    margin: 1px 0 2px;
+    font-size: 17px;
+    line-height: 1.12;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .now-recommendation p:last-child {
+    display: -webkit-box;
+    overflow: hidden;
+    font-size: 10px;
+    line-height: 1.25;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 1;
+  }
+
+  .now-recommendation .primary-small-button {
+    grid-column: 2;
+    width: auto;
+    min-width: 72px;
+    height: 40px;
+    min-height: 40px;
+    padding: 0 11px;
+    border-radius: 999px;
+    font-size: 10px;
+    white-space: nowrap;
+  }
+
+  .hero-grid,
+  .content-grid,
+  .home-intelligence-grid {
+    gap: 10px;
+  }
+
+  .focus-card {
+    min-height: 0;
+    padding: 15px;
+    border-radius: 22px;
+  }
+
+  .focus-card-content {
+    position: relative;
+  }
+
+  .focus-card .card-kicker {
+    margin-bottom: 4px;
+    font-size: .6rem;
+  }
+
+  .focus-card h2 {
+    max-width: calc(100% - 66px);
+    margin-bottom: 6px;
+    font-size: clamp(25px, 7.5vw, 30px);
+    line-height: .98;
+  }
+
+  .focus-description {
+    display: -webkit-box;
+    overflow: hidden;
+    max-width: calc(100% - 60px);
+    margin-bottom: 8px;
+    font-size: .7rem;
+    line-height: 1.3;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+
+  .home-progress-ring {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 58px;
+    margin: 0;
+  }
+
+  .home-progress-ring strong {
+    font-size: .82rem;
+  }
+
+  .home-progress-ring span {
+    width: 45px;
+    font-size: 5.8px;
+  }
+
+  .energy-checkin {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 5px 9px;
+    margin-top: 8px;
+  }
+
+  .energy-heading {
+    font-size: .64rem;
+  }
+
+  .energy-options {
+    align-self: center;
+    gap: 6px;
+  }
+
+  .energy-options button {
+    width: min(28px, 8vw);
+    height: 8px;
+  }
+
+  .energy-checkin > small {
+    display: none;
+  }
+
+  .focus-settings {
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+    margin-top: 10px;
+  }
+
+  .focus-settings label {
+    gap: 4px;
+    font-size: .6rem;
+  }
+
+  .focus-settings select {
+    min-height: 40px;
+    padding: 7px 9px;
+    border-radius: 13px;
+    font-size: .76rem;
+  }
+
+  .start-focus-button {
+    min-height: 50px;
+    margin-top: 10px;
+    padding: 8px 12px;
+    border-radius: 16px;
+  }
+
+  .start-focus-button .start-icon {
+    width: 34px;
+    height: 34px;
+    border-radius: 12px;
+  }
+
+  .start-focus-button strong {
+    font-size: .86rem;
+  }
+
+  .start-focus-button small {
+    font-size: .64rem;
+  }
+
+  .today-summary-card,
+  .home-next-card,
+  .tasks-card,
+  .upcoming-card,
+  .goal-countdown-card,
+  .organizer-card {
+    padding: 13px;
+    border-radius: 20px;
+  }
+
+  .today-summary-card {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .today-summary-card .card-heading-row,
+  .today-summary-card .weekly-replay-trigger {
+    grid-column: 1 / -1;
+  }
+
+  .today-summary-card .weekly-replay-trigger {
+    min-height: 34px;
+    margin: 0;
+    padding: 6px 10px;
+    border-radius: 999px;
+    font-size: .65rem;
+  }
+
+  .today-summary-card .summary-stat {
+    min-width: 0;
+    gap: 4px;
+    padding: 7px 4px;
+    border-radius: 13px;
+    text-align: center;
+  }
+
+  .today-summary-card .summary-stat-icon {
+    display: none;
+  }
+
+  .today-summary-card .summary-stat span,
+  .today-summary-card .summary-stat strong {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .today-summary-card .summary-stat span {
+    font-size: .56rem;
+  }
+
+  .today-summary-card .summary-stat strong {
+    font-size: .7rem;
+  }
+
+  .card-heading-row {
+    margin-bottom: 9px;
+  }
+
+  .card-heading-row h2,
+  .organizer-card h2 {
+    font-size: 1.35rem;
+    line-height: 1.05;
+  }
+
+  .card-kicker {
+    font-size: .58rem;
+  }
+
+  #homePage .task-item:nth-child(n + 4),
+  #homePage .upcoming-item:nth-child(n + 4),
+  #homePage .goal-countdown-row:nth-child(n + 4) {
+    display: none;
+  }
+
+  #homePage .task-item,
+  #homePage .upcoming-item,
+  #homePage .timeline-item,
+  #homePage .goal-countdown-row {
+    min-height: 0;
+    padding-block: 7px;
+  }
+
+  .home-next-card .timeline {
+    max-height: 142px;
+    overflow-y: auto;
+    margin-top: 5px;
+  }
+
+  .home-next-card .timeline-item {
+    grid-template-columns: 36px 10px minmax(0, 1fr);
+  }
+
+  .timeline-time,
+  .timeline-content span,
+  .task-subject,
+  .upcoming-item small {
+    font-size: .62rem;
+  }
+
+  .timeline-content strong,
+  .task-item strong,
+  .upcoming-item strong {
+    font-size: .76rem;
+  }
+
+  .organizer-card {
+    gap: 10px;
+  }
+
+  .organizer-card p:not(.card-kicker) {
+    display: -webkit-box;
+    overflow: hidden;
+    font-size: .7rem;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+
+  .organizer-card .primary-button {
+    min-height: 42px;
+    padding: 9px 13px;
+    border-radius: 999px;
+    font-size: .74rem;
+  }
+
+  .schedule-spa-header,
+  .tasks-spa-header,
+  .calendar-spa-header,
+  .subjects-spa-header,
+  .progress-spa-header {
+    margin-bottom: 12px;
+  }
+
+  .schedule-spa-header h2,
+  .tasks-spa-header h2,
+  .calendar-spa-header h2,
+  .subjects-spa-header h2,
+  .progress-spa-header h2 {
+    font-size: 1.7rem;
+  }
+
+  .tasks-spa-header-actions {
+    min-height: 44px;
+  }
+
+  .tasks-auto-plan,
+  .tasks-spa-header-actions .primary-small-button {
+    height: 40px;
+    min-height: 40px;
+  }
+
+  .tasks-spa-toolbar {
+    gap: 7px;
+    padding: 8px;
+    margin-bottom: 9px;
+    border-radius: 20px;
+  }
+
+  .tasks-spa-toolbar input {
+    min-height: 42px;
+  }
+
+  .tasks-spa-filters button {
+    min-height: 34px;
+    padding: 7px 11px;
+    font-size: .68rem;
+  }
+
+  .tasks-spa-list {
+    gap: 8px;
+  }
+
+  .tasks-swipe-row,
+  .tasks-spa-item {
+    border-radius: 20px;
+  }
+
+  html[data-theme][data-mode] .tasks-swipe-row .tasks-spa-item {
+    min-height: 76px;
+    gap: 8px;
+    padding: 10px;
+  }
+
+  .tasks-spa-check {
+    width: 30px;
+    height: 30px;
+  }
+
+  .tasks-spa-item > div strong {
+    font-size: .84rem;
+  }
+
+  .tasks-spa-item > div small {
+    font-size: .62rem;
+  }
+
+  .tasks-spa-badge {
+    padding: 5px 8px;
+    font-size: .64rem;
+  }
+
+  .tasks-spa-start,
+  .tasks-spa-edit {
+    min-height: 34px;
+    padding: 6px 10px;
+    font-size: .68rem;
+  }
+
+  .calendar-spa-card {
+    padding: 7px;
+    border-radius: 18px;
+  }
+
+  .calendar-spa-month-head {
+    margin-bottom: 8px;
+  }
+
+  .calendar-spa-month-head h3 {
+    font-size: 1.35rem;
+  }
+
+  .calendar-spa-day {
+    min-height: 42px;
+    border-radius: 11px;
+  }
+
+  .subjects-spa-grid {
+    gap: 9px;
+  }
+
+  .subjects-spa-card {
+    gap: 10px;
+    padding: 13px;
+    border-radius: 18px;
+  }
+
+  .subjects-spa-icon {
+    width: 38px;
+    height: 38px;
+    border-radius: 12px;
+  }
+
+  .subjects-spa-card h3 {
+    font-size: 1.25rem;
+  }
+
+  .mobile-navigation,
+  html[data-theme="neutral"][data-mode="light"] .mobile-navigation {
+    right: 8px;
+    bottom: max(7px, env(safe-area-inset-bottom));
+    left: 8px;
+    height: 60px;
+    padding: 4px 8px;
+    border-radius: 22px;
+  }
+
+  .mobile-nav-item {
+    min-height: 44px;
+    gap: 1px;
+  }
+
+  .mobile-nav-item span {
+    font-size: 17px;
+  }
+
+  .mobile-nav-item small {
+    font-size: 7px;
+  }
+
+  .mobile-main-add-button {
+    width: 44px;
+    height: 44px;
+    min-height: 44px;
+    border-radius: 15px;
+  }
+}
+
+/* Final compact pass for every phone view. */
+@media (max-width: 430px) {
+  .schedule-spa-header,
+  .calendar-spa-header,
+  .subjects-spa-header,
+  .progress-spa-header {
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .schedule-spa-header p:not(.eyebrow),
+  .subjects-spa-header p:not(.eyebrow),
+  .progress-spa-header p:not(.eyebrow) {
+    display: -webkit-box;
+    overflow: hidden;
+    margin-top: 4px;
+    font-size: .68rem;
+    line-height: 1.25;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 1;
+  }
+
+  .schedule-spa-week {
+    grid-template-columns: repeat(7, minmax(215px, 78vw));
+    gap: 8px;
+    padding-bottom: 8px;
+  }
+
+  .schedule-spa-day {
+    min-height: 255px;
+    padding: 10px;
+    border-radius: 18px;
+  }
+
+  .schedule-spa-day-head {
+    padding: 2px 1px 9px;
+  }
+
+  .schedule-spa-item {
+    grid-template-columns: 43px minmax(0, 1fr);
+    gap: 7px;
+    margin-bottom: 7px;
+    padding: 9px 8px;
+    border-radius: 12px;
+  }
+
+  .schedule-spa-item strong {
+    font-size: .78rem;
+  }
+
+  .calendar-spa-details {
+    padding: 11px;
+  }
+
+  .calendar-spa-detail-list {
+    gap: 6px;
+  }
+
+  .calendar-spa-detail-item {
+    grid-template-columns: 48px minmax(0, 1fr);
+    gap: 7px;
+    padding: 9px;
+    border-radius: 12px;
+  }
+
+  .subject-spa-hero {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 10px;
+    padding: 15px;
+    border-radius: 20px;
+  }
+
+  .subject-spa-hero h2 {
+    font-size: clamp(1.85rem, 9vw, 2.2rem);
+  }
+
+  .subject-spa-hero p:not(.eyebrow) {
+    margin-top: 3px;
+    font-size: .72rem;
+  }
+
+  .subject-spa-hero > .primary-small-button,
+  .admission-hero-actions .primary-small-button,
+  .admission-next-card .primary-small-button {
+    width: auto;
+    min-width: 0;
+    height: 40px;
+    min-height: 40px;
+    padding: 0 12px;
+    border-radius: 999px;
+    font-size: .68rem;
+    white-space: nowrap;
+  }
+
+  .subject-spa-stats {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 6px;
+    margin: 8px 0;
+  }
+
+  .subject-spa-stats article {
+    min-width: 0;
+    padding: 9px 7px;
+    border-radius: 15px;
+  }
+
+  .subject-spa-stats span {
+    overflow: hidden;
+    font-size: .56rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .subject-spa-stats strong {
+    margin-top: 2px;
+    font-size: 1.05rem;
+  }
+
+  .subject-spa-columns {
+    gap: 8px;
+  }
+
+  .subject-spa-panel {
+    padding: 12px;
+    border-radius: 18px;
+  }
+
+  .subject-spa-panel h3 {
+    margin-bottom: 8px;
+    font-size: 1.22rem;
+  }
+
+  .subject-spa-panel-head button {
+    width: 36px;
+    height: 36px;
+    min-height: 36px;
+  }
+
+  .subject-spa-row {
+    grid-template-columns: 28px minmax(0, 1fr);
+    gap: 7px;
+    padding: 8px 0;
+  }
+
+  .subject-spa-row > span {
+    min-width: 0;
+  }
+
+  .subject-spa-row span strong,
+  .subject-spa-row span small {
+    display: block;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .subject-spa-row span strong {
+    font-size: .76rem;
+  }
+
+  .subject-spa-row span small {
+    margin-top: 2px;
+    font-size: .6rem;
+  }
+
+  html[data-mode="dark"] .subjects-spa-back {
+    color: var(--primary);
+  }
+
+  .grades-spa-summary {
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+
+  .grades-spa-average {
+    min-height: 0;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    align-items: center;
+    gap: 2px 10px;
+    padding: 12px 14px;
+    border-radius: 18px;
+  }
+
+  .grades-spa-average strong {
+    grid-column: 2;
+    grid-row: 1 / 3;
+    font-size: 2.55rem;
+  }
+
+  .grades-spa-average small {
+    margin-top: 0;
+    font-size: .62rem;
+  }
+
+  .grades-spa-subjects {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 6px;
+    padding: 8px;
+    border-radius: 18px;
+  }
+
+  .grades-spa-subjects a {
+    min-width: 0;
+    padding: 8px;
+    border-radius: 10px;
+  }
+
+  .grades-spa-subjects a strong,
+  .grades-spa-subjects a b {
+    overflow: hidden;
+    font-size: .7rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .grades-spa-subjects a small {
+    font-size: .58rem;
+  }
+
+  .progress-spa-panel {
+    padding: 12px;
+    border-radius: 18px;
+  }
+
+  .progress-spa-panel > h3 {
+    margin-bottom: 8px;
+    font-size: 1.25rem;
+  }
+
+  .grades-spa-row {
+    grid-template-columns: 34px minmax(0, 1fr) auto;
+    gap: 8px;
+    padding: 8px 6px;
+  }
+
+  .grades-spa-row > b {
+    width: 32px;
+    height: 32px;
+  }
+
+  .grades-spa-row time {
+    grid-column: auto;
+    font-size: .6rem;
+  }
+
+  #admissionViewRoot .progress-spa-header {
+    align-items: flex-start;
+    flex-direction: row;
+  }
+
+  #admissionViewRoot .progress-spa-header .primary-small-button {
+    width: 40px;
+    height: 40px;
+    min-height: 40px;
+    flex: 0 0 40px;
+  }
+
+  .admission-command-hero {
+    min-height: 0;
+    padding: 16px;
+  }
+
+  .admission-command-copy h3 {
+    margin: 4px 0 0;
+    font-size: 1.55rem;
+    line-height: 1.04;
+  }
+
+  .admission-command-copy > p:last-of-type {
+    display: -webkit-box;
+    overflow: hidden;
+    margin-top: 7px;
+    font-size: .7rem;
+    line-height: 1.3;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+  }
+
+  .admission-hero-actions {
+    align-items: center;
+    flex-direction: row;
+    gap: 8px;
+    margin-top: 12px;
+  }
+
+  .admission-hero-actions .text-button {
+    width: auto;
+    min-height: 40px;
+    padding-inline: 8px;
+    font-size: .65rem;
+  }
+
+  .admission-command-grid {
+    gap: 8px;
+  }
+
+  .admission-next-card {
+    min-height: 0;
+    padding: 14px;
+  }
+
+  .admission-next-card h3 {
+    margin: 4px 0 6px;
+    font-size: 1.42rem;
+  }
+
+  .admission-next-card > p:not(.eyebrow) {
+    margin: 0 0 9px;
+    font-size: .68rem;
+    line-height: 1.3;
+  }
+
+  .admission-panel-heading {
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+
+  .admission-panel-heading > span {
+    padding: 5px 8px;
+    font-size: .62rem;
+  }
+
+  .admission-milestone-list {
+    gap: 3px;
+  }
+
+  .admission-milestone,
+  .admission-date-row {
+    padding-block: 8px;
+  }
+
+  .admission-date-row {
+    grid-template-columns: 50px minmax(0, 1fr);
+    gap: 8px;
+  }
+
+  .account-settings-card {
+    width: calc(100vw - 16px);
+    max-height: calc(100dvh - 16px - env(safe-area-inset-top));
+    padding: 14px;
+    border-radius: 24px;
+  }
+
+  .account-settings-card form {
+    gap: 10px;
+  }
+
+  .settings-section {
+    gap: 9px;
+    padding: 11px;
+    border-radius: 16px;
+  }
+
+  .settings-field {
+    gap: 4px;
+    font-size: .65rem;
+  }
+
+  .settings-field input {
+    min-height: 42px;
+    padding-inline: 11px;
+    border-radius: 12px;
+  }
+
+  .theme-choice-grid {
+    gap: 6px;
+  }
+
+  .theme-choice {
+    gap: 3px;
+    padding: 7px;
+    border-radius: 13px;
+  }
+
+  .theme-preview {
+    height: 38px;
+    padding: 6px;
+  }
+
+  .theme-preview i {
+    height: 13px;
+  }
+
+  .theme-preview i:nth-child(2) {
+    height: 23px;
+  }
+
+  .theme-preview i:nth-child(3) {
+    height: 18px;
+  }
+
+  .settings-appearance-row,
+  .settings-session-row {
+    grid-template-columns: minmax(0, 1fr) auto;
+  }
+
+  .mode-control,
+  .logout-button {
+    width: auto;
+  }
+
+  .logout-button {
+    min-height: 40px;
+    padding-inline: 11px;
+    font-size: .65rem;
+  }
+
+  .account-settings-card .form-actions {
+    flex-direction: row;
+  }
+
+  .schedule-spa-dialog,
+  .tasks-spa-dialog,
+  .calendar-spa-dialog,
+  .subjects-spa-dialog,
+  .progress-spa-dialog {
+    width: calc(100vw - 16px);
+    max-height: calc(100dvh - 16px);
+    overflow-y: auto;
+    border-radius: 22px;
+  }
+
+  .schedule-spa-dialog form,
+  .tasks-spa-dialog form,
+  .calendar-spa-dialog form,
+  .subjects-spa-dialog form,
+  .progress-spa-dialog form {
+    gap: 10px;
+    padding: 14px;
+  }
+
+  .schedule-spa-dialog h3,
+  .tasks-spa-dialog h3,
+  .calendar-spa-dialog h3,
+  .subjects-spa-dialog h3,
+  .progress-spa-dialog h3 {
+    font-size: 1.45rem;
+  }
+
+  .schedule-spa-fields,
+  .tasks-spa-fields,
+  .calendar-spa-fields,
+  .subjects-spa-fields,
+  .progress-spa-fields {
+    gap: 8px;
+  }
+
+  .schedule-spa-dialog input,
+  .schedule-spa-dialog select,
+  .schedule-spa-dialog textarea,
+  .tasks-spa-dialog input,
+  .tasks-spa-dialog select,
+  .tasks-spa-dialog textarea,
+  .calendar-spa-dialog input,
+  .calendar-spa-dialog select,
+  .calendar-spa-dialog textarea,
+  .subjects-spa-dialog input,
+  .progress-spa-dialog input,
+  .progress-spa-dialog select,
+  .progress-spa-dialog textarea {
+    min-height: 42px;
+    padding: 9px 11px;
+    border-radius: 12px;
+  }
+
+  .schedule-spa-dialog textarea,
+  .tasks-spa-dialog textarea,
+  .calendar-spa-dialog textarea,
+  .progress-spa-dialog textarea {
+    min-height: 68px;
+  }
+
+  .notification-panel {
+    top: 8px;
+    right: 8px;
+    width: calc(100vw - 16px);
+    max-height: calc(100dvh - 80px);
+    padding: 13px;
+    border-radius: 20px;
+  }
+
+  .notification-panel-header h2 {
+    font-size: 1.55rem;
+  }
+
+  .push-settings-card,
+  .notification-item {
+    padding: 10px;
+    border-radius: 13px;
+  }
+
+  .floating-timer-body {
+    padding: 14px;
+  }
+
+  .floating-timer-body > strong {
+    margin: 9px 0 7px;
+    font-size: 40px;
+  }
+
+  .floating-timer-actions {
+    margin-top: 11px;
+  }
+}

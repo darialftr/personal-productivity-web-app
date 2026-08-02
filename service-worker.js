@@ -1,6 +1,6 @@
 "use strict";
 
-const CACHE_NAME = "itera-shell-v42";
+const CACHE_NAME = "itera-shell-v44";
 const APP_SHELL = [
   "./",
   "./index.html",
