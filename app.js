@@ -63,6 +63,7 @@ let focusAudioContext = null;
 let focusAudioSource = null;
 let focusAudioGain = null;
 let activeSoundscape = "none";
+let pendingReviewSuggestion = null;
 const appLaunchStartedAt = Date.now();
 
 let currentUser = null;
@@ -1313,6 +1314,7 @@ function startFocusSession() {
 
   updateFocusTimerDisplay();
   showFloatingTimer(subject, matchingTask?.title || "Studiu individual");
+  void playFocusCue("start");
   if (activeSoundscape !== "none") void setFocusSoundscape(activeSoundscape);
 
   focusTimerInterval = setInterval(() => {
@@ -1325,7 +1327,7 @@ function startFocusSession() {
     updateFocusTimerDisplay();
 
     if (focusSecondsRemaining <= 0) {
-      finishFocusSession();
+      finishFocusSession({ reason: "elapsed" });
     }
   }, 1000);
 }
@@ -1346,6 +1348,7 @@ function startRecommendedFocusSession() {
 
 function toggleFocusPause() {
   focusPaused = !focusPaused;
+  void playFocusCue(focusPaused ? "pause" : "resume");
 
   document.getElementById(
     "pauseFocusButton"
@@ -1363,7 +1366,11 @@ function toggleFocusPause() {
     ? "Continuă"
     : "Pauză";
   if (focusAudioGain) {
-    focusAudioGain.gain.setTargetAtTime(focusPaused ? 0 : 0.08, focusAudioContext.currentTime, 0.08);
+    focusAudioGain.gain.setTargetAtTime(
+      focusPaused ? 0 : getSoundscapeSettings(activeSoundscape).volume,
+      focusAudioContext.currentTime,
+      0.08
+    );
   }
   emitFocusTimerState();
 }
@@ -1394,8 +1401,9 @@ function updateFocusTimerDisplay() {
     `${String(minutes).padStart(2, "0")}:` +
     `${String(seconds).padStart(2, "0")}`;
 
-  document.getElementById("floatingTimerValue").textContent =
-    `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+  const timerText = `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+  document.getElementById("floatingTimerValue").textContent = timerText;
+  document.getElementById("focusIslandValue").textContent = timerText;
   const progress = focusInitialSeconds
     ? ((focusInitialSeconds - focusSecondsRemaining) / focusInitialSeconds) * 100
     : 0;
@@ -1487,10 +1495,11 @@ async function saveCurrentFocusSession() {
   return studiedMinutes;
 }
 
-async function finishFocusSession() {
+async function finishFocusSession({ reason = "manual" } = {}) {
   clearInterval(focusTimerInterval);
   focusPaused = true;
   stopFocusSoundscape();
+  void playFocusCue(reason === "elapsed" ? "complete" : "stop");
 
   if (focusTaskId) {
     document.getElementById("taskCompletionTitle").textContent =
@@ -1512,6 +1521,7 @@ async function finishFocusSession() {
     `Sesiunea de ${studiedMinutes} min a fost salvată.`,
     "✿"
   );
+  offerReviewSuggestion(studiedMinutes);
 }
 
 function hydrateDailyEnergy() {
@@ -2894,12 +2904,24 @@ function initializeFloatingTimer() {
   let dragOffsetY = 0;
 
   document.getElementById("floatingPauseButton").addEventListener("click", toggleFocusPause);
-  document.getElementById("floatingFinishButton").addEventListener("click", finishFocusSession);
+  document.getElementById("floatingFinishButton").addEventListener("click", () => {
+    finishFocusSession({ reason: "manual" });
+  });
   document.getElementById("minimizeFloatingTimer").addEventListener("click", () => {
-    timer.classList.toggle("minimized");
+    const minimized = timer.classList.toggle("minimized");
+    const button = document.getElementById("minimizeFloatingTimer");
+    button.textContent = minimized ? "+" : "−";
+    button.setAttribute("aria-label", minimized ? "Extinde timerul" : "Minimizează timerul");
+    document.getElementById("focusIslandSummary").setAttribute("aria-hidden", String(!minimized));
+    if (minimized && window.matchMedia("(max-width: 760px)").matches) {
+      timer.style.removeProperty("left");
+      timer.style.removeProperty("right");
+      timer.style.removeProperty("top");
+      timer.style.removeProperty("bottom");
+    }
   });
   document.getElementById("closeFloatingTimer").addEventListener("click", () => {
-    finishFocusSession();
+    finishFocusSession({ reason: "manual" });
   });
   document.getElementById("taskCompletedYes").addEventListener("click", completeFocusedTask);
   document.getElementById("taskCompletedNo").addEventListener("click", () => {
@@ -2919,6 +2941,11 @@ function initializeFloatingTimer() {
       scheduleTaskContinuation(Number(button.dataset.resumeMinutes));
     });
   });
+  document.getElementById("dismissReviewSuggestion")?.addEventListener("click", () => {
+    pendingReviewSuggestion = null;
+    closeModal("reviewSuggestionModal");
+  });
+  document.getElementById("scheduleReviewSuggestion")?.addEventListener("click", scheduleSuggestedReview);
   activeSoundscape = currentUser?.user_metadata?.itera_soundscape || "none";
   syncSoundscapeButtons();
   document.querySelectorAll("[data-soundscape]").forEach((button) => {
@@ -2927,6 +2954,7 @@ function initializeFloatingTimer() {
 
   dragHandle.addEventListener("pointerdown", (event) => {
     if (event.target.closest("button")) return;
+    if (timer.classList.contains("minimized") && window.matchMedia("(max-width: 760px)").matches) return;
     const rect = timer.getBoundingClientRect();
     dragOffsetX = event.clientX - rect.left;
     dragOffsetY = event.clientY - rect.top;
@@ -3028,12 +3056,71 @@ function stopFocusSoundscape() {
   focusAudioGain = null;
 }
 
+async function playFocusCue(kind) {
+  if (activeSoundscape === "mute") return;
+  const AudioContext = window.AudioContext || window.webkitAudioContext;
+  if (!AudioContext) return;
+
+  try {
+    focusAudioContext ||= new AudioContext();
+    await focusAudioContext.resume();
+    const context = focusAudioContext;
+    const cueGain = context.createGain();
+    const now = context.currentTime;
+    const cueMap = {
+      start: [523.25, 659.25],
+      resume: [440, 554.37],
+      pause: [440],
+      stop: [440, 349.23],
+      complete: [523.25, 659.25, 783.99]
+    };
+    const frequencies = cueMap[kind] || cueMap.start;
+    const step = kind === "complete" ? 0.16 : 0.12;
+    const noteLength = kind === "complete" ? 0.34 : 0.24;
+
+    cueGain.gain.setValueAtTime(1, now);
+    cueGain.connect(context.destination);
+
+    frequencies.forEach((frequency, index) => {
+      const startAt = now + index * step;
+      const oscillator = context.createOscillator();
+      const noteGain = context.createGain();
+      oscillator.type = "sine";
+      oscillator.frequency.setValueAtTime(frequency, startAt);
+      noteGain.gain.setValueAtTime(0.0001, startAt);
+      noteGain.gain.exponentialRampToValueAtTime(0.045, startAt + 0.025);
+      noteGain.gain.exponentialRampToValueAtTime(0.0001, startAt + noteLength);
+      oscillator.connect(noteGain).connect(cueGain);
+      oscillator.start(startAt);
+      oscillator.stop(startAt + noteLength + 0.02);
+    });
+
+    window.setTimeout(() => cueGain.disconnect(), 1100);
+  } catch (error) {
+    console.debug("Itera timer cue unavailable", error);
+  }
+}
+
+const focusSoundscapeSettings = Object.freeze({
+  rain: { filter: "highpass", frequency: 950, q: 0.35, volume: 0.055 },
+  cafe: { filter: "bandpass", frequency: 520, q: 0.7, volume: 0.065 },
+  library: { filter: "lowpass", frequency: 360, q: 0.4, volume: 0.038 },
+  fireplace: { filter: "bandpass", frequency: 720, q: 0.5, volume: 0.052 },
+  waves: { filter: "lowpass", frequency: 880, q: 0.35, volume: 0.06 },
+  brown: { filter: "lowpass", frequency: 430, q: 0.45, volume: 0.07 }
+});
+
+function getSoundscapeSettings(kind) {
+  return focusSoundscapeSettings[kind] || focusSoundscapeSettings.rain;
+}
+
 async function setFocusSoundscape(kind, persist = false) {
-  activeSoundscape = ["rain", "cafe"].includes(kind) ? kind : "none";
+  const soundscapeExists = Object.prototype.hasOwnProperty.call(focusSoundscapeSettings, kind);
+  activeSoundscape = soundscapeExists || ["none", "mute"].includes(kind) ? kind : "none";
   syncSoundscapeButtons();
   stopFocusSoundscape();
 
-  if (activeSoundscape !== "none") {
+  if (!["none", "mute"].includes(activeSoundscape)) {
     const AudioContext = window.AudioContext || window.webkitAudioContext;
     if (!AudioContext) {
       activeSoundscape = "none";
@@ -3042,15 +3129,45 @@ async function setFocusSoundscape(kind, persist = false) {
     }
     focusAudioContext ||= new AudioContext();
     await focusAudioContext.resume();
-    const seconds = 4;
+    const seconds = 6;
     const buffer = focusAudioContext.createBuffer(2, focusAudioContext.sampleRate * seconds, focusAudioContext.sampleRate);
     for (let channel = 0; channel < buffer.numberOfChannels; channel += 1) {
       const data = buffer.getChannelData(channel);
       let smooth = 0;
       for (let index = 0; index < data.length; index += 1) {
         const white = Math.random() * 2 - 1;
-        smooth = activeSoundscape === "rain" ? smooth * 0.82 + white * 0.18 : smooth * 0.96 + white * 0.04;
-        data[index] = smooth * (activeSoundscape === "rain" ? 0.7 : 1.2);
+        const time = index / focusAudioContext.sampleRate;
+        if (activeSoundscape === "rain") {
+          smooth = smooth * 0.72 + white * 0.28;
+          const distantDrop = Math.sin(time * 17.3 + channel * 1.7) > 0.998
+            ? Math.sin(time * 2600) * 0.16
+            : 0;
+          data[index] = smooth * 0.56 + distantDrop;
+        } else if (activeSoundscape === "cafe") {
+          smooth = smooth * 0.985 + white * 0.015;
+          const roomPulse = 0.62 + Math.sin(time * 1.7 + channel) * 0.16;
+          const softMurmur = Math.sin(time * 92 + channel * 0.8) * 0.018;
+          const cupClink = Math.sin(time * 9.1 + channel * 2.3) > 0.9995
+            ? Math.sin(time * 1840) * 0.12
+            : 0;
+          data[index] = smooth * roomPulse * 1.18 + softMurmur + cupClink;
+        } else if (activeSoundscape === "library") {
+          smooth = smooth * 0.994 + white * 0.006;
+          const quietRoom = Math.sin(time * 58 + channel) * 0.006;
+          const distantPage = Math.sin(time * 2.2 + channel * 0.6) > 0.9997 ? white * 0.08 : 0;
+          data[index] = smooth * 1.25 + quietRoom + distantPage;
+        } else if (activeSoundscape === "fireplace") {
+          smooth = smooth * 0.94 + white * 0.06;
+          const crackle = Math.random() > 0.9992 ? white * 0.58 : 0;
+          data[index] = smooth * 0.6 + crackle;
+        } else if (activeSoundscape === "waves") {
+          smooth = smooth * 0.84 + white * 0.16;
+          const swell = (Math.sin(time * 0.72 + channel * 0.35) + 1) / 2;
+          data[index] = smooth * (0.12 + swell * 0.58);
+        } else {
+          smooth = smooth * 0.992 + white * 0.008;
+          data[index] = smooth * 2.6;
+        }
       }
     }
     const source = focusAudioContext.createBufferSource();
@@ -3058,9 +3175,11 @@ async function setFocusSoundscape(kind, persist = false) {
     const gain = focusAudioContext.createGain();
     source.buffer = buffer;
     source.loop = true;
-    filter.type = activeSoundscape === "rain" ? "highpass" : "lowpass";
-    filter.frequency.value = activeSoundscape === "rain" ? 650 : 900;
-    gain.gain.value = focusPaused ? 0 : 0.08;
+    const settings = getSoundscapeSettings(activeSoundscape);
+    filter.type = settings.filter;
+    filter.frequency.value = settings.frequency;
+    filter.Q.value = settings.q;
+    gain.gain.value = focusPaused ? 0 : settings.volume;
     source.connect(filter).connect(gain).connect(focusAudioContext.destination);
     source.start();
     focusAudioSource = source;
@@ -3084,6 +3203,10 @@ function showFloatingTimer(subject, taskTitle) {
   timer.setAttribute("aria-hidden", "false");
   document.getElementById("floatingTimerSubject").textContent = subject;
   document.getElementById("floatingTimerTask").textContent = taskTitle;
+  document.getElementById("focusIslandSubject").textContent = subject;
+  document.getElementById("focusIslandSummary").setAttribute("aria-hidden", "true");
+  document.getElementById("minimizeFloatingTimer").textContent = "−";
+  document.getElementById("minimizeFloatingTimer").setAttribute("aria-label", "Minimizează timerul");
   document.getElementById("floatingPauseButton").textContent = "Pauză";
   emitFocusTimerState();
 }
@@ -3100,13 +3223,14 @@ function startTaskFocus(task, subject) {
   focusSessionSaved = false;
   updateFocusTimerDisplay();
   showFloatingTimer(subject?.name || "Fără materie", task.title);
+  void playFocusCue("start");
   if (activeSoundscape !== "none") void setFocusSoundscape(activeSoundscape);
 
   focusTimerInterval = setInterval(() => {
     if (focusPaused) return;
     focusSecondsRemaining -= 1;
     updateFocusTimerDisplay();
-    if (focusSecondsRemaining <= 0) finishFocusSession();
+    if (focusSecondsRemaining <= 0) finishFocusSession({ reason: "elapsed" });
   }, 1000);
 }
 
@@ -3131,6 +3255,88 @@ async function completeFocusedTask() {
   await loadHomeData();
   renderAll();
   showToast("Task finalizat și timpul salvat.", "✓");
+  offerReviewSuggestion(studiedMinutes);
+}
+
+function offerReviewSuggestion(studiedMinutes) {
+  if (!currentUser || !focusSubjectId || Number(studiedMinutes) < 5) return;
+  const subject = subjects.find((item) => item.id === focusSubjectId);
+  if (!subject) return;
+
+  const reviewDate = new Date();
+  reviewDate.setDate(reviewDate.getDate() + 3);
+  const date = formatDateForInput(reviewDate);
+  const preferredStart = [0, 6].includes(reviewDate.getDay()) ? 11 * 60 : 17 * 60;
+  const availableSlot = findAvailableSlot(
+    preferredStart,
+    15,
+    mergeIntervals(getDayIntervals(date)),
+    22 * 60
+  );
+  const fallbackSlot = availableSlot === null
+    ? findAvailableSlot(8 * 60, 15, mergeIntervals(getDayIntervals(date)), 22 * 60)
+    : null;
+  const time = formatClockMinutes(availableSlot ?? fallbackSlot ?? 18 * 60);
+
+  pendingReviewSuggestion = {
+    subjectId: subject.id,
+    subjectName: subject.name,
+    date,
+    time
+  };
+  document.getElementById("reviewSuggestionSubject").textContent = subject.name;
+  document.getElementById("reviewSuggestionDate").textContent =
+    `${formatReadableDate(date)} · ${time}`;
+  openModal("reviewSuggestionModal");
+}
+
+async function scheduleSuggestedReview() {
+  if (!pendingReviewSuggestion || !currentUser) return;
+  const suggestion = { ...pendingReviewSuggestion };
+  const button = document.getElementById("scheduleReviewSuggestion");
+  const duplicate = tasks.find((task) =>
+    !task.completed &&
+    task.subject_id === suggestion.subjectId &&
+    task.deadline === suggestion.date &&
+    normalizeSearchText(task.title).startsWith("recapitulare")
+  );
+
+  if (duplicate) {
+    pendingReviewSuggestion = null;
+    closeModal("reviewSuggestionModal");
+    showToast("Recapitularea este deja în planul tău.", "✓");
+    return;
+  }
+
+  button.disabled = true;
+  button.textContent = "Se programează…";
+  const { data, error } = await supabaseClient.from("tasks").insert({
+    user_id: currentUser.id,
+    subject_id: suggestion.subjectId,
+    title: `Recapitulare · ${suggestion.subjectName}`,
+    task_type: "homework",
+    deadline_date: suggestion.date,
+    deadline_time: suggestion.time,
+    priority: "low",
+    estimated_minutes: 15,
+    notes: "Recapitulare recomandată automat după o sesiune de studiu.",
+    completed: false,
+    progress: 0
+  }).select("*").single();
+
+  button.disabled = false;
+  button.textContent = "Programează";
+  if (error) {
+    showToast("Recapitularea nu a putut fi programată.", "!");
+    return;
+  }
+
+  tasks.unshift(normalizeHomeTask(data));
+  await globalThis.IteraPush?.scheduleTaskReminders(data);
+  pendingReviewSuggestion = null;
+  closeModal("reviewSuggestionModal");
+  renderAll();
+  showToast(`Recapitulare programată ${formatReadableDate(suggestion.date)}, la ${suggestion.time}.`, "✓");
 }
 
 async function scheduleTaskContinuation(minutes) {

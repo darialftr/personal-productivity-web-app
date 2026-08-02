@@ -626,7 +626,11 @@
   <section class="floating-timer" id="floatingTimer" aria-hidden="true">
     <header class="floating-timer-drag" id="floatingTimerDrag">
       <span class="focus-status-dot"></span>
-      <span>Nu te distrage</span>
+      <span class="floating-timer-label">Nu te distrage</span>
+      <span class="focus-island-summary" id="focusIslandSummary" aria-hidden="true">
+        <strong id="focusIslandSubject">Matematică</strong>
+        <small id="focusIslandValue">45:00</small>
+      </span>
       <div>
         <button id="minimizeFloatingTimer" aria-label="Minimizează">−</button>
         <button id="closeFloatingTimer" aria-label="Închide">×</button>
@@ -643,9 +647,14 @@
         <button class="primary-button" id="floatingFinishButton">Finalizează</button>
       </div>
       <div class="soundscape-picker" id="floatingSoundscape" aria-label="Sunet de focus">
-        <button type="button" data-soundscape="none" class="active">Liniște</button>
+        <button type="button" data-soundscape="none" class="active">Doar timer</button>
+        <button type="button" data-soundscape="mute">Fără sunete</button>
         <button type="button" data-soundscape="rain">Ploaie</button>
         <button type="button" data-soundscape="cafe">Cafenea</button>
+        <button type="button" data-soundscape="library">Bibliotecă</button>
+        <button type="button" data-soundscape="fireplace">Șemineu</button>
+        <button type="button" data-soundscape="waves">Valuri</button>
+        <button type="button" data-soundscape="brown">Brown noise</button>
       </div>
     </div>
   </section>
@@ -670,6 +679,25 @@
         <button data-resume-minutes="30">Peste 30 min</button>
         <button data-resume-minutes="60">Peste o oră</button>
         <button data-resume-minutes="-1">Mai târziu</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- AUTOMATIC REVIEW SUGGESTION -->
+  <div class="modal-overlay" id="reviewSuggestionModal" aria-hidden="true">
+    <div class="modal-card review-suggestion-card">
+      <span class="review-suggestion-symbol" aria-hidden="true">↻</span>
+      <p class="card-kicker">MEMORIE PE TERMEN LUNG</p>
+      <h2>Fixăm ce ai învățat?</h2>
+      <p>O recapitulare scurtă peste 3 zile te ajută să păstrezi informația.</p>
+      <div class="review-suggestion-plan">
+        <span id="reviewSuggestionSubject">Matematică</span>
+        <strong id="reviewSuggestionDate">Miercuri · 17:00</strong>
+        <small>15 minute</small>
+      </div>
+      <div class="review-suggestion-actions">
+        <button class="secondary-button" id="dismissReviewSuggestion" type="button">Nu acum</button>
+        <button class="primary-button" id="scheduleReviewSuggestion" type="button">Programează</button>
       </div>
     </div>
   </div>

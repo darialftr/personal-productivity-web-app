@@ -2909,7 +2909,7 @@ html[data-mode="dark"] :is(.admission-next-card, .admission-pathway, .admission-
 .quick-capture>label{display:block;margin-bottom:8px;color:var(--text);font-size:.8rem;font-weight:750}.quick-capture>small{display:block;margin-top:7px;color:var(--muted);font-size:.7rem;line-height:1.45}
 .quick-capture-control{display:grid;grid-template-columns:1fr auto auto;gap:7px}.quick-capture-control input{min-width:0}.quick-capture-control button{width:44px;min-height:44px;border:0;border-radius:13px;color:#fff;background:var(--primary);font-size:1.05rem}.quick-capture-control button:first-of-type{color:var(--primary);background:var(--surface);border:1px solid var(--border)}
 .quick-capture-control button.listening{animation:quick-capture-pulse 1s infinite}@keyframes quick-capture-pulse{50%{transform:scale(.92);box-shadow:0 0 0 7px var(--primary-soft)}}
-.soundscape-picker{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:10px}.soundscape-picker button{min-height:34px;padding:6px 8px;border:1px solid var(--border);border-radius:11px;color:var(--muted);background:var(--surface);font:inherit;font-size:.7rem;font-weight:700}.soundscape-picker button.active{color:var(--primary);border-color:var(--primary);background:var(--primary-soft)}
+.soundscape-picker{display:flex;width:100%;gap:6px;margin-top:10px;overflow-x:auto;padding:2px 1px 5px;scroll-snap-type:x proximity;scrollbar-width:none}.soundscape-picker::-webkit-scrollbar{display:none}.soundscape-picker button{min-height:34px;flex:0 0 auto;padding:6px 10px;border:1px solid var(--border);border-radius:999px;color:var(--muted);background:var(--surface);font:inherit;font-size:.7rem;font-weight:700;scroll-snap-align:start}.soundscape-picker button.active{color:var(--primary);border-color:var(--primary);background:var(--primary-soft)}
 .smart-resume-option{grid-column:1/-1;display:flex!important;align-items:center;justify-content:space-between;gap:12px;text-align:left;color:var(--text)!important;border-color:var(--primary)!important;background:var(--primary-soft)!important}.smart-resume-option span{font-size:.68rem;color:var(--muted)}
 .weekly-replay-card,.exam-mode-card,.recovery-modal-card{width:min(720px,calc(100vw - 30px))}.modal-intro{margin:-4px 0 18px;color:var(--muted);line-height:1.6}
 .exam-subject-picker{margin:0;padding:14px;border:1px solid var(--border);border-radius:16px}.exam-subject-picker legend{padding:0 6px;color:var(--muted);font-size:.75rem;font-weight:750}.exam-subject-picker>div{display:flex;flex-wrap:wrap;gap:8px}.exam-subject-picker label{position:relative}.exam-subject-picker input{position:absolute;opacity:0;pointer-events:none}.exam-subject-picker span{display:block;padding:9px 12px;border:1px solid var(--border);border-radius:999px;color:var(--muted);background:var(--surface);font-size:.78rem;font-weight:700}.exam-subject-picker input:checked+span{color:var(--primary);border-color:var(--primary);background:var(--primary-soft)}
@@ -6992,5 +6992,171 @@ html[data-mode="dark"] .admission-next-card {
 
   .floating-timer-actions {
     margin-top: 11px;
+  }
+}
+
+/* Focus Island and spaced-review prompt. */
+.focus-island-summary {
+  display: none;
+}
+
+.review-suggestion-card {
+  width: min(440px, 100%);
+  display: grid;
+  justify-items: center;
+  text-align: center;
+}
+
+.review-suggestion-symbol {
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  margin-bottom: 12px;
+  border-radius: 16px;
+  color: var(--primary-dark);
+  background: var(--primary-soft);
+  font-size: 1.45rem;
+  font-weight: 800;
+}
+
+.review-suggestion-card h2 {
+  margin: 5px 0 8px;
+  font-family: "DM Serif Display", serif;
+  font-size: 2rem;
+  font-weight: 400;
+}
+
+.review-suggestion-card > p:not(.card-kicker) {
+  max-width: 340px;
+  margin: 0;
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.review-suggestion-plan {
+  width: 100%;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 3px 12px;
+  margin: 20px 0;
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 17px;
+  background: color-mix(in srgb, var(--primary-soft) 48%, var(--surface));
+  text-align: left;
+}
+
+.review-suggestion-plan span,
+.review-suggestion-plan small {
+  overflow: hidden;
+  color: var(--muted);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.review-suggestion-plan strong {
+  grid-column: 1;
+}
+
+.review-suggestion-plan small {
+  grid-column: 2;
+  grid-row: 1 / 3;
+}
+
+.review-suggestion-actions {
+  width: 100%;
+  display: grid;
+  grid-template-columns: 1fr 1.25fr;
+  gap: 8px;
+}
+
+@media (max-width: 760px) {
+  .floating-timer.minimized,
+  .floating-timer.minimized.visible {
+    top: max(9px, env(safe-area-inset-top));
+    right: auto;
+    bottom: auto;
+    left: 50%;
+    width: min(318px, calc(100vw - 24px));
+    border-radius: 999px;
+    transform: translateX(-50%);
+    box-shadow: 0 12px 34px color-mix(in srgb, var(--text) 18%, transparent);
+  }
+
+  .floating-timer.minimized .floating-timer-drag {
+    min-height: 50px;
+    gap: 9px;
+    padding: 6px 7px 6px 13px;
+    border-bottom: 0;
+    border-radius: inherit;
+    cursor: default;
+  }
+
+  .floating-timer.minimized .floating-timer-label,
+  .floating-timer.minimized #closeFloatingTimer {
+    display: none;
+  }
+
+  .floating-timer.minimized .focus-island-summary {
+    min-width: 0;
+    display: flex;
+    flex: 1;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    text-transform: none;
+    letter-spacing: 0;
+  }
+
+  .focus-island-summary strong {
+    overflow: hidden;
+    color: var(--text);
+    font-size: .74rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .focus-island-summary small {
+    color: var(--primary-dark);
+    font-size: .72rem;
+    font-variant-numeric: tabular-nums;
+  }
+
+  .floating-timer.minimized #minimizeFloatingTimer {
+    width: 37px;
+    height: 37px;
+    flex: 0 0 37px;
+    border-radius: 50%;
+  }
+
+  .review-suggestion-card {
+    padding: 18px;
+    border-radius: 24px;
+  }
+
+  .review-suggestion-symbol {
+    width: 42px;
+    height: 42px;
+    margin-bottom: 8px;
+    border-radius: 14px;
+  }
+
+  .review-suggestion-card h2 {
+    font-size: 1.65rem;
+  }
+
+  .review-suggestion-card > p:not(.card-kicker) {
+    font-size: .76rem;
+  }
+
+  .review-suggestion-plan {
+    margin: 14px 0;
+    padding: 11px 12px;
+  }
+
+  .review-suggestion-actions button {
+    min-height: 44px;
   }
 }
