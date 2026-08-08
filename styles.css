@@ -1726,6 +1726,11 @@ textarea:focus-visible {
   background: var(--green-soft);
 }
 
+.quick-add-icon.blue {
+  color: color-mix(in srgb, var(--text) 72%, #5f8fb6);
+  background: color-mix(in srgb, #a9c9df 28%, var(--surface));
+}
+
 .quick-add-option strong {
   font-size: 13px;
 }
@@ -3562,6 +3567,111 @@ html[data-mode="dark"] :is(
   margin-top: 18px;
 }
 
+.personal-home-card {
+  margin-top: 18px;
+  padding: 26px;
+  overflow: hidden;
+  background:
+    radial-gradient(circle at 100% 0%, color-mix(in srgb, #9dbbd4 20%, transparent), transparent 38%),
+    color-mix(in srgb, var(--surface) 94%, #f4eadb);
+}
+
+.personal-home-heading {
+  align-items: flex-start;
+  margin-bottom: 18px;
+}
+
+.personal-home-heading h2 {
+  margin-bottom: 5px;
+}
+
+.personal-home-heading p:last-child {
+  margin: 0;
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.personal-home-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.personal-home-column {
+  min-width: 0;
+  padding: 18px;
+  border: 1px solid color-mix(in srgb, var(--border) 76%, #9dbbd4);
+  border-radius: 19px;
+  background: color-mix(in srgb, var(--surface) 88%, transparent);
+}
+
+.personal-home-column-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.personal-home-column-head span,
+.personal-home-column-head strong {
+  display: block;
+}
+
+.personal-home-column-head span {
+  margin-bottom: 3px;
+  color: var(--muted);
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+}
+
+.personal-home-column-head strong {
+  font-size: 0.95rem;
+}
+
+html[data-mode="dark"] .personal-home-card {
+  background:
+    radial-gradient(circle at 100% 0%, color-mix(in srgb, #9dbbd4 14%, transparent), transparent 38%),
+    var(--surface);
+}
+
+html[data-mode="dark"] .personal-home-column {
+  background: color-mix(in srgb, var(--surface-soft) 84%, transparent);
+}
+
+@media (max-width: 760px) {
+  .personal-home-card {
+    margin-top: 10px;
+    padding: 13px;
+    border-radius: 20px;
+  }
+
+  .personal-home-heading {
+    margin-bottom: 12px;
+  }
+
+  .personal-home-heading h2 {
+    font-size: 1.35rem;
+  }
+
+  .personal-home-heading p:last-child {
+    max-width: 250px;
+    font-size: 0.68rem;
+  }
+
+  .personal-home-grid {
+    grid-template-columns: 1fr;
+    gap: 9px;
+  }
+
+  .personal-home-column {
+    padding: 12px;
+    border-radius: 16px;
+  }
+}
+
 .goal-countdown-card,
 .organizer-card {
   min-width: 0;
@@ -3746,6 +3856,52 @@ html[data-mode="dark"] :is(
 .quick-task-card form {
   display: grid;
   gap: 18px;
+}
+
+.quick-task-card {
+  max-height: min(92dvh, 760px);
+  overflow-y: auto;
+}
+
+.quick-task-card .form-layout > label {
+  display: grid;
+  align-content: start;
+  gap: 7px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 0.76rem;
+  font-weight: 750;
+}
+
+.quick-task-card .form-layout input,
+.quick-task-card .form-layout select,
+.quick-task-card .form-layout textarea {
+  width: 100%;
+  min-width: 0;
+  padding: 12px 13px;
+  border: 1px solid var(--border);
+  border-radius: 13px;
+  color: var(--text);
+  background: var(--surface);
+  font: inherit;
+  font-size: 0.9rem;
+  font-weight: 500;
+  outline: none;
+}
+
+.quick-task-card .form-layout input:focus,
+.quick-task-card .form-layout select:focus,
+.quick-task-card .form-layout textarea:focus {
+  border-color: color-mix(in srgb, var(--primary) 65%, var(--border));
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--primary) 13%, transparent);
+}
+
+.quick-task-card .form-layout textarea {
+  resize: vertical;
+}
+
+.quick-task-card [hidden] {
+  display: none !important;
 }
 
 .quick-task-hint {
@@ -4160,7 +4316,21 @@ html[data-mode="dark"] :is(
   }
 
   .quick-task-card .form-layout {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 11px;
+  }
+
+  .quick-task-card .full-field {
+    grid-column: 1 / -1;
+  }
+
+  .quick-task-card {
+    max-height: calc(100dvh - 20px);
+    padding: 18px;
+  }
+
+  .quick-task-card form {
+    gap: 13px;
   }
 
   .quick-task-card .form-actions,

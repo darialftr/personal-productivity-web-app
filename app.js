@@ -323,11 +323,9 @@ function populateHomeSubjects() {
 
   if (quickTaskSelect) {
     const previousValue = quickTaskSelect.value;
-    quickTaskSelect.innerHTML = subjects.length
-      ? subjects
-          .map((subject) => `<option value="${subject.id}">${escapeHtml(subject.name)}</option>`)
-          .join("")
-      : '<option value="">Adaugă mai întâi o materie</option>';
+    quickTaskSelect.innerHTML = `<option value="">Fără materie</option>${subjects
+      .map((subject) => `<option value="${subject.id}">${escapeHtml(subject.name)}</option>`)
+      .join("")}`;
     if (previousValue && subjects.some((subject) => subject.id === previousValue)) {
       quickTaskSelect.value = previousValue;
     }
@@ -336,6 +334,25 @@ function populateHomeSubjects() {
 
 function subjectName(subjectId) {
   return subjects.find((subject) => subject.id === subjectId)?.name || "";
+}
+
+function isLifeTaskType(type) {
+  return ["personal", "selfcare", "home", "health", "errand", "goal"].includes(type);
+}
+
+function taskTypeLabel(type) {
+  return ({
+    personal: "Personal",
+    selfcare: "Self-care",
+    home: "Casă",
+    health: "Sănătate",
+    errand: "De rezolvat",
+    goal: "Obiectiv",
+    test: "Test",
+    project: "Proiect",
+    study: "Studiu",
+    other: "Altceva"
+  })[type] || "Școală";
 }
 
 function normalizeHomeEvent(event) {
@@ -359,7 +376,7 @@ function normalizeHomeTask(task) {
   return {
     ...task,
     type: task.task_type,
-    subject: subjectName(task.subject_id),
+    subject: subjectName(task.subject_id) || taskTypeLabel(task.task_type),
     deadline: task.deadline_date,
     deadlineTime: String(task.deadline_time || "").slice(0, 5),
     estimatedMinutes: task.estimated_minutes
@@ -866,6 +883,18 @@ function initializeQuickActions() {
     prepareQuickTaskModal("homework");
   });
 
+  document.getElementById("addPersonalTaskButton")?.addEventListener("click", () => {
+    prepareQuickTaskModal("personal");
+  });
+
+  document.getElementById("addPersonalGoalButton")?.addEventListener("click", () => {
+    prepareQuickTaskModal("goal");
+  });
+
+  document.getElementById("viewPersonalTasksButton")?.addEventListener("click", () => {
+    IteraShell.navigate("tasks", { updateUrl: true });
+  });
+
   document
     .querySelectorAll("[data-quick-action]")
     .forEach((button) => {
@@ -879,13 +908,14 @@ function initializeQuickActions() {
           return;
         }
         if (
-  action === "task" ||
-  action === "test" ||
-  action === "homework"
-) {
-  prepareQuickTaskModal(action);
-  return;
-}
+          action === "task" ||
+          action === "test" ||
+          action === "homework" ||
+          action === "personal"
+        ) {
+          prepareQuickTaskModal(action);
+          return;
+        }
 
         if (action === "grade") {
           IteraShell.navigate("grades", { updateUrl: true });
@@ -918,12 +948,25 @@ function normalizeSearchText(value) {
     .toLowerCase();
 }
 
+function inferLifeTaskType(value) {
+  const plain = normalizeSearchText(value);
+  if (/\b(obiectiv|goal|tinta|vreau sa)\b/.test(plain)) return "goal";
+  if (/\b(unghi(?:i|ile)?|manichiura|pedichiura|skincare|masca|parul|self[ -]?care|spa)\b/.test(plain)) return "selfcare";
+  if (/\b(curat|curatenie|camera|ordine|aspir|spal|rufe|bucatarie|baie)\b/.test(plain)) return "home";
+  if (/\b(sport|sala|alerg|plimbare|medic|doctor|dentist|sanatate|vitamine)\b/.test(plain)) return "health";
+  if (/\b(cumparaturi|magazin|ridic|colet|farmacie|programare|rezolvat)\b/.test(plain)) return "errand";
+  if (/\b(personal|prieteni|familie|sun[ăa]|iesire|film|citit)\b/.test(plain)) return "personal";
+  return "";
+}
+
 function parseQuickCapture(value) {
   const raw = String(value || "").trim();
   const plain = normalizeSearchText(raw);
   const result = {
     title: raw,
-    type: /\b(test|simulare|examen)\b/.test(plain) ? "test" : "homework",
+    type: /\b(test|simulare|examen)\b/.test(plain)
+      ? "test"
+      : (inferLifeTaskType(plain) || "homework"),
     date: formatDateForInput(new Date()),
     time: "",
     minutes: 45,
@@ -967,7 +1010,9 @@ function parseQuickCapture(value) {
     const shortName = firstWord.slice(0, Math.max(3, Math.min(4, firstWord.length)));
     return plain.includes(name) || new RegExp(`\\b${shortName}`).test(plain);
   });
-  result.subjectId = subject?.id || subjects[0]?.id || "";
+  result.subjectId = isLifeTaskType(result.type)
+    ? ""
+    : (subject?.id || subjects[0]?.id || "");
 
   const noisePatterns = [
     /\b(tem[ăa]|task|test|simulare|examen)\b/gi,
@@ -1033,17 +1078,63 @@ function prepareQuickTaskModal(type = "homework") {
   const form = document.getElementById("quickTaskForm");
   const normalizedType = type === "task" ? "homework" : type;
   form.reset();
-  document.getElementById("quickTaskType").value = normalizedType;
   document.getElementById("quickTaskDate").value = formatDateForInput(new Date());
   document.getElementById("quickTaskMinutes").value = "45";
-  document.getElementById("quickTaskModalTitle").textContent =
-    normalizedType === "test" ? "Adaugă un test" : "Adaugă o temă";
+  setQuickTaskScope(
+    isLifeTaskType(normalizedType) ? "life" : "school",
+    normalizedType
+  );
   openModal("quickTaskModal");
   window.setTimeout(() => document.getElementById("quickTaskTitle")?.focus(), 50);
 }
 
 function initializeQuickTaskForm() {
   document.getElementById("quickTaskForm")?.addEventListener("submit", handleQuickTaskSubmit);
+  document.getElementById("quickTaskCategory")?.addEventListener("change", (event) => {
+    setQuickTaskScope("life", event.target.value);
+  });
+}
+
+function setQuickTaskScope(scope, preferredType = "") {
+  const life = scope === "life";
+  const typeInput = document.getElementById("quickTaskType");
+  const category = document.getElementById("quickTaskCategory");
+  const subject = document.getElementById("quickTaskSubject");
+
+  document.getElementById("quickTaskSubjectField").hidden = life;
+  document.getElementById("quickTaskCategoryField").hidden = !life;
+
+  if (life) {
+    const nextType = isLifeTaskType(preferredType)
+      ? preferredType
+      : (category.value || "personal");
+    category.value = nextType;
+    typeInput.value = nextType;
+    subject.value = "";
+    const goal = nextType === "goal";
+    document.getElementById("quickTaskTitle").placeholder = goal
+      ? "Ex: Alerg primul meu 5K"
+      : "Ex: Îmi fac unghiile";
+    document.getElementById("quickTaskModalTitle").textContent = goal
+      ? "Adaugă un obiectiv"
+      : "Adaugă în program";
+    document.getElementById("quickTaskHint").textContent =
+      "Va apărea automat în Task-uri, Calendar și planul zilei.";
+    document.getElementById("saveQuickTaskButton").textContent = goal
+      ? "Adaugă obiectivul"
+      : "Adaugă în program";
+    return;
+  }
+
+  typeInput.value = preferredType === "test" ? "test" : "homework";
+  if (!subject.value && subjects[0]) subject.value = subjects[0].id;
+  document.getElementById("quickTaskTitle").placeholder = "Ex: Exercițiile 1–10";
+  document.getElementById("quickTaskModalTitle").textContent =
+    typeInput.value === "test" ? "Adaugă un test" : "Adaugă o temă";
+  document.getElementById("quickTaskHint").textContent =
+    "Va apărea automat în Task-uri, Calendar și pagina materiei.";
+  document.getElementById("saveQuickTaskButton").textContent =
+    typeInput.value === "test" ? "Adaugă testul" : "Adaugă tema";
 }
 
 async function handleQuickTaskSubmit(event) {
@@ -1052,11 +1143,13 @@ async function handleQuickTaskSubmit(event) {
 
   const saveButton = document.getElementById("saveQuickTaskButton");
   const title = document.getElementById("quickTaskTitle").value.trim();
-  const subjectId = document.getElementById("quickTaskSubject").value || null;
+  const taskType = document.getElementById("quickTaskType").value || "homework";
+  const subjectId = isLifeTaskType(taskType)
+    ? null
+    : (document.getElementById("quickTaskSubject").value || null);
   const deadlineDate = document.getElementById("quickTaskDate").value;
   let deadlineTime = document.getElementById("quickTaskTime").value || null;
   const automaticTime = !deadlineTime;
-  const taskType = document.getElementById("quickTaskType").value || "homework";
   const estimatedMinutes = Number(document.getElementById("quickTaskMinutes").value) || 45;
   const priority = document.getElementById("quickTaskPriority").value;
 
@@ -1115,10 +1208,16 @@ async function handleQuickTaskSubmit(event) {
     .single();
 
   saveButton.disabled = false;
-  saveButton.textContent = "Salvează";
+  saveButton.textContent = taskType === "test"
+    ? "Adaugă testul"
+    : taskType === "goal"
+      ? "Adaugă obiectivul"
+    : isLifeTaskType(taskType)
+      ? "Adaugă în program"
+      : "Adaugă tema";
 
   if (error) {
-    showToast("Tema nu a putut fi salvată.", "!");
+    showToast("Taskul nu a putut fi salvat.", "!");
     return;
   }
 
@@ -1127,7 +1226,15 @@ async function handleQuickTaskSubmit(event) {
   closeModal("quickTaskModal");
   renderAll();
   showToast(
-    `${taskType === "test" ? "Testul" : "Tema"} apare acum în Task-uri, Calendar și Materii.${automaticTime ? ` Itera a ales ora ${deadlineTime}.` : ""}`,
+    `${taskType === "test"
+      ? "Testul"
+      : taskType === "goal"
+        ? "Obiectivul"
+      : isLifeTaskType(taskType)
+        ? "Taskul"
+        : "Tema"} apare acum în Task-uri și Calendar.${
+      !isLifeTaskType(taskType) ? " Îl găsești și la Materii." : ""
+    }${automaticTime ? ` Itera a ales ora ${deadlineTime}.` : ""}`,
     "✓"
   );
 }
@@ -1333,6 +1440,11 @@ function startFocusSession() {
 }
 
 function startRecommendedFocusSession() {
+  if (recommendedTask && isLifeTaskType(recommendedTask.task_type || recommendedTask.type)) {
+    startTaskFocus(recommendedTask, null);
+    return;
+  }
+
   if (recommendedTask?.subject) {
     const focusSubject = document.getElementById("focusSubject");
     const subjectExists = [...focusSubject.options].some(
@@ -3222,7 +3334,7 @@ function startTaskFocus(task, subject) {
   focusTaskTitle = task.title;
   focusSessionSaved = false;
   updateFocusTimerDisplay();
-  showFloatingTimer(subject?.name || "Fără materie", task.title);
+  showFloatingTimer(subject?.name || taskTypeLabel(task.task_type || task.type), task.title);
   void playFocusCue("start");
   if (activeSoundscape !== "none") void setFocusSoundscape(activeSoundscape);
 
@@ -3487,6 +3599,7 @@ function renderAll() {
   renderHomeSummary();
   renderTodayTimeline();
   renderTodayTasks();
+  renderPersonalHub();
   renderUpcomingEvents();
   renderNowRecommendation();
   renderGoalCountdowns();
@@ -3712,6 +3825,27 @@ function renderTodayTasks() {
     taskEvents,
     "Nu ai task-uri pentru astăzi."
   );
+}
+
+function renderPersonalHub() {
+  const taskList = document.getElementById("personalTaskList");
+  const goalList = document.getElementById("personalGoalList");
+  if (!taskList || !goalList) return;
+
+  const personalItems = tasks
+    .filter((task) => isLifeTaskType(task.type) && task.type !== "goal" && !task.completed)
+    .map(convertTaskToCalendarItem)
+    .sort(sortEvents)
+    .slice(0, 4);
+
+  const personalGoals = tasks
+    .filter((task) => task.type === "goal" && !task.completed)
+    .map(convertTaskToCalendarItem)
+    .sort(sortEvents)
+    .slice(0, 3);
+
+  renderTaskCollection(taskList, personalItems, "Nu ai nimic personal planificat încă.");
+  renderTaskCollection(goalList, personalGoals, "Adaugă un obiectiv mic sau mare, în ritmul tău.");
 }
 
 function updateAppBadge() {

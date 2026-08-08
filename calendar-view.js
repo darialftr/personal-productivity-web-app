@@ -4,6 +4,15 @@
   const months = ["Ianuarie", "Februarie", "Martie", "Aprilie", "Mai", "Iunie", "Iulie", "August", "Septembrie", "Octombrie", "Noiembrie", "Decembrie"];
   let root, user, subjects = [], events = [], tasks = [], mounted = false;
   let month = new Date().getMonth(), year = new Date().getFullYear(), selected = isoDate(new Date());
+  const taskTypeLabel = type => ({
+    personal: "Personal", selfcare: "Self-care", home: "Casă",
+    health: "Sănătate", errand: "De rezolvat", goal: "Obiectiv", homework: "Temă",
+    test: "Test", project: "Proiect", study: "Studiu", other: "Altceva"
+  })[type] || "Task";
+  const taskTypeColor = type => ({
+    personal: "#9dbbd4", selfcare: "#e7a7bd", home: "#d6b98c",
+    health: "#9bc6ae", errand: "#b6acd8", goal: "#d2a36f"
+  })[type] || "#f3a9c5";
 
   async function mount() {
     root = document.getElementById("calendarViewRoot");
@@ -72,7 +81,7 @@
       const date = `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
       const items = allItems(date);
       cells.push(`<button class="calendar-spa-day ${date === selected ? "selected" : ""} ${date === isoDate(new Date()) ? "today" : ""}" data-date="${date}">
-        <strong>${day}</strong><span>${items.slice(0, 3).map(item => `<i style="--item:${subjectColor(item.subject_id)}">${escapeHtml(item.title)}</i>`).join("")}</span>
+        <strong>${day}</strong><span>${items.slice(0, 3).map(item => `<i style="--item:${itemColor(item)}">${escapeHtml(item.title)}</i>`).join("")}</span>
         ${items.length > 3 ? `<small>+${items.length - 3}</small>` : ""}</button>`);
     }
     return cells.join("");
@@ -82,9 +91,9 @@
     const items = allItems(selected);
     return `<div class="calendar-spa-detail-head"><div><p class="eyebrow">Zi selectată</p><h3>${formatDate(selected)}</h3></div>
       <button class="icon-button" data-add-selected aria-label="Adaugă"><span aria-hidden="true">+</span></button></div>
-      <div class="calendar-spa-detail-list">${items.length ? items.map(item => `<button class="calendar-spa-detail-item" ${item.source === "event" ? `data-edit-event="${item.id}"` : 'data-open-tasks'} style="--item:${subjectColor(item.subject_id)}">
+      <div class="calendar-spa-detail-list">${items.length ? items.map(item => `<button class="calendar-spa-detail-item" ${item.source === "event" ? `data-edit-event="${item.id}"` : 'data-open-tasks'} style="--item:${itemColor(item)}">
         <span>${String(item.start_time || "—").slice(0, 5)}</span><span><strong>${escapeHtml(item.title)}</strong>
-        <small>${item.source === "task" ? "Deadline task" : escapeHtml(subjectName(item.subject_id) || item.event_type)}</small></span></button>`).join("") :
+        <small>${item.source === "task" ? escapeHtml(subjectName(item.subject_id) || taskTypeLabel(item.task_type)) : escapeHtml(subjectName(item.subject_id) || item.event_type)}</small></span></button>`).join("") :
         '<div class="calendar-spa-empty">Nimic planificat în această zi.</div>'}</div>`;
   }
 
@@ -179,6 +188,7 @@
 
   function subjectName(id) { return subjects.find(item => item.id === id)?.name || ""; }
   function subjectColor(id) { return subjects.find(item => item.id === id)?.color || "#f3a9c5"; }
+  function itemColor(item) { return item.subject_id ? subjectColor(item.subject_id) : taskTypeColor(item.task_type || item.event_type); }
   function addMinutes(value, minutes) {
     const [hours, mins] = String(value || "00:00").slice(0, 5).split(":").map(Number);
     const total = Math.min(1439, hours * 60 + mins + minutes);

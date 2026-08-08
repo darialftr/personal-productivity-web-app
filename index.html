@@ -354,6 +354,33 @@
           </article>
         </section>
 
+        <section class="soft-card personal-home-card">
+          <div class="card-heading-row personal-home-heading">
+            <div>
+              <p class="card-kicker">Personal</p>
+              <h2>Și lucrurile tale contează.</h2>
+              <p>Taskuri, obiective și timp pentru tine, în același program.</p>
+            </div>
+            <button class="round-add-button" id="addPersonalTaskButton" aria-label="Adaugă un task personal">+</button>
+          </div>
+          <div class="personal-home-grid">
+            <div class="personal-home-column">
+              <div class="personal-home-column-head">
+                <div><span>De făcut</span><strong>Plan personal</strong></div>
+                <button class="text-button" id="viewPersonalTasksButton">Vezi toate</button>
+              </div>
+              <div class="task-list" id="personalTaskList"></div>
+            </div>
+            <div class="personal-home-column">
+              <div class="personal-home-column-head">
+                <div><span>În ritmul tău</span><strong>Obiective personale</strong></div>
+                <button class="text-button" id="addPersonalGoalButton">Adaugă obiectiv</button>
+              </div>
+              <div class="task-list" id="personalGoalList"></div>
+            </div>
+          </div>
+        </section>
+
         <section class="home-intelligence-grid">
           <article class="soft-card goal-countdown-card">
             <div class="card-heading-row">
@@ -737,6 +764,12 @@
           <small>Task cu deadline</small>
         </button>
 
+        <button class="quick-add-option" data-quick-action="personal">
+          <span class="quick-add-icon blue" aria-hidden="true">○</span>
+          <strong>Personal</strong>
+          <small>Self-care, casă sau timp pentru tine</small>
+        </button>
+
         <button class="quick-add-option" data-quick-action="homework">
           <span class="quick-add-icon pink">⌂</span>
           <strong>Temă</strong>
@@ -828,9 +861,20 @@
             <span>Titlu</span>
             <input id="quickTaskTitle" required placeholder="Ex: Exercițiile 1–10">
           </label>
-          <label>
+          <label id="quickTaskSubjectField">
             <span>Materie</span>
-            <select id="quickTaskSubject" required></select>
+            <select id="quickTaskSubject"></select>
+          </label>
+          <label id="quickTaskCategoryField" hidden>
+            <span>Categorie</span>
+            <select id="quickTaskCategory">
+              <option value="personal">Personal</option>
+              <option value="selfcare">Self-care</option>
+              <option value="home">Casă</option>
+              <option value="health">Sănătate</option>
+              <option value="errand">De rezolvat</option>
+              <option value="goal">Obiectiv</option>
+            </select>
           </label>
           <label>
             <span>Deadline</span>
@@ -858,7 +902,7 @@
             <textarea id="quickTaskNotes" rows="3" placeholder="Detalii opționale"></textarea>
           </label>
         </div>
-        <p class="quick-task-hint">Va apărea automat în Task-uri, Calendar și pagina materiei.</p>
+        <p class="quick-task-hint" id="quickTaskHint">Va apărea automat în Task-uri, Calendar și pagina materiei.</p>
         <div class="form-actions">
           <button type="button" class="secondary-button" data-close-modal="quickTaskModal">Renunță</button>
           <button type="submit" class="primary-button" id="saveQuickTaskButton">Adaugă tema</button>

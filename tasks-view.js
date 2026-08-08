@@ -3,6 +3,17 @@
 (function (global) {
   let root, user, subjects = [], tasks = [], scheduleItems = [], calendarEvents = [];
   let filter = "all", search = "", mounted = false;
+  const lifeTaskTypes = ["personal", "selfcare", "home", "health", "errand", "goal"];
+  const isLifeTask = type => lifeTaskTypes.includes(type);
+  const taskTypeLabel = type => ({
+    personal: "Personal", selfcare: "Self-care", home: "Casă",
+    health: "Sănătate", errand: "De rezolvat", goal: "Obiectiv", test: "Test",
+    project: "Proiect", study: "Studiu", other: "Altceva"
+  })[type] || "Școală";
+  const taskTypeColor = type => ({
+    personal: "#9dbbd4", selfcare: "#e7a7bd", home: "#d6b98c",
+    health: "#9bc6ae", errand: "#b6acd8", goal: "#d2a36f"
+  })[type] || "#f3a9c5";
   const localDate = (date = new Date()) => {
     const offset = date.getTimezoneOffset() * 60000;
     return new Date(date.getTime() - offset).toISOString().slice(0, 10);
@@ -48,6 +59,7 @@
       if (filter === "today") return task.deadline_date === today() && !task.completed;
       if (filter === "homework") return task.task_type === "homework" && !task.completed;
       if (filter === "test") return task.task_type === "test" && !task.completed;
+      if (filter === "life") return isLifeTask(task.task_type) && !task.completed;
       if (filter === "completed") return task.completed;
       return true;
     });
@@ -64,8 +76,8 @@
       <section class="tasks-spa-toolbar">
         <input type="search" value="${escapeHtml(search)}" placeholder="Caută un task…" data-task-search>
         <div class="tasks-spa-filters">${[
-          ["all", "Toate"], ["today", "Astăzi"], ["homework", "Homework"],
-          ["test", "Teste"], ["completed", "Finalizate"]
+          ["all", "Toate"], ["today", "Astăzi"], ["homework", "Teme"],
+          ["test", "Teste"], ["life", "Personal"], ["completed", "Finalizate"]
         ].map(([value, label]) => `<button class="${filter === value ? "active" : ""}" data-task-filter="${value}">${label}</button>`).join("")}</div>
       </section>
       <p class="tasks-swipe-hint">Glisează un task spre stânga pentru a-l șterge rapid.</p>
@@ -77,7 +89,7 @@
         <label>Titlu<input name="title" required></label>
         <div class="tasks-spa-fields">
           <label>Materie<select name="subject_id"><option value="">Fără materie</option>${subjects.map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join("")}</select></label>
-          <label>Tip<select name="task_type"><option value="homework">Homework</option><option value="test">Test</option><option value="project">Proiect</option><option value="study">Studiu</option><option value="other">Altceva</option></select></label>
+          <label>Tip<select name="task_type"><option value="homework">Temă</option><option value="test">Test</option><option value="project">Proiect</option><option value="study">Studiu</option><option value="personal">Personal</option><option value="selfcare">Self-care</option><option value="home">Casă</option><option value="health">Sănătate</option><option value="errand">De rezolvat</option><option value="goal">Obiectiv</option><option value="other">Altceva</option></select></label>
           <label>Deadline<input name="deadline_date" type="date"></label><label>Ora<input name="deadline_time" type="time"><small class="tasks-time-hint">Las-o liberă și Itera alege ora după prioritate.</small></label>
           <label>Prioritate<select name="priority"><option value="low">Scăzută</option><option value="medium">Medie</option><option value="high">Ridicată</option></select></label>
           <label>Minute estimate<input name="estimated_minutes" type="number" min="0" value="30"></label>
@@ -92,11 +104,12 @@
   function renderTask(task) {
     const subject = subjects.find(item => item.id === task.subject_id);
     const deadlineLabel = task.deadline_date ? formatTaskDate(task.deadline_date) : "";
+    const contextLabel = subject?.name || taskTypeLabel(task.task_type);
     return `<div class="tasks-swipe-row" data-task-row="${task.id}">
       <button class="tasks-swipe-delete" data-swipe-delete="${task.id}" aria-label="Șterge ${escapeHtml(task.title)}">Șterge</button>
-      <article class="tasks-spa-item ${task.completed ? "completed" : ""}" data-swipe-surface style="--subject:${subject?.color || "#f3a9c5"}">
+      <article class="tasks-spa-item ${task.completed ? "completed" : ""} ${isLifeTask(task.task_type) ? "life-task" : ""}" data-swipe-surface style="--subject:${subject?.color || taskTypeColor(task.task_type)}">
       <button class="tasks-spa-check" data-toggle-task="${task.id}" aria-label="Schimbă starea">${task.completed ? "✓" : ""}</button>
-      <div><strong>${escapeHtml(task.title)}</strong><small>${escapeHtml(subject?.name || "Fără materie")}${deadlineLabel ? ` · ${escapeHtml(deadlineLabel)}` : ""}${task.deadline_time ? ` · ${String(task.deadline_time).slice(0, 5)}` : ""}</small></div>
+      <div><strong>${escapeHtml(task.title)}</strong><small>${escapeHtml(contextLabel)}${deadlineLabel ? ` · ${escapeHtml(deadlineLabel)}` : ""}${task.deadline_time ? ` · ${String(task.deadline_time).slice(0, 5)}` : ""}</small></div>
       <span class="tasks-spa-badge priority-${escapeHtml(task.priority || "medium")}">${task.estimated_minutes || 0}m</span>
       ${task.completed ? "" : `<button class="tasks-spa-start" data-start-task="${task.id}"><span class="tasks-play-icon" aria-hidden="true"></span> Start</button>`}
       <button class="tasks-spa-edit" data-edit-task="${task.id}">Editează</button></article></div>`;
@@ -118,6 +131,10 @@
     root.querySelector("[data-auto-plan]").addEventListener("click", autoScheduleOpenTasks);
     root.querySelector("[data-close-task]").addEventListener("click", closeDialog);
     root.querySelector("[data-task-form]").addEventListener("submit", saveTask);
+    root.querySelector('[name="task_type"]').addEventListener("change", event => {
+      const subjectSelect = root.querySelector('[name="subject_id"]');
+      if (isLifeTask(event.target.value)) subjectSelect.value = "";
+    });
     root.querySelector("[data-delete-task]").addEventListener("click", deleteTask);
     root.querySelector("[data-task-search]").addEventListener("change", event => { search = event.target.value.trim().toLowerCase(); render(); });
     root.querySelectorAll("[data-task-filter]").forEach(button => button.addEventListener("click", () => { filter = button.dataset.taskFilter; render(); }));
@@ -216,7 +233,7 @@
     const form = event.currentTarget, values = Object.fromEntries(new FormData(form)), id = values.id;
     const submitButton = form.querySelector('[type="submit"]');
     form.querySelector("[data-task-error]").textContent = "";
-    const payload = { user_id: user.id, subject_id: values.subject_id || null, title: values.title.trim(),
+    const payload = { user_id: user.id, subject_id: isLifeTask(values.task_type) ? null : (values.subject_id || null), title: values.title.trim(),
       task_type: values.task_type, deadline_date: values.deadline_date || null, deadline_time: values.deadline_time || null,
       priority: values.priority, estimated_minutes: Number(values.estimated_minutes) || 0, notes: values.notes.trim() || null };
     if (payload.deadline_date && !payload.deadline_time) {
