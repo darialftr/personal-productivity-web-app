@@ -15,7 +15,32 @@
     const installButton = document.getElementById("installIteraButton");
     const testButton = document.getElementById("testPushButton");
 
-    if (!enableButton || !("serviceWorker" in navigator) || !("PushManager" in global)) {
+    if (!("serviceWorker" in navigator)) {
+      updateUi("unsupported");
+      return;
+    }
+
+    let reloadingForUpdate = false;
+    navigator.serviceWorker.addEventListener("controllerchange", () => {
+      if (reloadingForUpdate) return;
+      reloadingForUpdate = true;
+      global.location.reload();
+    });
+
+    try {
+      registration = await navigator.serviceWorker.register("./service-worker.js", {
+        scope: "./",
+        updateViaCache: "none"
+      });
+      await registration.update();
+      await navigator.serviceWorker.ready;
+    } catch (error) {
+      console.error("Itera service worker:", error);
+      updateUi("error");
+      return;
+    }
+
+    if (!enableButton || !("PushManager" in global)) {
       updateUi("unsupported");
       return;
     }
@@ -23,18 +48,14 @@
     global.addEventListener("beforeinstallprompt", (event) => {
       event.preventDefault();
       deferredInstallPrompt = event;
-      installButton.hidden = false;
+      if (installButton) installButton.hidden = false;
     });
 
     enableButton.addEventListener("click", enablePush);
-    installButton.addEventListener("click", installApp);
-    testButton.addEventListener("click", sendTestNotification);
+    installButton?.addEventListener("click", installApp);
+    testButton?.addEventListener("click", sendTestNotification);
 
     try {
-      registration = await navigator.serviceWorker.register("./service-worker.js", {
-        scope: "./"
-      });
-      await navigator.serviceWorker.ready;
       currentSubscription = await registration.pushManager.getSubscription();
       updateUi(currentSubscription ? "enabled" : "ready");
       if (currentSubscription) await persistSubscription(currentSubscription);
@@ -47,7 +68,8 @@
   async function enablePush() {
     if (isIos && !isStandalone()) {
       updateUi("ios-install");
-      document.getElementById("installIteraButton").hidden = false;
+      const installButton = document.getElementById("installIteraButton");
+      if (installButton) installButton.hidden = false;
       return;
     }
 
