@@ -64,6 +64,7 @@
 
   function visibleTasks() {
     return tasks.filter(task => {
+      if (isPersonalEventLike(task)) return false;
       const matchesSearch = task.title.toLowerCase().includes(search);
       if (!matchesSearch) return false;
       if (filter === "today") return task.deadline_date === today() && !task.completed;
@@ -77,7 +78,7 @@
 
   function render() {
     const list = visibleTasks();
-    const open = tasks.filter(task => !task.completed).length;
+    const open = tasks.filter(task => !isPersonalEventLike(task) && !task.completed).length;
     root.innerHTML = `
       <header class="tasks-spa-header"><div><p class="eyebrow">Organizare</p><h2>Task-urile tale</h2>
         <p>${open} task-uri active · ${open ? "alege următorul pas" : "totul este la zi"}</p></div>
@@ -152,12 +153,23 @@
     root.querySelector("[data-task-search]").addEventListener("change", event => { search = event.target.value.trim().toLowerCase(); render(); });
     root.querySelectorAll("[data-task-filter]").forEach(button => button.addEventListener("click", () => { filter = button.dataset.taskFilter; render(); }));
     root.querySelectorAll("[data-toggle-task]").forEach(button => button.addEventListener("click", () => toggleTask(button.dataset.toggleTask)));
+    root.querySelectorAll(".tasks-spa-item button").forEach(button => {
+      button.addEventListener("pointerdown", event => event.stopPropagation());
+    });
     root.querySelectorAll("[data-start-task]").forEach(button => button.addEventListener("click", () => {
       const task = tasks.find(item => item.id === button.dataset.startTask);
       const subject = subjects.find(item => item.id === task?.subject_id);
       if (task && global.IteraFocus) global.IteraFocus.startTask(task, subject);
     }));
-    root.querySelectorAll("[data-edit-task]").forEach(button => button.addEventListener("click", () => openDialog(tasks.find(task => task.id === button.dataset.editTask))));
+    root.querySelectorAll("[data-edit-task]").forEach(button => button.addEventListener("click", event => {
+      event.stopPropagation();
+      const task = tasks.find(item => String(item.id) === String(button.dataset.editTask));
+      if (!task) {
+        global.showToast?.("Taskul nu a putut fi deschis. Reîncarcă pagina și încearcă din nou.", "!");
+        return;
+      }
+      openDialog(task);
+    }));
     root.querySelectorAll("[data-swipe-delete]").forEach(button => button.addEventListener("click", () => deleteTaskById(button.dataset.swipeDelete)));
     bindSwipeRows();
   }
@@ -175,7 +187,7 @@
     syncTaskFormType(form.elements.task_type.value);
     form.querySelector("[data-task-dialog-title]").textContent = task ? "Editează task-ul" : "Task nou";
     form.querySelector("[data-delete-task]").hidden = !task;
-    dialog.showModal();
+    if (!dialog.open) dialog.showModal();
   }
 
   function closeDialog() { root.querySelector("dialog").close(); }

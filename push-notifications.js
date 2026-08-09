@@ -4,6 +4,11 @@
   let registration = null;
   let deferredInstallPrompt = null;
   let currentSubscription = null;
+  const personalTaskOnlyMarker = "[itera:task-only]";
+  const fixedPersonalTypes = ["personal", "selfcare", "home", "health", "errand"];
+  const isPersonalEventLike = task =>
+    fixedPersonalTypes.includes(task?.task_type) &&
+    !String(task?.notes || "").includes(personalTaskOnlyMarker);
 
   const isIos = /iphone|ipad|ipod/i.test(navigator.userAgent);
   const isStandalone = () =>
@@ -219,6 +224,7 @@
   async function scheduleTaskReminders(task) {
     if (!task?.id) return [];
     await cancelTaskReminders(task.id);
+    if (isPersonalEventLike(task)) return [];
     if (!task.deadline_date || !task.deadline_time || task.completed) return [];
 
     const deadline = new Date(

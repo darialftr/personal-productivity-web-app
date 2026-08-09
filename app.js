@@ -347,6 +347,15 @@ function isFixedPersonalTaskType(type) {
 
 const PERSONAL_TASK_ONLY_MARKER = "[itera:task-only]";
 
+function isPersonalEventLikeTask(task) {
+  const type = task?.type || task?.task_type;
+  return isFixedPersonalTaskType(type) && !task?.calendarHidden;
+}
+
+function isActionableTask(task) {
+  return !isPersonalEventLikeTask(task);
+}
+
 function cleanPersonalTaskNotes(notes) {
   return String(notes || "").replace(PERSONAL_TASK_ONLY_MARKER, "").trim();
 }
@@ -505,7 +514,9 @@ function getDailyBriefing(profileName) {
   const todaySchedule = scheduleItems
     .filter((item) => Number(item.day_of_week) === day)
     .sort((a, b) => String(a.start_time || "").localeCompare(String(b.start_time || "")));
-  const todayTasks = tasks.filter((task) => task.deadline === todayString);
+  const todayTasks = tasks.filter(
+    (task) => isActionableTask(task) && task.deadline === todayString
+  );
   const remainingTasks = todayTasks.filter((task) => !task.completed);
   const greetingTitle = getGreetingTitle(profileName, now);
 
@@ -2180,7 +2191,9 @@ function initializeMorningBrief() {
   const today = formatDateForInput(new Date());
   if (currentUser?.user_metadata?.itera_brief_seen_date === today) return;
 
-  const todayTasks = tasks.filter((task) => !task.completed && task.deadline === today);
+  const todayTasks = tasks.filter(
+    (task) => isActionableTask(task) && !task.completed && task.deadline === today
+  );
   const todayClasses = scheduleItems.filter(
     (item) => Number(item.day_of_week) === new Date().getDay()
   );
@@ -2190,7 +2203,9 @@ function initializeMorningBrief() {
     currentUser?.user_metadata?.first_name ||
     "Itera";
   const isWeekend = [0, 6].includes(new Date().getDay());
-  const overdue = tasks.filter((task) => !task.completed && task.deadline && task.deadline < today);
+  const overdue = tasks.filter(
+    (task) => isActionableTask(task) && !task.completed && task.deadline && task.deadline < today
+  );
   const upcomingExam = getAllCalendarItems()
     .filter((item) => item.date >= today && /bac|examen|simulare|admitere|cambridge|delf|permis/i.test(`${item.title} ${item.notes || ""}`))
     .sort(sortEvents)[0];
@@ -2253,7 +2268,7 @@ function sortTasksForPlan(firstTask, secondTask) {
 function getOrganizerPlan() {
   const today = formatDateForInput(new Date());
   const tomorrow = getTomorrowDate();
-  const openTasks = tasks.filter((task) => !task.completed);
+  const openTasks = tasks.filter((task) => isActionableTask(task) && !task.completed);
   const overdueTasks = openTasks.filter((task) => task.deadline && task.deadline < today);
   const todayTasks = openTasks.filter((task) => task.deadline === today).sort(sortTasksForPlan);
   const tomorrowTasks = openTasks.filter((task) => task.deadline === tomorrow).sort(sortTasksForPlan);
@@ -2982,7 +2997,9 @@ function renderAchievement() {
   const card = document.getElementById("achievementCard");
   if (!card) return;
   const todayString = formatDateForInput(new Date());
-  const todayTasks = tasks.filter((task) => task.deadline === todayString);
+  const todayTasks = tasks.filter(
+    (task) => isActionableTask(task) && task.deadline === todayString
+  );
   const currentDate = new Date();
   const mondayOffset = (currentDate.getDay() + 6) % 7;
   const weekStart = new Date(currentDate);
@@ -2991,6 +3008,7 @@ function renderAchievement() {
   const weekEnd = new Date(weekStart);
   weekEnd.setDate(weekStart.getDate() + 7);
   const completedThisWeek = tasks.filter((task) => {
+    if (!isActionableTask(task)) return false;
     if (!task.completed_at) return false;
     const completedAt = new Date(task.completed_at);
     return completedAt >= weekStart && completedAt < weekEnd;
@@ -3644,7 +3662,7 @@ globalThis.IteraFocus = Object.freeze({
 function buildNotifications() {
   const today = parseLocalDate(formatDateForInput(new Date()));
   const taskNotifications = tasks
-    .filter((task) => !task.completed && task.deadline)
+    .filter((task) => isActionableTask(task) && !task.completed && task.deadline)
     .map((task) => {
       const days = Math.round((parseLocalDate(task.deadline) - today) / 86400000);
       if (days > 3) return null;
@@ -3767,7 +3785,9 @@ function renderHomeSummary() {
     (item) => Number(item.day_of_week) === new Date().getDay()
   );
 
-  const taskEvents = tasks.filter((task) => task.deadline === todayString);
+  const taskEvents = tasks.filter(
+    (task) => isActionableTask(task) && task.deadline === todayString
+  );
 
   const remainingTasks = taskEvents.filter(
     (event) => !event.completed
@@ -3972,7 +3992,13 @@ function renderPersonalHub() {
   if (!taskList || !goalList) return;
 
   const personalItems = tasks
-    .filter((task) => isLifeTaskType(task.type) && task.type !== "goal" && !task.completed)
+    .filter(
+      (task) =>
+        isLifeTaskType(task.type) &&
+        task.type !== "goal" &&
+        isActionableTask(task) &&
+        !task.completed
+    )
     .map(convertTaskToCalendarItem)
     .sort(sortEvents)
     .slice(0, 4);
@@ -3989,7 +4015,9 @@ function renderPersonalHub() {
 
 function updateAppBadge() {
   const today = formatDateForInput(new Date());
-  const remaining = tasks.filter((task) => !task.completed && task.deadline && task.deadline <= today).length;
+  const remaining = tasks.filter(
+    (task) => isActionableTask(task) && !task.completed && task.deadline && task.deadline <= today
+  ).length;
   if (typeof navigator.setAppBadge === "function") {
     if (remaining) {
       navigator.setAppBadge(remaining).catch(() => {});
