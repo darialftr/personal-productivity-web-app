@@ -340,6 +340,16 @@ function isLifeTaskType(type) {
   return ["personal", "selfcare", "home", "health", "errand", "goal"].includes(type);
 }
 
+function isFixedPersonalTaskType(type) {
+  return ["personal", "selfcare", "home", "health", "errand"].includes(type);
+}
+
+const PERSONAL_TASK_ONLY_MARKER = "[itera:task-only]";
+
+function cleanPersonalTaskNotes(notes) {
+  return String(notes || "").replace(PERSONAL_TASK_ONLY_MARKER, "").trim();
+}
+
 function taskTypeLabel(type) {
   return ({
     personal: "Personal",
@@ -379,7 +389,9 @@ function normalizeHomeTask(task) {
     subject: subjectName(task.subject_id) || taskTypeLabel(task.task_type),
     deadline: task.deadline_date,
     deadlineTime: String(task.deadline_time || "").slice(0, 5),
-    estimatedMinutes: task.estimated_minutes
+    estimatedMinutes: task.estimated_minutes,
+    calendarHidden: String(task.notes || "").includes(PERSONAL_TASK_ONLY_MARKER),
+    notes: cleanPersonalTaskNotes(task.notes)
   };
 }
 
@@ -417,7 +429,7 @@ function getAllCalendarItems() {
   }));
 
   const calendarTasks = tasks
-    .filter((task) => task.deadline)
+    .filter((task) => task.deadline && !task.calendarHidden)
     .map(convertTaskToCalendarItem);
 
   return [
@@ -1093,6 +1105,9 @@ function initializeQuickTaskForm() {
   document.getElementById("quickTaskCategory")?.addEventListener("change", (event) => {
     setQuickTaskScope("life", event.target.value);
   });
+  document.getElementById("quickTaskDestination")?.addEventListener("change", () => {
+    setQuickTaskScope("life", document.getElementById("quickTaskCategory").value);
+  });
 }
 
 function setQuickTaskScope(scope, preferredType = "") {
@@ -1100,6 +1115,7 @@ function setQuickTaskScope(scope, preferredType = "") {
   const typeInput = document.getElementById("quickTaskType");
   const category = document.getElementById("quickTaskCategory");
   const subject = document.getElementById("quickTaskSubject");
+  const destination = document.getElementById("quickTaskDestination");
 
   document.getElementById("quickTaskSubjectField").hidden = life;
   document.getElementById("quickTaskCategoryField").hidden = !life;
@@ -1112,21 +1128,49 @@ function setQuickTaskScope(scope, preferredType = "") {
     typeInput.value = nextType;
     subject.value = "";
     const goal = nextType === "goal";
+    const fixedPersonal = isFixedPersonalTaskType(nextType);
+    if (goal) destination.value = "task";
+    document.getElementById("quickTaskDestinationField").hidden = goal;
+    document.getElementById("quickTaskDurationField").classList.toggle("full-field", !goal);
+    document.getElementById("quickTaskPriorityField").hidden = true;
+    document.getElementById("quickTaskPriority").value = "medium";
+    document.getElementById("quickTaskDateLabel").textContent = goal ? "Data țintă" : "Data";
+    document.getElementById("quickTaskDurationLabel").textContent = goal ? "Timp alocat" : "Durată";
+    document.getElementById("quickTaskTime").required = fixedPersonal;
+    document.getElementById("quickTaskTimeHint").textContent = fixedPersonal
+      ? destination.value === "event"
+        ? "Evenimentul va ocupa acest interval în Calendar."
+        : "Taskul rămâne în planul zilei, fără să apară în Calendar."
+      : "Opțional: adaugă o oră doar dacă obiectivul are un moment precis.";
     document.getElementById("quickTaskTitle").placeholder = goal
       ? "Ex: Alerg primul meu 5K"
       : "Ex: Îmi fac unghiile";
     document.getElementById("quickTaskModalTitle").textContent = goal
       ? "Adaugă un obiectiv"
       : "Adaugă în program";
-    document.getElementById("quickTaskHint").textContent =
-      "Va apărea automat în Task-uri, Calendar și planul zilei.";
+    document.getElementById("quickTaskHint").textContent = goal
+      ? "Obiectivul va apărea în zona Personal și în Task-uri."
+      : destination.value === "event"
+        ? "Va apărea în Calendar ca interval personal."
+        : "Va apărea în Task-uri și în planul zilei, gata de bifat.";
     document.getElementById("saveQuickTaskButton").textContent = goal
       ? "Adaugă obiectivul"
-      : "Adaugă în program";
+      : destination.value === "event"
+        ? "Adaugă evenimentul"
+        : "Adaugă taskul";
     return;
   }
 
   typeInput.value = preferredType === "test" ? "test" : "homework";
+  destination.value = "task";
+  document.getElementById("quickTaskDestinationField").hidden = true;
+  document.getElementById("quickTaskDurationField").classList.remove("full-field");
+  document.getElementById("quickTaskPriorityField").hidden = false;
+  document.getElementById("quickTaskDateLabel").textContent = "Deadline";
+  document.getElementById("quickTaskDurationLabel").textContent = "Durată estimată";
+  document.getElementById("quickTaskTime").required = false;
+  document.getElementById("quickTaskTimeHint").textContent =
+    "Opțional: dacă o lași liberă, Itera alege ora după prioritate.";
   if (!subject.value && subjects[0]) subject.value = subjects[0].id;
   document.getElementById("quickTaskTitle").placeholder = "Ex: Exercițiile 1–10";
   document.getElementById("quickTaskModalTitle").textContent =
@@ -1144,16 +1188,28 @@ async function handleQuickTaskSubmit(event) {
   const saveButton = document.getElementById("saveQuickTaskButton");
   const title = document.getElementById("quickTaskTitle").value.trim();
   const taskType = document.getElementById("quickTaskType").value || "homework";
+  const destination = isLifeTaskType(taskType)
+    ? document.getElementById("quickTaskDestination").value
+    : "task";
   const subjectId = isLifeTaskType(taskType)
     ? null
     : (document.getElementById("quickTaskSubject").value || null);
   const deadlineDate = document.getElementById("quickTaskDate").value;
   let deadlineTime = document.getElementById("quickTaskTime").value || null;
-  const automaticTime = !deadlineTime;
+  const fixedPersonal = isFixedPersonalTaskType(taskType);
+  const automaticTime = !isLifeTaskType(taskType) && !deadlineTime;
   const estimatedMinutes = Number(document.getElementById("quickTaskMinutes").value) || 45;
-  const priority = document.getElementById("quickTaskPriority").value;
+  const priority = isLifeTaskType(taskType)
+    ? "medium"
+    : document.getElementById("quickTaskPriority").value;
 
-  if (!deadlineTime) {
+  if (fixedPersonal && !deadlineTime) {
+    showToast("Alege ora la care vrei să păstrăm acest interval în program.", "!");
+    document.getElementById("quickTaskTime").focus();
+    return;
+  }
+
+  if (automaticTime) {
     const targetDate = parseLocalDate(deadlineDate);
     const priorityDelay = priority === "high" ? 0 : priority === "low" ? 120 : 60;
     const preferredStart = ([0, 6].includes(targetDate.getDay()) ? 10 * 60 : 16 * 60) + priorityDelay;
@@ -1189,6 +1245,37 @@ async function handleQuickTaskSubmit(event) {
   saveButton.disabled = true;
   saveButton.textContent = "Se salvează…";
 
+  if (destination === "event" && isLifeTaskType(taskType) && taskType !== "goal") {
+    const { data, error } = await supabaseClient
+      .from("calendar_events")
+      .insert({
+        user_id: currentUser.id,
+        subject_id: null,
+        title,
+        event_type: taskType,
+        event_date: deadlineDate,
+        start_time: deadlineTime,
+        end_time: formatClockMinutes(getMinutesFromTime(deadlineTime) + estimatedMinutes),
+        notes: document.getElementById("quickTaskNotes").value.trim() || null
+      })
+      .select("*")
+      .single();
+
+    saveButton.disabled = false;
+    saveButton.textContent = "Adaugă evenimentul";
+    if (error) {
+      showToast("Evenimentul nu a putut fi salvat.", "!");
+      return;
+    }
+
+    events.push(normalizeHomeEvent(data));
+    events.sort(sortEvents);
+    closeModal("quickTaskModal");
+    renderAll();
+    showToast("Evenimentul apare acum în Calendar.", "✓");
+    return;
+  }
+
   const { data, error } = await supabaseClient
     .from("tasks")
     .insert({
@@ -1200,7 +1287,9 @@ async function handleQuickTaskSubmit(event) {
       deadline_time: deadlineTime,
       priority,
       estimated_minutes: estimatedMinutes,
-      notes: document.getElementById("quickTaskNotes").value.trim() || null,
+      notes: isLifeTaskType(taskType)
+        ? `${document.getElementById("quickTaskNotes").value.trim()} ${PERSONAL_TASK_ONLY_MARKER}`.trim()
+        : document.getElementById("quickTaskNotes").value.trim() || null,
       completed: false,
       progress: 0
     })
@@ -1213,7 +1302,7 @@ async function handleQuickTaskSubmit(event) {
     : taskType === "goal"
       ? "Adaugă obiectivul"
     : isLifeTaskType(taskType)
-      ? "Adaugă în program"
+      ? "Adaugă taskul"
       : "Adaugă tema";
 
   if (error) {
@@ -1232,8 +1321,8 @@ async function handleQuickTaskSubmit(event) {
         ? "Obiectivul"
       : isLifeTaskType(taskType)
         ? "Taskul"
-        : "Tema"} apare acum în Task-uri și Calendar.${
-      !isLifeTaskType(taskType) ? " Îl găsești și la Materii." : ""
+        : "Tema"} apare acum în Task-uri${
+      !isLifeTaskType(taskType) ? " și Calendar. Îl găsești și la Materii." : "."
     }${automaticTime ? ` Itera a ales ora ${deadlineTime}.` : ""}`,
     "✓"
   );
@@ -3532,6 +3621,7 @@ function buildNotifications() {
               ? "Replanifică-l sau finalizează-l acum."
               : `Deadline peste ${days} zile`,
         action: "tasks",
+        targetId: task.id,
         urgent: days <= 1
       };
     })
@@ -3545,6 +3635,8 @@ function buildNotifications() {
       title: event.title,
       text: `${formatRelativeDate(event.date)}${event.subject ? ` · ${event.subject}` : ""}`,
       action: "calendar",
+      targetId: event.id,
+      targetDate: event.date,
       urgent: event.date === formatDateForInput(new Date())
     }));
 
@@ -3577,7 +3669,7 @@ function renderNotifications() {
   }
 
   list.innerHTML = notifications.map((notification) => `
-    <button class="notification-item ${notification.urgent ? "urgent" : ""}" data-notification-route="${notification.action}">
+    <button class="notification-item ${notification.urgent ? "urgent" : ""}" data-notification-route="${notification.action}" data-notification-target="${notification.targetId || ""}" data-notification-date="${notification.targetDate || ""}">
       <span>${notification.icon}</span>
       <div><strong>${escapeHtml(notification.title)}</strong><small>${escapeHtml(notification.text)}</small></div>
       <b>→</b>
@@ -3586,8 +3678,17 @@ function renderNotifications() {
 
   list.querySelectorAll("[data-notification-route]").forEach((button) => {
     button.addEventListener("click", () => {
-      document.getElementById("notificationPanel").classList.remove("visible");
-      openPage(button.dataset.notificationRoute);
+      const panel = document.getElementById("notificationPanel");
+      const route = button.dataset.notificationRoute;
+      const targetId = button.dataset.notificationTarget;
+      panel.classList.remove("visible");
+      panel.setAttribute("aria-hidden", "true");
+      openPage(route);
+      if (route === "tasks" && targetId) {
+        globalThis.IteraTasksView?.openTask(targetId);
+      } else if (route === "calendar" && targetId) {
+        globalThis.IteraCalendarView?.openEvent(targetId, button.dataset.notificationDate);
+      }
     });
   });
 }

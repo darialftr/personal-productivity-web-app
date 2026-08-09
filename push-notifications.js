@@ -343,7 +343,7 @@
       denied: ["Notificări blocate", "Activează permisiunea din setările browserului.", "Blocate"],
       unsupported: ["Notificări indisponibile", "Browserul acesta nu suportă Web Push.", "Indisponibil"],
       error: ["Conectare nereușită", "Reîncarcă pagina și încearcă din nou.", "Reîncearcă"],
-      "not-configured": ["Mai lipsește configurarea", "Cheile de notificare trebuie activate în Supabase.", "Reîncearcă"],
+      "not-configured": ["Notificări indisponibile momentan", "Serviciul de notificări nu este încă activ. Încearcă din nou mai târziu.", "Reîncearcă"],
       "ios-install": ["Instalează Itera întâi", "Pe iPhone, adaugă Itera pe Home Screen din meniul Share.", "După instalare"]
     };
     const [nextTitle, nextDescription, buttonText] = states[state] || states.ready;

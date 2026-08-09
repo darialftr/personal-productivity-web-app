@@ -430,7 +430,7 @@ function translateAuthError(message) {
       "over_email_send_rate_limit"
     )
   ) {
-    return "Emailurile de confirmare au atins limita temporară Supabase. Nu este o problemă cu datele introduse — încearcă din nou peste aproximativ o oră.";
+    return "Emailurile de confirmare au atins o limită temporară. Nu este o problemă cu datele introduse — încearcă din nou peste aproximativ o oră.";
   }
 
   return message;

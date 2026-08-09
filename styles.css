@@ -2783,6 +2783,7 @@ textarea:focus-visible {
 .tasks-spa-dialog{width:min(620px,calc(100vw - 28px));padding:0;border:0;border-radius:26px;background:rgba(255,255,255,.97);box-shadow:0 30px 90px rgba(54,37,45,.2)}.tasks-spa-dialog::backdrop{background:rgba(42,32,37,.28);backdrop-filter:blur(8px)}
 .tasks-spa-dialog form{display:grid;gap:17px;padding:28px}.tasks-spa-dialog-head,.tasks-spa-actions{display:flex;align-items:center;justify-content:space-between;gap:12px}.tasks-spa-dialog h3{margin:0;font-family:"DM Serif Display",serif;font-size:1.8rem}
 .tasks-spa-dialog label{display:grid;gap:7px;color:var(--muted);font-size:.78rem;font-weight:700}.tasks-spa-dialog input,.tasks-spa-dialog select,.tasks-spa-dialog textarea{width:100%;padding:11px 12px;border:1px solid rgba(117,89,101,.16);border-radius:12px;color:var(--text);background:rgba(249,247,248,.9)}
+.tasks-spa-dialog [hidden]{display:none!important}
 .tasks-time-hint{color:var(--muted);font-size:.66rem;font-weight:500;line-height:1.35}
 .quick-task-field-hint{display:block;margin-top:5px;color:var(--muted);font-size:.68rem;font-weight:500;line-height:1.35}
 .tasks-spa-fields{display:grid;grid-template-columns:1fr 1fr;gap:14px}.tasks-spa-error{min-height:18px;margin:0;color:#a43f63;font-size:.78rem}

@@ -876,20 +876,27 @@
               <option value="goal">Obiectiv</option>
             </select>
           </label>
-          <label>
-            <span>Deadline</span>
+          <label id="quickTaskDestinationField" hidden>
+            <span>Adaugă drept</span>
+            <select id="quickTaskDestination">
+              <option value="task" selected>Task de bifat</option>
+              <option value="event">Eveniment în calendar</option>
+            </select>
+          </label>
+          <label id="quickTaskDateField">
+            <span id="quickTaskDateLabel">Deadline</span>
             <input id="quickTaskDate" type="date" required>
           </label>
-          <label>
+          <label id="quickTaskTimeField">
             <span>Ora</span>
             <input id="quickTaskTime" type="time">
-            <small class="quick-task-field-hint">Opțional: dacă o lași liberă, Itera alege ora după prioritate.</small>
+            <small class="quick-task-field-hint" id="quickTaskTimeHint">Opțional: dacă o lași liberă, Itera alege ora după prioritate.</small>
           </label>
-          <label>
-            <span>Durată estimată</span>
+          <label id="quickTaskDurationField">
+            <span id="quickTaskDurationLabel">Durată estimată</span>
             <input id="quickTaskMinutes" type="number" min="5" max="600" step="5" value="30" required>
           </label>
-          <label>
+          <label id="quickTaskPriorityField">
             <span>Prioritate</span>
             <select id="quickTaskPriority">
               <option value="low">Scăzută</option>

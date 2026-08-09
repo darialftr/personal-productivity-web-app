@@ -2,9 +2,12 @@
 
 (function (global) {
   let root, user, subjects = [], tasks = [], scheduleItems = [], calendarEvents = [];
-  let filter = "all", search = "", mounted = false;
+  let filter = "all", search = "", mounted = false, pendingTaskId = null;
   const lifeTaskTypes = ["personal", "selfcare", "home", "health", "errand", "goal"];
   const isLifeTask = type => lifeTaskTypes.includes(type);
+  const isFixedPersonalTask = type => ["personal", "selfcare", "home", "health", "errand"].includes(type);
+  const personalTaskOnlyMarker = "[itera:task-only]";
+  const cleanTaskNotes = notes => String(notes || "").replace(personalTaskOnlyMarker, "").trim();
   const taskTypeLabel = type => ({
     personal: "Personal", selfcare: "Self-care", home: "Casă",
     health: "Sănătate", errand: "De rezolvat", goal: "Obiectiv", test: "Test",
@@ -50,6 +53,11 @@
     scheduleItems = scheduleResult.data || [];
     calendarEvents = eventResult.data || [];
     render();
+    if (pendingTaskId) {
+      const task = tasks.find(item => String(item.id) === String(pendingTaskId));
+      pendingTaskId = null;
+      if (task) openDialog(task);
+    }
   }
 
   function visibleTasks() {
@@ -70,7 +78,7 @@
     const open = tasks.filter(task => !task.completed).length;
     root.innerHTML = `
       <header class="tasks-spa-header"><div><p class="eyebrow">Organizare</p><h2>Task-urile tale</h2>
-        <p>${open} task-uri active · sincronizate cu Supabase</p></div>
+        <p>${open} task-uri active · ${open ? "alege următorul pas" : "totul este la zi"}</p></div>
         <div class="tasks-spa-header-actions"><button class="secondary-button tasks-auto-plan" data-auto-plan><span class="tasks-plan-icon" aria-hidden="true"></span> Planifică automat</button>
         <button class="primary-small-button" data-add-task><span class="tasks-add-icon" aria-hidden="true"></span> Task</button></div></header>
       <section class="tasks-spa-toolbar">
@@ -88,11 +96,11 @@
         <button type="button" class="icon-button" data-close-task aria-label="Închide">×</button></div>
         <label>Titlu<input name="title" required></label>
         <div class="tasks-spa-fields">
-          <label>Materie<select name="subject_id"><option value="">Fără materie</option>${subjects.map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join("")}</select></label>
+          <label data-task-subject-field>Materie<select name="subject_id"><option value="">Fără materie</option>${subjects.map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join("")}</select></label>
           <label>Tip<select name="task_type"><option value="homework">Temă</option><option value="test">Test</option><option value="project">Proiect</option><option value="study">Studiu</option><option value="personal">Personal</option><option value="selfcare">Self-care</option><option value="home">Casă</option><option value="health">Sănătate</option><option value="errand">De rezolvat</option><option value="goal">Obiectiv</option><option value="other">Altceva</option></select></label>
-          <label>Deadline<input name="deadline_date" type="date"></label><label>Ora<input name="deadline_time" type="time"><small class="tasks-time-hint">Las-o liberă și Itera alege ora după prioritate.</small></label>
-          <label>Prioritate<select name="priority"><option value="low">Scăzută</option><option value="medium">Medie</option><option value="high">Ridicată</option></select></label>
-          <label>Minute estimate<input name="estimated_minutes" type="number" min="0" value="30"></label>
+          <label><span data-task-date-label>Deadline</span><input name="deadline_date" type="date"></label><label><span>Ora</span><input name="deadline_time" type="time"><small class="tasks-time-hint" data-task-time-hint>Las-o liberă și Itera alege ora după prioritate.</small></label>
+          <label data-task-priority-field>Prioritate<select name="priority"><option value="low">Scăzută</option><option value="medium">Medie</option><option value="high">Ridicată</option></select></label>
+          <label><span data-task-duration-label>Minute estimate</span><input name="estimated_minutes" type="number" min="0" value="30"></label>
         </div><label>Notițe<textarea name="notes" rows="3"></textarea></label>
         <p class="tasks-spa-error" data-task-error></p>
         <div class="tasks-spa-actions"><button type="button" class="secondary-button tasks-delete-dialog" data-delete-task hidden>Șterge</button>
@@ -131,10 +139,7 @@
     root.querySelector("[data-auto-plan]").addEventListener("click", autoScheduleOpenTasks);
     root.querySelector("[data-close-task]").addEventListener("click", closeDialog);
     root.querySelector("[data-task-form]").addEventListener("submit", saveTask);
-    root.querySelector('[name="task_type"]').addEventListener("change", event => {
-      const subjectSelect = root.querySelector('[name="subject_id"]');
-      if (isLifeTask(event.target.value)) subjectSelect.value = "";
-    });
+    root.querySelector('[name="task_type"]').addEventListener("change", event => syncTaskFormType(event.target.value));
     root.querySelector("[data-delete-task]").addEventListener("click", deleteTask);
     root.querySelector("[data-task-search]").addEventListener("change", event => { search = event.target.value.trim().toLowerCase(); render(); });
     root.querySelectorAll("[data-task-filter]").forEach(button => button.addEventListener("click", () => { filter = button.dataset.taskFilter; render(); }));
@@ -153,15 +158,50 @@
     const dialog = root.querySelector("dialog"), form = dialog.querySelector("form");
     form.reset();
     for (const name of ["id", "title", "subject_id", "task_type", "deadline_date", "deadline_time", "priority", "estimated_minutes", "notes"]) {
-      if (form.elements[name]) form.elements[name].value = task?.[name] ?? "";
+      if (form.elements[name]) form.elements[name].value = name === "notes"
+        ? cleanTaskNotes(task?.[name])
+        : task?.[name] ?? "";
     }
     if (!task) { form.elements.task_type.value = "homework"; form.elements.priority.value = "medium"; form.elements.estimated_minutes.value = "30"; }
+    syncTaskFormType(form.elements.task_type.value);
     form.querySelector("[data-task-dialog-title]").textContent = task ? "Editează task-ul" : "Task nou";
     form.querySelector("[data-delete-task]").hidden = !task;
     dialog.showModal();
   }
 
   function closeDialog() { root.querySelector("dialog").close(); }
+
+  function openTask(id) {
+    pendingTaskId = id;
+    if (!mounted || !root || !root.querySelector("dialog")) return;
+    const task = tasks.find(item => String(item.id) === String(id));
+    if (!task) return;
+    pendingTaskId = null;
+    openDialog(task);
+  }
+
+  function syncTaskFormType(type) {
+    const form = root.querySelector("[data-task-form]");
+    if (!form) return;
+    const life = isLifeTask(type);
+    const goal = type === "goal";
+    const fixedPersonal = isFixedPersonalTask(type);
+    form.querySelector("[data-task-subject-field]").hidden = life;
+    form.querySelector("[data-task-priority-field]").hidden = life;
+    if (life) {
+      form.elements.subject_id.value = "";
+      form.elements.priority.value = "medium";
+    }
+    form.querySelector("[data-task-date-label]").textContent = goal ? "Data țintă" : life ? "Data" : "Deadline";
+    form.querySelector("[data-task-duration-label]").textContent = goal ? "Timp alocat" : life ? "Durată" : "Minute estimate";
+    form.elements.deadline_date.required = fixedPersonal;
+    form.elements.deadline_time.required = fixedPersonal;
+    form.querySelector("[data-task-time-hint]").textContent = fixedPersonal
+      ? "Ora fixează un interval pe care Itera îl păstrează în program."
+      : goal
+        ? "Opțional: adaugă o oră doar dacă obiectivul are un moment precis."
+        : "Las-o liberă și Itera alege ora după prioritate.";
+  }
 
   function minutesFromTime(value) {
     if (!value) return null;
@@ -233,10 +273,16 @@
     const form = event.currentTarget, values = Object.fromEntries(new FormData(form)), id = values.id;
     const submitButton = form.querySelector('[type="submit"]');
     form.querySelector("[data-task-error]").textContent = "";
+    const fixedPersonal = isFixedPersonalTask(values.task_type);
     const payload = { user_id: user.id, subject_id: isLifeTask(values.task_type) ? null : (values.subject_id || null), title: values.title.trim(),
       task_type: values.task_type, deadline_date: values.deadline_date || null, deadline_time: values.deadline_time || null,
-      priority: values.priority, estimated_minutes: Number(values.estimated_minutes) || 0, notes: values.notes.trim() || null };
-    if (payload.deadline_date && !payload.deadline_time) {
+      priority: isLifeTask(values.task_type) ? "medium" : values.priority, estimated_minutes: Number(values.estimated_minutes) || 0,
+      notes: isLifeTask(values.task_type) ? `${values.notes.trim()} ${personalTaskOnlyMarker}`.trim() : values.notes.trim() || null };
+    if (fixedPersonal && (!payload.deadline_date || !payload.deadline_time)) {
+      form.querySelector("[data-task-error]").textContent = "Alege data și ora pentru a rezerva activitatea în program.";
+      return;
+    }
+    if (!isLifeTask(values.task_type) && payload.deadline_date && !payload.deadline_time) {
       payload.deadline_time = findAutomaticTime({ ...payload, id });
       if (!payload.deadline_time) {
         form.querySelector("[data-task-error]").textContent = "Nu am găsit un interval liber până la 22:00. Alege o oră sau mută deadline-ul.";
@@ -256,7 +302,7 @@
       return;
     }
     await global.IteraPush?.scheduleTaskReminders(data);
-    if (!values.deadline_time && data.deadline_time) {
+    if (!isLifeTask(values.task_type) && !values.deadline_time && data.deadline_time) {
       global.showToast?.(`Itera l-a planificat la ${String(data.deadline_time).slice(0, 5)}.`, "✓");
     }
     closeDialog(); await reload();
@@ -265,7 +311,7 @@
   async function autoScheduleOpenTasks() {
     const button = root.querySelector("[data-auto-plan]");
     const candidates = tasks
-      .filter(task => !task.completed && task.deadline_date && !task.deadline_time)
+      .filter(task => !task.completed && !isLifeTask(task.task_type) && task.deadline_date && !task.deadline_time)
       .sort((a, b) => {
         const priority = { high: 0, medium: 1, low: 2 };
         return a.deadline_date.localeCompare(b.deadline_date)
@@ -391,5 +437,5 @@
   window.addEventListener("itera:task-updated", () => {
     if (mounted) reload();
   });
-  global.IteraTasksView = Object.freeze({ mount, unmount });
+  global.IteraTasksView = Object.freeze({ mount, unmount, openTask });
 })(window);

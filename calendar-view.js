@@ -3,7 +3,7 @@
 (function (global) {
   const months = ["Ianuarie", "Februarie", "Martie", "Aprilie", "Mai", "Iunie", "Iulie", "August", "Septembrie", "Octombrie", "Noiembrie", "Decembrie"];
   let root, user, subjects = [], events = [], tasks = [], mounted = false;
-  let month = new Date().getMonth(), year = new Date().getFullYear(), selected = isoDate(new Date());
+  let month = new Date().getMonth(), year = new Date().getFullYear(), selected = isoDate(new Date()), pendingEventId = null;
   const taskTypeLabel = type => ({
     personal: "Personal", selfcare: "Self-care", home: "Casă",
     health: "Sănătate", errand: "De rezolvat", goal: "Obiectiv", homework: "Temă",
@@ -13,6 +13,7 @@
     personal: "#9dbbd4", selfcare: "#e7a7bd", home: "#d6b98c",
     health: "#9bc6ae", errand: "#b6acd8", goal: "#d2a36f"
   })[type] || "#f3a9c5";
+  const personalTaskOnlyMarker = "[itera:task-only]";
 
   async function mount() {
     root = document.getElementById("calendarViewRoot");
@@ -31,7 +32,7 @@
     const [subjectResult, eventResult, taskResult] = await Promise.all([
       supabaseClient.from("subjects").select("id,name,color").eq("user_id", user.id).eq("is_active", true).order("position"),
       supabaseClient.from("calendar_events").select("*").eq("user_id", user.id).order("event_date").order("start_time"),
-      supabaseClient.from("tasks").select("id,subject_id,title,task_type,deadline_date,deadline_time,priority,estimated_minutes,completed")
+      supabaseClient.from("tasks").select("id,subject_id,title,task_type,deadline_date,deadline_time,priority,estimated_minutes,completed,notes")
         .eq("user_id", user.id).not("deadline_date", "is", null)
     ]);
     if (!mounted) return;
@@ -43,12 +44,17 @@
     events = eventResult.data || [];
     tasks = taskResult.data || [];
     render();
+    if (pendingEventId) {
+      const event = events.find(item => String(item.id) === String(pendingEventId));
+      pendingEventId = null;
+      if (event) openDialog(event);
+    }
   }
 
   function allItems(date) {
     return [
       ...events.filter(item => item.event_date === date).map(item => ({ ...item, source: "event" })),
-      ...tasks.filter(item => item.deadline_date === date).map(item => ({
+      ...tasks.filter(item => item.deadline_date === date && !String(item.notes || "").includes(personalTaskOnlyMarker)).map(item => ({
         ...item, source: "task", event_date: item.deadline_date, start_time: item.deadline_time,
         event_type: item.task_type
       }))
@@ -144,6 +150,24 @@
 
   function closeDialog() { root.querySelector("dialog").close(); }
 
+  function openEvent(id, dateValue = "") {
+    pendingEventId = id;
+    if (dateValue) {
+      selected = dateValue;
+      const date = new Date(`${dateValue}T12:00:00`);
+      if (!Number.isNaN(date.getTime())) {
+        month = date.getMonth();
+        year = date.getFullYear();
+      }
+    }
+    if (!mounted || !root || !root.querySelector("dialog")) return;
+    const event = events.find(item => String(item.id) === String(id));
+    if (!event) return;
+    pendingEventId = null;
+    render();
+    openDialog(event);
+  }
+
   async function saveEvent(event) {
     event.preventDefault();
     const form = event.currentTarget, values = Object.fromEntries(new FormData(form)), id = values.id;
@@ -197,5 +221,5 @@
   function isoDate(date) { return date.toISOString().slice(0, 10); }
   function formatDate(value) { return new Intl.DateTimeFormat("ro-RO", { day: "numeric", month: "long", year: "numeric" }).format(new Date(`${value}T12:00:00`)); }
   function escapeHtml(value) { return String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#039;"); }
-  global.IteraCalendarView = Object.freeze({ mount, unmount });
+  global.IteraCalendarView = Object.freeze({ mount, unmount, openEvent });
 })(window);
