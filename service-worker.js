@@ -1,6 +1,6 @@
 "use strict";
 
-const CACHE_NAME = "itera-shell-v59";
+const CACHE_NAME = "itera-shell-v60";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -13,6 +13,7 @@ const APP_SHELL = [
   "./subjects-view.js",
   "./progress-view.js",
   "./supabase-config.js",
+  "./task-planning.js",
   "./auth-guard.js",
   "./push-notifications.js",
   "./manifest.webmanifest",

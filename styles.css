@@ -70,6 +70,27 @@ body {
     var(--background);
 }
 
+/* Smart-plan labels stay compact without pushing task actions off-screen. */
+.tasks-spa-item > div {
+  min-width: 0;
+}
+
+.tasks-spa-item > div small {
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 760px) {
+  .tasks-spa-item > div small {
+    font-size: 0.74rem;
+  }
+
+  .tasks-spa-badge {
+    align-self: start;
+    white-space: nowrap;
+  }
+}
+
 /* Schedule day builder: fast weekly setup with safe text containment. */
 .schedule-spa-header-actions {
   display: flex;

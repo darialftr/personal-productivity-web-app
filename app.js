@@ -80,6 +80,8 @@ async function initializeApp() {
   await loadHomeData();
   if (!currentUser) return;
   hydrateDailyEnergy();
+  const initialPlan = await rebuildSmartTaskPlan();
+  if (initialPlan?.changed) await loadHomeData();
   applyAccountPreferences();
   initializeShellViews();
   updateCurrentDate();
@@ -117,6 +119,13 @@ async function initializeApp() {
 });
 
 window.addEventListener("itera:home-refresh", async () => {
+  await loadHomeData();
+  renderAll();
+});
+
+window.addEventListener("itera:plan-updated", async () => {
+  const { data } = await supabaseClient.auth.getUser();
+  if (data?.user) currentUser = data.user;
   await loadHomeData();
   renderAll();
 });
@@ -293,8 +302,12 @@ async function loadHomeData() {
   events = (eventsResult.data || []).map(normalizeHomeEvent);
   tasks = (tasksResult.data || []).map(normalizeHomeTask);
   scheduleItems = scheduleResult.data || [];
+  const reminderTasks = (tasksResult.data || []).map((task) => {
+    const plan = globalThis.IteraPlanning?.getTaskPlan(currentUser, task);
+    return plan ? { ...task, deadline_date: plan.date, deadline_time: plan.time } : task;
+  });
   globalThis.IteraPush
-    ?.syncUpcomingReminders(tasksResult.data || [], eventsResult.data || [])
+    ?.syncUpcomingReminders(reminderTasks, eventsResult.data || [])
     .catch((error) => console.warn("Itera reminder sync:", error));
   populateHomeSubjects();
 }
@@ -356,6 +369,74 @@ function isActionableTask(task) {
   return !isPersonalEventLikeTask(task);
 }
 
+function getTaskPlanDate(task) {
+  return task?.scheduledDate || task?.deadline || task?.deadline_date || null;
+}
+
+function getTaskPlanTime(task) {
+  return task?.scheduledTime || task?.deadlineTime || task?.deadline_time || "";
+}
+
+async function rebuildSmartTaskPlan({ notify = false } = {}) {
+  if (!currentUser || !globalThis.IteraPlanning) return null;
+  const result = globalThis.IteraPlanning.buildPlan({
+    tasks,
+    scheduleItems,
+    calendarEvents: events,
+    user: currentUser,
+    energy: currentEnergy,
+    today: formatDateForInput(new Date())
+  });
+  if (!result.total) return result;
+  const currentPlan = globalThis.IteraPlanning.getPlan(currentUser);
+  if (JSON.stringify(result.plan) === JSON.stringify(currentPlan)) {
+    result.changed = false;
+    return result;
+  }
+  const saved = await globalThis.IteraPlanning.savePlan(currentUser, result.plan);
+  if (!saved.ok) {
+    if (notify) showToast("Planul nu a putut fi salvat în cont.", "!");
+    return null;
+  }
+  currentUser = saved.user;
+  result.changed = true;
+  if (notify) {
+    showToast(
+      `${result.scheduled} ${result.scheduled === 1 ? "task planificat" : "task-uri planificate"} înainte de termen, cu pauze incluse.`,
+      "✓"
+    );
+  }
+  return result;
+}
+
+async function saveTaskPlanEntries(entries) {
+  if (!currentUser || !entries.length || !globalThis.IteraPlanning) return false;
+  const plan = { ...globalThis.IteraPlanning.getPlan(currentUser) };
+  entries.forEach(({ task, date, time }) => {
+    plan[String(task.id)] = {
+      date,
+      time,
+      deadlineDate: task.deadline || task.deadline_date || null,
+      deadlineTime: task.deadlineTime || task.deadline_time || null,
+      duration: getTaskMinutes(task),
+      kind: isLifeTaskType(task.type || task.task_type) ? "personal" : "study",
+      source: "manual",
+      updatedAt: new Date().toISOString()
+    };
+  });
+  const saved = await globalThis.IteraPlanning.savePlan(currentUser, plan);
+  if (!saved.ok) return false;
+  currentUser = saved.user;
+  await Promise.all(entries.map(({ task, date, time }) =>
+    globalThis.IteraPush?.scheduleTaskReminders({
+      ...task,
+      deadline_date: date,
+      deadline_time: time
+    })
+  ));
+  return true;
+}
+
 function cleanPersonalTaskNotes(notes) {
   return String(notes || "").replace(PERSONAL_TASK_ONLY_MARKER, "").trim();
 }
@@ -393,12 +474,15 @@ function normalizeHomeEvent(event) {
 }
 
 function normalizeHomeTask(task) {
+  const plan = globalThis.IteraPlanning?.getTaskPlan(currentUser, task) || null;
   return {
     ...task,
     type: task.task_type,
     subject: subjectName(task.subject_id) || taskTypeLabel(task.task_type),
     deadline: task.deadline_date,
     deadlineTime: String(task.deadline_time || "").slice(0, 5),
+    scheduledDate: plan?.date || task.deadline_date,
+    scheduledTime: plan?.time || String(task.deadline_time || "").slice(0, 5),
     estimatedMinutes: task.estimated_minutes,
     calendarHidden: String(task.notes || "").includes(PERSONAL_TASK_ONLY_MARKER),
     notes: cleanPersonalTaskNotes(task.notes)
@@ -414,8 +498,8 @@ function convertTaskToCalendarItem(task) {
     type: task.type || "homework",
     subject: task.subject || "",
 
-    date: task.deadline,
-    time: task.deadlineTime || "",
+    date: task.scheduledDate || task.deadline,
+    time: task.scheduledTime || task.deadlineTime || "",
 
     duration: Number(
       task.estimatedMinutes || 0
@@ -515,7 +599,7 @@ function getDailyBriefing(profileName) {
     .filter((item) => Number(item.day_of_week) === day)
     .sort((a, b) => String(a.start_time || "").localeCompare(String(b.start_time || "")));
   const todayTasks = tasks.filter(
-    (task) => isActionableTask(task) && task.deadline === todayString
+    (task) => isActionableTask(task) && getTaskPlanDate(task) === todayString
   );
   const remainingTasks = todayTasks.filter((task) => !task.completed);
   const greetingTitle = getGreetingTitle(profileName, now);
@@ -1221,22 +1305,7 @@ async function handleQuickTaskSubmit(event) {
     return;
   }
 
-  if (automaticTime) {
-    const targetDate = parseLocalDate(deadlineDate);
-    const priorityDelay = priority === "high" ? 0 : priority === "low" ? 120 : 60;
-    const preferredStart = ([0, 6].includes(targetDate.getDay()) ? 10 * 60 : 16 * 60) + priorityDelay;
-    const earliest = deadlineDate === formatDateForInput(new Date())
-      ? Math.max(preferredStart, roundToQuarter(new Date().getHours() * 60 + new Date().getMinutes() + 10))
-      : preferredStart;
-    const slot = findAvailableSlot(earliest, estimatedMinutes, mergeIntervals(getDayIntervals(deadlineDate)), 22 * 60);
-    if (slot === null) {
-      showToast("Nu am găsit un interval liber până la 22:00. Alege tu o oră.", "!");
-      return;
-    }
-    deadlineTime = formatClockMinutes(slot);
-  }
-
-  if (deadlineTime) {
+  if (deadlineTime && destination === "event") {
     const candidate = {
       ...normalizeInterval(deadlineTime, "", estimatedMinutes),
       title
@@ -1323,7 +1392,14 @@ async function handleQuickTaskSubmit(event) {
   }
 
   tasks.unshift(normalizeHomeTask(data));
-  await globalThis.IteraPush?.scheduleTaskReminders(data);
+  const smartPlan = taskType !== "goal" && destination !== "event"
+    ? await rebuildSmartTaskPlan()
+    : null;
+  const plannedEntry = smartPlan ? globalThis.IteraPlanning?.getTaskPlan(currentUser, data) : null;
+  await globalThis.IteraPush?.scheduleTaskReminders(plannedEntry
+    ? { ...data, deadline_date: plannedEntry.date, deadline_time: plannedEntry.time }
+    : data);
+  if (plannedEntry) await loadHomeData();
   closeModal("quickTaskModal");
   renderAll();
   showToast(
@@ -1335,7 +1411,7 @@ async function handleQuickTaskSubmit(event) {
         ? "Taskul"
         : "Tema"} apare acum în Task-uri${
       !isLifeTaskType(taskType) ? " și Calendar. Îl găsești și la Materii." : "."
-    }${automaticTime ? ` Itera a ales ora ${deadlineTime}.` : ""}`,
+    }${plannedEntry ? ` Itera l-a planificat pe ${formatReadableDate(plannedEntry.date)}, la ${plannedEntry.time}, înainte de termen.` : ""}`,
     "✓"
   );
 }
@@ -1805,6 +1881,11 @@ async function saveDailyEnergy(level, previousLevel) {
     user_metadata: nextMetadata
   };
   currentEnergyDate = today;
+  const replanned = await rebuildSmartTaskPlan();
+  if (replanned) {
+    await loadHomeData();
+    renderAll();
+  }
 }
 
 function initializeEnergyCheckin() {
@@ -1829,12 +1910,13 @@ function getRecommendedSessionMinutes() {
 }
 
 function renderNowRecommendation() {
-  const today = parseLocalDate(formatDateForInput(new Date()));
+  const todayString = formatDateForInput(new Date());
+  const today = parseLocalDate(todayString);
   const openTasks = tasks
     .filter((task) => {
       if (task.completed) return false;
       const personal = isLifeTaskType(task.task_type || task.type);
-      return !personal || task.calendarHidden;
+      return (!personal || task.calendarHidden) && getTaskPlanDate(task) <= todayString;
     })
     .map((task) => {
       const deadline = task.deadline ? parseLocalDate(task.deadline) : null;
@@ -1844,7 +1926,8 @@ function renderNowRecommendation() {
       return {
         ...task,
         daysUntil,
-        recommendationScore: priorityScore + difficultyScore + Math.max(0, 35 - daysUntil * 7)
+        recommendationScore: priorityScore + difficultyScore + Math.max(0, 35 - daysUntil * 7) -
+          (isLifeTaskType(task.task_type || task.type) ? 60 : 0)
       };
     })
     .sort((a, b) => b.recommendationScore - a.recommendationScore);
@@ -1870,7 +1953,7 @@ function renderNowRecommendation() {
     const nowMinutes = new Date().getHours() * 60 + new Date().getMinutes();
     const nextPersonalEvent = getAllCalendarItems()
       .filter((item) =>
-        item.date === formatDateForInput(new Date()) &&
+        item.date === todayString &&
         item.time &&
         getMinutesFromTime(item.time) >= nowMinutes &&
         isLifeTaskType(item.type) &&
@@ -1974,14 +2057,14 @@ function getDayIntervals(dateString, options = {}) {
 
   if (includeTasks) {
     tasks
-      .filter((task) => !task.completed && task.deadline === dateString && task.deadlineTime)
+      .filter((task) => !task.completed && getTaskPlanDate(task) === dateString && getTaskPlanTime(task))
       .forEach((task) => {
         intervals.push({
-          ...normalizeInterval(task.deadlineTime, "", getTaskMinutes(task)),
+          ...normalizeInterval(getTaskPlanTime(task), "", getTaskMinutes(task)),
           id: task.id,
           kind: "task",
           title: task.title,
-          time: task.deadlineTime
+          time: getTaskPlanTime(task)
         });
       });
   }
@@ -2152,19 +2235,13 @@ function initializeDayPlanner() {
     event.currentTarget.disabled = true;
     event.currentTarget.textContent = "Aplic planul…";
     const today = formatDateForInput(new Date());
-    const results = await Promise.all(
-      pendingDayPlan.map((entry) =>
-        supabaseClient
-          .from("tasks")
-          .update({ deadline_date: today, deadline_time: entry.start })
-          .eq("id", entry.task.id)
-          .eq("user_id", currentUser.id)
-      )
+    const saved = await saveTaskPlanEntries(
+      pendingDayPlan.map((entry) => ({ task: entry.task, date: today, time: entry.start }))
     );
     event.currentTarget.disabled = false;
     event.currentTarget.textContent = "Aplică planul";
 
-    if (results.some((result) => result.error)) {
+    if (!saved) {
       showToast("O parte din plan nu a putut fi salvată.", "!");
       return;
     }
@@ -2192,7 +2269,7 @@ function initializeMorningBrief() {
   if (currentUser?.user_metadata?.itera_brief_seen_date === today) return;
 
   const todayTasks = tasks.filter(
-    (task) => isActionableTask(task) && !task.completed && task.deadline === today
+    (task) => isActionableTask(task) && !task.completed && getTaskPlanDate(task) === today
   );
   const todayClasses = scheduleItems.filter(
     (item) => Number(item.day_of_week) === new Date().getDay()
@@ -2250,7 +2327,7 @@ function getTomorrowDate(offset = 1) {
 
 function getTomorrowTasks() {
   const tomorrow = getTomorrowDate();
-  return tasks.filter((task) => !task.completed && task.deadline === tomorrow);
+  return tasks.filter((task) => !task.completed && getTaskPlanDate(task) === tomorrow);
 }
 
 function getTaskMinutes(task) {
@@ -2270,8 +2347,8 @@ function getOrganizerPlan() {
   const tomorrow = getTomorrowDate();
   const openTasks = tasks.filter((task) => isActionableTask(task) && !task.completed);
   const overdueTasks = openTasks.filter((task) => task.deadline && task.deadline < today);
-  const todayTasks = openTasks.filter((task) => task.deadline === today).sort(sortTasksForPlan);
-  const tomorrowTasks = openTasks.filter((task) => task.deadline === tomorrow).sort(sortTasksForPlan);
+  const todayTasks = openTasks.filter((task) => getTaskPlanDate(task) === today).sort(sortTasksForPlan);
+  const tomorrowTasks = openTasks.filter((task) => getTaskPlanDate(task) === tomorrow).sort(sortTasksForPlan);
   const todayMinutes = todayTasks.reduce((sum, task) => sum + getTaskMinutes(task), 0);
   const tomorrowMinutes = tomorrowTasks.reduce((sum, task) => sum + getTaskMinutes(task), 0);
   const energyCapacity = getEnergyCapacity();
@@ -2336,12 +2413,12 @@ function getOrganizerPlan() {
 
   if (tomorrowIsHeavy) {
     const movable = tomorrowTasks
-      .filter((task) => task.type !== "test" && task.priority !== "high")
+      .filter((task) => task.type !== "test" && task.priority !== "high" && !isLifeTaskType(task.type || task.task_type))
       .sort((a, b) => getTaskMinutes(b) - getTaskMinutes(a))
       .slice(0, 2);
     const candidateDays = [2, 3, 4, 5, 6].map((offset) => {
       const date = getTomorrowDate(offset);
-      const dayTasks = openTasks.filter((task) => task.deadline === date);
+      const dayTasks = openTasks.filter((task) => getTaskPlanDate(task) === date);
       return {
         date,
         count: dayTasks.length,
@@ -2453,15 +2530,34 @@ function initializeOrganizer() {
     const originalLabel = event.currentTarget.textContent;
     event.currentTarget.disabled = true;
     event.currentTarget.textContent = "Reechilibrez…";
-    const { error } = await supabaseClient
-      .from("tasks")
-      .update({ deadline_date: targetDate })
-      .eq("user_id", currentUser.id)
-      .in("id", taskIds);
+    const movingIds = new Set(taskIds.map(String));
+    const targetTasks = taskIds
+      .map((id) => tasks.find((task) => String(task.id) === String(id)))
+      .filter(Boolean);
+    const date = parseLocalDate(targetDate);
+    const weekend = [0, 6].includes(date.getDay());
+    const fixed = getDayIntervals(targetDate).filter((item) => !movingIds.has(String(item.id)));
+    const busy = mergeIntervals(fixed);
+    const scheduleEnd = fixed
+      .filter((item) => item.kind === "schedule")
+      .reduce((latest, item) => Math.max(latest, item.end), 0);
+    let cursor = weekend
+      ? 8 * 60 + 30
+      : Math.max(15 * 60 + 30, scheduleEnd ? scheduleEnd + 45 : 0);
+    const entries = [];
+    targetTasks.forEach((task) => {
+      const slot = findAvailableSlot(cursor, getTaskMinutes(task), busy, 22 * 60 + 30);
+      if (slot === null) return;
+      entries.push({ task, date: targetDate, time: formatClockMinutes(slot) });
+      busy.push({ start: slot, end: slot + getTaskMinutes(task) + 15 });
+      busy.sort((first, second) => first.start - second.start);
+      cursor = roundToQuarter(slot + getTaskMinutes(task) + 15);
+    });
+    const saved = entries.length === targetTasks.length && await saveTaskPlanEntries(entries);
     event.currentTarget.disabled = false;
     event.currentTarget.textContent = originalLabel;
 
-    if (error) {
+    if (!saved) {
       showToast("Planul nu a putut fi actualizat.", "!");
       return;
     }
@@ -2998,7 +3094,7 @@ function renderAchievement() {
   if (!card) return;
   const todayString = formatDateForInput(new Date());
   const todayTasks = tasks.filter(
-    (task) => isActionableTask(task) && task.deadline === todayString
+    (task) => isActionableTask(task) && getTaskPlanDate(task) === todayString
   );
   const currentDate = new Date();
   const mondayOffset = (currentDate.getDay() + 6) % 7;
@@ -3038,7 +3134,10 @@ function getRecoveryCandidates() {
 function buildRecoveryPlan() {
   const candidates = getRecoveryCandidates();
   const today = formatDateForInput(new Date());
-  const protectedTasks = candidates.filter((task) => task.type === "test" || task.task_type === "test" || task.priority === "high");
+  const protectedTasks = candidates.filter((task) =>
+    task.type === "test" || task.task_type === "test" || task.priority === "high" ||
+    isLifeTaskType(task.type || task.task_type)
+  );
   const flexibleTasks = candidates.filter((task) => !protectedTasks.includes(task));
   const keepToday = flexibleTasks.slice(0, Math.max(0, 2 - protectedTasks.length));
   const move = flexibleTasks.slice(keepToday.length);
@@ -3053,8 +3152,8 @@ function buildRecoveryPlan() {
   const updates = [
     ...protectedTasks.map((task) => ({
       task,
-      date: task.deadline,
-      time: task.deadlineTime || null,
+      date: getTaskPlanDate(task),
+      time: getTaskPlanTime(task) || null,
       protected: true
     })),
     ...keepToday.map((task) => ({ task, date: today, time: null, protected: false })),
@@ -3077,7 +3176,7 @@ function buildRecoveryPlan() {
     const isToday = entry.date === today;
     const earliest = isToday
       ? roundToQuarter(new Date().getHours() * 60 + new Date().getMinutes() + 15)
-      : ([0, 6].includes(date.getDay()) ? 10 * 60 : 16 * 60);
+      : ([0, 6].includes(date.getDay()) ? 8 * 60 + 30 : 16 * 60);
     const busy = busyByDate.get(entry.date);
     const slot = findAvailableSlot(earliest, getTaskMinutes(entry.task), busy, 22 * 60);
     if (slot !== null) {
@@ -3099,7 +3198,7 @@ function renderRecoveryCard() {
   if (!overloaded) return;
   document.getElementById("recoveryTitle").textContent = `${candidates.length} lucruri cer atenție în același timp.`;
   document.getElementById("recoveryDescription").textContent =
-    `Planul are ${formatMinutes(minutes)}. Testele și prioritățile mari rămân fixe; restul poate fi distribuit realist.`;
+    `Planul are ${formatMinutes(minutes)}. Testele, prioritățile mari și planurile personale rămân fixe; restul poate fi distribuit realist.`;
 }
 
 function initializeRecoveryMode() {
@@ -3129,21 +3228,11 @@ async function applyRecoveryPlan(event) {
   }
   event.currentTarget.disabled = true;
   event.currentTarget.textContent = "Simplific planul…";
-  const results = await Promise.all(changes.map((entry) =>
-    supabaseClient.from("tasks")
-      .update({ deadline_date: entry.date, deadline_time: entry.time })
-      .eq("id", entry.task.id)
-      .eq("user_id", currentUser.id)
-  ));
+  const entries = changes.filter((entry) => entry.time);
+  const saved = entries.length === changes.length && await saveTaskPlanEntries(entries);
   event.currentTarget.disabled = false;
   event.currentTarget.textContent = "Aplică planul simplificat";
-  if (results.some((result) => result.error)) {
-    await Promise.all(changes.map((entry) =>
-      supabaseClient.from("tasks")
-        .update({ deadline_date: entry.task.deadline, deadline_time: entry.task.deadlineTime || null })
-        .eq("id", entry.task.id)
-        .eq("user_id", currentUser.id)
-    ));
+  if (!saved) {
     showToast("Planul nu a putut fi actualizat complet.", "!");
     return;
   }
@@ -3246,7 +3335,7 @@ function getSmartResumeSuggestion() {
     const isWeekend = [0, 6].includes(date.getDay());
     const earliest = offset === 0
       ? roundToQuarter(new Date().getHours() * 60 + new Date().getMinutes() + 30)
-      : (isWeekend ? 10 * 60 : 16 * 60);
+      : (isWeekend ? 8 * 60 + 30 : 16 * 60);
     const busy = mergeIntervals(
       getDayIntervals(dateString).filter((item) => !(item.kind === "task" && item.id === focusTaskId))
     );
@@ -3267,11 +3356,9 @@ async function scheduleSmartTaskContinuation(date, time) {
     actionButton.disabled = false;
     return;
   }
-  const { error } = await supabaseClient.from("tasks")
-    .update({ deadline_date: date, deadline_time: time })
-    .eq("id", taskId)
-    .eq("user_id", currentUser.id);
-  if (error) {
+  const task = tasks.find((item) => String(item.id) === String(taskId));
+  const saved = task && await saveTaskPlanEntries([{ task, date, time }]);
+  if (!saved) {
     actionButton.disabled = false;
     showToast("Task-ul nu a putut fi reprogramat.", "!");
     return;
@@ -3664,18 +3751,19 @@ function buildNotifications() {
   const taskNotifications = tasks
     .filter((task) => isActionableTask(task) && !task.completed && task.deadline)
     .map((task) => {
-      const days = Math.round((parseLocalDate(task.deadline) - today) / 86400000);
+      const planDate = getTaskPlanDate(task);
+      const days = Math.round((parseLocalDate(planDate) - today) / 86400000);
       if (days > 3) return null;
       return {
         icon: days < 0 ? "!" : "✓",
         title: days < 0 ? `${task.title} este întârziat` : task.title,
         text: days === 0
-          ? `Deadline astăzi · ${task.estimatedMinutes || 30} min estimate`
+          ? `Planificat astăzi${getTaskPlanTime(task) ? ` la ${getTaskPlanTime(task)}` : ""} · termen ${formatRelativeDate(task.deadline)}`
           : days === 1
-            ? `Pentru mâine · ${task.estimatedMinutes || 30} min estimate`
+            ? `Planificat mâine${getTaskPlanTime(task) ? ` la ${getTaskPlanTime(task)}` : ""} · termen ${formatRelativeDate(task.deadline)}`
             : days < 0
               ? "Replanifică-l sau finalizează-l acum."
-              : `Deadline peste ${days} zile`,
+              : `Planificat peste ${days} zile · termen ${formatRelativeDate(task.deadline)}`,
         action: "tasks",
         targetId: task.id,
         urgent: days <= 1
@@ -3786,7 +3874,7 @@ function renderHomeSummary() {
   );
 
   const taskEvents = tasks.filter(
-    (task) => isActionableTask(task) && task.deadline === todayString
+    (task) => isActionableTask(task) && getTaskPlanDate(task) === todayString
   );
 
   const remainingTasks = taskEvents.filter(
@@ -3872,11 +3960,11 @@ function renderTodayTimeline() {
       .filter((event) => event.date === todayString && event.time)
       .map((event) => ({ ...event, endTime: "" })),
     ...tasks
-      .filter((task) => task.deadline === todayString && task.deadlineTime && !task.completed)
+      .filter((task) => getTaskPlanDate(task) === todayString && getTaskPlanTime(task) && !task.completed)
       .map((task) => ({
         title: task.title,
         subject: task.subject,
-        time: task.deadlineTime,
+        time: getTaskPlanTime(task),
         endTime: "",
         type: task.type || "homework"
       }))
@@ -4163,6 +4251,15 @@ async function toggleItemCompletion(
     if (error) {
       await loadHomeData();
       showToast("Task-ul nu a putut fi actualizat.", "!");
+      return;
+    }
+    if (task.completed) {
+      const removal = await globalThis.IteraPlanning?.removeTask(currentUser, task.id);
+      if (removal?.user) currentUser = removal.user;
+      await globalThis.IteraPush?.cancelTaskReminders(task.id);
+    } else {
+      await rebuildSmartTaskPlan();
+      await loadHomeData();
     }
   } else {
     showToast(

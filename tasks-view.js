@@ -24,6 +24,9 @@
     return new Date(date.getTime() - offset).toISOString().slice(0, 10);
   };
   const today = () => localDate();
+  const taskPlan = task => global.IteraPlanning?.getTaskPlan(user, task) || null;
+  const plannedDate = task => taskPlan(task)?.date || task.deadline_date || null;
+  const plannedTime = task => taskPlan(task)?.time || task.deadline_time || null;
 
   async function mount() {
     root = document.getElementById("tasksViewRoot");
@@ -67,7 +70,7 @@
       if (isPersonalEventLike(task)) return false;
       const matchesSearch = task.title.toLowerCase().includes(search);
       if (!matchesSearch) return false;
-      if (filter === "today") return task.deadline_date === today() && !task.completed;
+      if (filter === "today") return plannedDate(task) === today() && !task.completed;
       if (filter === "homework") return task.task_type === "homework" && !task.completed;
       if (filter === "test") return task.task_type === "test" && !task.completed;
       if (filter === "life") return isLifeTask(task.task_type) && !task.completed;
@@ -116,6 +119,8 @@
   function renderTask(task) {
     const subject = subjects.find(item => item.id === task.subject_id);
     const deadlineLabel = task.deadline_date ? formatTaskDate(task.deadline_date) : "";
+    const plan = taskPlan(task);
+    const planLabel = plan ? `Planificat ${formatTaskDate(plan.date)} · ${plan.time}` : "";
     const contextLabel = subject?.name || taskTypeLabel(task.task_type);
     const personalEvent = isPersonalEventLike(task);
     return `<div class="tasks-swipe-row" data-task-row="${task.id}">
@@ -124,7 +129,7 @@
       ${personalEvent
         ? '<span class="tasks-spa-event-icon" aria-label="Eveniment"></span>'
         : `<button class="tasks-spa-check" data-toggle-task="${task.id}" aria-label="Schimbă starea">${task.completed ? "✓" : ""}</button>`}
-      <div><strong>${escapeHtml(task.title)}</strong><small>${escapeHtml(contextLabel)}${deadlineLabel ? ` · ${escapeHtml(deadlineLabel)}` : ""}${task.deadline_time ? ` · ${String(task.deadline_time).slice(0, 5)}` : ""}</small></div>
+      <div><strong>${escapeHtml(task.title)}</strong><small>${escapeHtml(contextLabel)}${planLabel ? ` · ${escapeHtml(planLabel)}` : ""}${deadlineLabel && (!plan || plan.date !== task.deadline_date) ? ` · termen ${escapeHtml(deadlineLabel)}` : ""}</small></div>
       ${personalEvent
         ? '<span class="tasks-spa-badge tasks-spa-event-badge">Eveniment</span>'
         : `<span class="tasks-spa-badge priority-${escapeHtml(task.priority || "medium")}">${task.estimated_minutes || 0}m</span>`}
@@ -225,71 +230,6 @@
         : "Las-o liberă și Itera alege ora după prioritate.";
   }
 
-  function minutesFromTime(value) {
-    if (!value) return null;
-    const [hours, minutes] = String(value).slice(0, 5).split(":").map(Number);
-    return Number.isFinite(hours) && Number.isFinite(minutes) ? hours * 60 + minutes : null;
-  }
-
-  function clockFromMinutes(value) {
-    const safe = Math.max(0, Math.min(1439, Math.round(value)));
-    return `${String(Math.floor(safe / 60)).padStart(2, "0")}:${String(safe % 60).padStart(2, "0")}`;
-  }
-
-  function mergeIntervals(intervals) {
-    return intervals
-      .filter(item => Number.isFinite(item.start) && Number.isFinite(item.end) && item.end > item.start)
-      .sort((a, b) => a.start - b.start)
-      .reduce((merged, interval) => {
-        const last = merged.at(-1);
-        if (!last || interval.start > last.end) merged.push({ ...interval });
-        else last.end = Math.max(last.end, interval.end);
-        return merged;
-      }, []);
-  }
-
-  function busyIntervals(dateValue, excludedIds = new Set()) {
-    const date = new Date(`${dateValue}T12:00:00`);
-    const dayOfWeek = date.getDay() === 0 ? 7 : date.getDay();
-    const scheduleBusy = scheduleItems
-      .filter(item => Number(item.day_of_week) === dayOfWeek)
-      .map(item => ({ start: minutesFromTime(item.start_time), end: minutesFromTime(item.end_time) }));
-    const eventBusy = calendarEvents
-      .filter(item => item.event_date === dateValue && item.start_time)
-      .map(item => {
-        const start = minutesFromTime(item.start_time);
-        return { start, end: minutesFromTime(item.end_time) ?? start + 60 };
-      });
-    const taskBusy = tasks
-      .filter(item => !item.completed && item.deadline_date === dateValue && item.deadline_time && !excludedIds.has(item.id))
-      .map(item => {
-        const start = minutesFromTime(item.deadline_time);
-        return { start, end: start + Math.max(15, Number(item.estimated_minutes) || 30) };
-      });
-    return mergeIntervals([...scheduleBusy, ...eventBusy, ...taskBusy]);
-  }
-
-  function findAutomaticTime(task, extraBusy = []) {
-    if (!task.deadline_date) return null;
-    const date = new Date(`${task.deadline_date}T12:00:00`);
-    const weekend = [0, 6].includes(date.getDay());
-    const priorityDelay = task.priority === "high" ? 0 : task.priority === "low" ? 120 : 60;
-    let cursor = (weekend ? 10 * 60 : 16 * 60) + priorityDelay;
-    if (task.deadline_date === today()) {
-      const now = new Date();
-      cursor = Math.max(cursor, Math.ceil((now.getHours() * 60 + now.getMinutes() + 10) / 15) * 15);
-    }
-    const duration = Math.max(15, Number(task.estimated_minutes) || 30);
-    const latestEnd = 22 * 60;
-    const excludedIds = new Set(task.id ? [task.id] : []);
-    const occupied = mergeIntervals([...busyIntervals(task.deadline_date, excludedIds), ...extraBusy]);
-    for (const interval of occupied) {
-      if (cursor + duration <= interval.start) break;
-      if (cursor < interval.end) cursor = Math.ceil(interval.end / 15) * 15;
-    }
-    return cursor + duration <= latestEnd ? clockFromMinutes(cursor) : null;
-  }
-
   async function saveTask(event) {
     event.preventDefault();
     const form = event.currentTarget, values = Object.fromEntries(new FormData(form)), id = values.id;
@@ -307,13 +247,6 @@
       form.querySelector("[data-task-error]").textContent = "Alege data și ora pentru a rezerva activitatea în program.";
       return;
     }
-    if (!isLifeTask(values.task_type) && payload.deadline_date && !payload.deadline_time) {
-      payload.deadline_time = findAutomaticTime({ ...payload, id });
-      if (!payload.deadline_time) {
-        form.querySelector("[data-task-error]").textContent = "Nu am găsit un interval liber până la 22:00. Alege o oră sau mută deadline-ul.";
-        return;
-      }
-    }
     submitButton.disabled = true;
     submitButton.textContent = "Se salvează…";
     const query = id
@@ -326,50 +259,53 @@
       form.querySelector("[data-task-error]").textContent = "Task-ul nu a putut fi salvat.";
       return;
     }
-    await global.IteraPush?.scheduleTaskReminders(data);
-    if (!isLifeTask(values.task_type) && !values.deadline_time && data.deadline_time) {
-      global.showToast?.(`Itera l-a planificat la ${String(data.deadline_time).slice(0, 5)}.`, "✓");
-    }
-    closeDialog(); await reload();
-  }
-
-  async function autoScheduleOpenTasks() {
-    const button = root.querySelector("[data-auto-plan]");
-    const candidates = tasks
-      .filter(task => !task.completed && !isLifeTask(task.task_type) && task.deadline_date && !task.deadline_time)
-      .sort((a, b) => {
-        const priority = { high: 0, medium: 1, low: 2 };
-        return a.deadline_date.localeCompare(b.deadline_date)
-          || (priority[a.priority] ?? 1) - (priority[b.priority] ?? 1)
-          || String(a.created_at).localeCompare(String(b.created_at));
-      });
-    if (!candidates.length) {
-      global.showToast?.("Toate taskurile au deja o oră.", "✓");
-      return;
-    }
-
-    button.disabled = true;
-    button.textContent = "Planific...";
-    const plannedBusy = new Map();
-    let planned = 0;
-    for (const task of candidates) {
-      const extraBusy = plannedBusy.get(task.deadline_date) || [];
-      const deadlineTime = findAutomaticTime(task, extraBusy);
-      if (!deadlineTime) continue;
-      const { data, error } = await supabaseClient.from("tasks")
-        .update({ deadline_time: deadlineTime })
-        .eq("id", task.id).eq("user_id", user.id).select("*").single();
-      if (error) continue;
-      const start = minutesFromTime(deadlineTime);
-      extraBusy.push({ start, end: start + Math.max(15, Number(task.estimated_minutes) || 30) });
-      plannedBusy.set(task.deadline_date, extraBusy);
-      planned += 1;
+    const removal = await global.IteraPlanning?.removeTask(user, data.id);
+    if (removal?.user) user = removal.user;
+    closeDialog();
+    await reload();
+    if (!isPersonalEventLike(data) && data.task_type !== "goal" && data.deadline_date) {
+      await autoScheduleOpenTasks({ silent: true, highlightId: data.id });
+    } else {
       await global.IteraPush?.scheduleTaskReminders(data);
     }
-    global.showToast?.(planned
-      ? `${planned} ${planned === 1 ? "task planificat" : "taskuri planificate"} după prioritate.`
-      : "Nu am găsit intervale libere până la 22:00.", planned ? "✓" : "!");
-    await reload();
+  }
+
+  async function autoScheduleOpenTasks(options = {}) {
+    const button = root.querySelector("[data-auto-plan]");
+    const energy = user?.user_metadata?.itera_energy_date === today()
+      ? Number(user.user_metadata.itera_energy_level) || 3
+      : 3;
+    const result = global.IteraPlanning?.buildPlan({
+      tasks, scheduleItems, calendarEvents, user, energy, today: today()
+    });
+    if (!result?.total) {
+      if (!options.silent) global.showToast?.("Nu există taskuri care trebuie planificate.", "✓");
+      return;
+    }
+    if (button) { button.disabled = true; button.textContent = "Planific..."; }
+    const saved = await global.IteraPlanning.savePlan(user, result.plan);
+    if (button) { button.disabled = false; button.textContent = "Planifică automat"; }
+    if (!saved.ok) {
+      global.showToast?.("Planul nu a putut fi salvat în cont.", "!");
+      return;
+    }
+    user = saved.user;
+    await Promise.all(tasks.map(task => {
+      const plan = global.IteraPlanning.getTaskPlan(user, task);
+      return global.IteraPush?.scheduleTaskReminders(plan
+        ? { ...task, deadline_date: plan.date, deadline_time: plan.time }
+        : task);
+    }));
+    render();
+    global.dispatchEvent(new CustomEvent("itera:plan-updated"));
+    const highlighted = options.highlightId && global.IteraPlanning.getTaskPlan(user, options.highlightId);
+    if (options.silent && highlighted) {
+      global.showToast?.(`Planificat ${formatTaskDate(highlighted.date)}, la ${highlighted.time}, înainte de termen.`, "✓");
+    } else if (!options.silent) {
+      global.showToast?.(result.scheduled
+        ? `${result.scheduled} ${result.scheduled === 1 ? "task planificat" : "taskuri planificate"}, cu pauze și fără ultima clipă.`
+        : "Nu am găsit intervale libere înaintea termenelor.", result.scheduled ? "✓" : "!");
+    }
   }
 
   function bindSwipeRows() {
@@ -428,6 +364,8 @@
     const { error } = await supabaseClient.from("tasks").update({ completed, progress: completed ? 100 : 0,
       completed_at: completed ? new Date().toISOString() : null }).eq("id", id).eq("user_id", user.id);
     if (!error) {
+      const removal = await global.IteraPlanning?.removeTask(user, id);
+      if (removal?.user) user = removal.user;
       await global.IteraPush?.scheduleTaskReminders({ ...task, completed });
       await reload();
     }
@@ -446,6 +384,8 @@
     await global.IteraPush?.cancelTaskReminders(id);
     const { error } = await supabaseClient.from("tasks").delete().eq("id", id).eq("user_id", user.id);
     if (!error) {
+      const removal = await global.IteraPlanning?.removeTask(user, id);
+      if (removal?.user) user = removal.user;
       if (fromDialog) closeDialog();
       global.showToast?.("Task șters.", "✓");
       await reload();

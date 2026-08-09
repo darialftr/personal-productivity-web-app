@@ -14,6 +14,9 @@
     health: "#9bc6ae", errand: "#b6acd8", goal: "#d2a36f"
   })[type] || "#f3a9c5";
   const personalTaskOnlyMarker = "[itera:task-only]";
+  const taskPlan = task => global.IteraPlanning?.getTaskPlan(user, task) || null;
+  const plannedDate = task => taskPlan(task)?.date || task.deadline_date;
+  const plannedTime = task => taskPlan(task)?.time || task.deadline_time;
 
   async function mount() {
     root = document.getElementById("calendarViewRoot");
@@ -54,8 +57,8 @@
   function allItems(date) {
     return [
       ...events.filter(item => item.event_date === date).map(item => ({ ...item, source: "event" })),
-      ...tasks.filter(item => item.deadline_date === date && !String(item.notes || "").includes(personalTaskOnlyMarker)).map(item => ({
-        ...item, source: "task", event_date: item.deadline_date, start_time: item.deadline_time,
+      ...tasks.filter(item => plannedDate(item) === date && !String(item.notes || "").includes(personalTaskOnlyMarker)).map(item => ({
+        ...item, source: "task", event_date: plannedDate(item), start_time: plannedTime(item),
         event_type: item.task_type
       }))
     ].sort((a, b) => String(a.start_time || "23:59").localeCompare(String(b.start_time || "23:59")));
