@@ -8,6 +8,8 @@
   const isFixedPersonalTask = type => ["personal", "selfcare", "home", "health", "errand"].includes(type);
   const personalTaskOnlyMarker = "[itera:task-only]";
   const cleanTaskNotes = notes => String(notes || "").replace(personalTaskOnlyMarker, "").trim();
+  const isPersonalEventLike = task =>
+    isFixedPersonalTask(task.task_type) && !String(task.notes || "").includes(personalTaskOnlyMarker);
   const taskTypeLabel = type => ({
     personal: "Personal", selfcare: "Self-care", home: "Casă",
     health: "Sănătate", errand: "De rezolvat", goal: "Obiectiv", test: "Test",
@@ -98,6 +100,7 @@
         <div class="tasks-spa-fields">
           <label data-task-subject-field>Materie<select name="subject_id"><option value="">Fără materie</option>${subjects.map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join("")}</select></label>
           <label>Tip<select name="task_type"><option value="homework">Temă</option><option value="test">Test</option><option value="project">Proiect</option><option value="study">Studiu</option><option value="personal">Personal</option><option value="selfcare">Self-care</option><option value="home">Casă</option><option value="health">Sănătate</option><option value="errand">De rezolvat</option><option value="goal">Obiectiv</option><option value="other">Altceva</option></select></label>
+          <label data-task-kind-field hidden>Comportament<select name="personal_kind"><option value="task">Task cu timer</option><option value="event">Eveniment la oră fixă</option></select></label>
           <label><span data-task-date-label>Deadline</span><input name="deadline_date" type="date"></label><label><span>Ora</span><input name="deadline_time" type="time"><small class="tasks-time-hint" data-task-time-hint>Las-o liberă și Itera alege ora după prioritate.</small></label>
           <label data-task-priority-field>Prioritate<select name="priority"><option value="low">Scăzută</option><option value="medium">Medie</option><option value="high">Ridicată</option></select></label>
           <label><span data-task-duration-label>Minute estimate</span><input name="estimated_minutes" type="number" min="0" value="30"></label>
@@ -113,13 +116,18 @@
     const subject = subjects.find(item => item.id === task.subject_id);
     const deadlineLabel = task.deadline_date ? formatTaskDate(task.deadline_date) : "";
     const contextLabel = subject?.name || taskTypeLabel(task.task_type);
+    const personalEvent = isPersonalEventLike(task);
     return `<div class="tasks-swipe-row" data-task-row="${task.id}">
       <button class="tasks-swipe-delete" data-swipe-delete="${task.id}" aria-label="Șterge ${escapeHtml(task.title)}">Șterge</button>
-      <article class="tasks-spa-item ${task.completed ? "completed" : ""} ${isLifeTask(task.task_type) ? "life-task" : ""}" data-swipe-surface style="--subject:${subject?.color || taskTypeColor(task.task_type)}">
-      <button class="tasks-spa-check" data-toggle-task="${task.id}" aria-label="Schimbă starea">${task.completed ? "✓" : ""}</button>
+      <article class="tasks-spa-item ${task.completed ? "completed" : ""} ${isLifeTask(task.task_type) ? "life-task" : ""} ${personalEvent ? "personal-event" : ""}" data-swipe-surface style="--subject:${subject?.color || taskTypeColor(task.task_type)}">
+      ${personalEvent
+        ? '<span class="tasks-spa-event-icon" aria-label="Eveniment"></span>'
+        : `<button class="tasks-spa-check" data-toggle-task="${task.id}" aria-label="Schimbă starea">${task.completed ? "✓" : ""}</button>`}
       <div><strong>${escapeHtml(task.title)}</strong><small>${escapeHtml(contextLabel)}${deadlineLabel ? ` · ${escapeHtml(deadlineLabel)}` : ""}${task.deadline_time ? ` · ${String(task.deadline_time).slice(0, 5)}` : ""}</small></div>
-      <span class="tasks-spa-badge priority-${escapeHtml(task.priority || "medium")}">${task.estimated_minutes || 0}m</span>
-      ${task.completed ? "" : `<button class="tasks-spa-start" data-start-task="${task.id}"><span class="tasks-play-icon" aria-hidden="true"></span> Start</button>`}
+      ${personalEvent
+        ? '<span class="tasks-spa-badge tasks-spa-event-badge">Eveniment</span>'
+        : `<span class="tasks-spa-badge priority-${escapeHtml(task.priority || "medium")}">${task.estimated_minutes || 0}m</span>`}
+      ${task.completed || personalEvent ? "" : `<button class="tasks-spa-start" data-start-task="${task.id}"><span class="tasks-play-icon" aria-hidden="true"></span> Start</button>`}
       <button class="tasks-spa-edit" data-edit-task="${task.id}">Editează</button></article></div>`;
   }
 
@@ -163,6 +171,7 @@
         : task?.[name] ?? "";
     }
     if (!task) { form.elements.task_type.value = "homework"; form.elements.priority.value = "medium"; form.elements.estimated_minutes.value = "30"; }
+    form.elements.personal_kind.value = task && isPersonalEventLike(task) ? "event" : "task";
     syncTaskFormType(form.elements.task_type.value);
     form.querySelector("[data-task-dialog-title]").textContent = task ? "Editează task-ul" : "Task nou";
     form.querySelector("[data-delete-task]").hidden = !task;
@@ -188,6 +197,7 @@
     const fixedPersonal = isFixedPersonalTask(type);
     form.querySelector("[data-task-subject-field]").hidden = life;
     form.querySelector("[data-task-priority-field]").hidden = life;
+    form.querySelector("[data-task-kind-field]").hidden = !fixedPersonal;
     if (life) {
       form.elements.subject_id.value = "";
       form.elements.priority.value = "medium";
@@ -274,10 +284,13 @@
     const submitButton = form.querySelector('[type="submit"]');
     form.querySelector("[data-task-error]").textContent = "";
     const fixedPersonal = isFixedPersonalTask(values.task_type);
+    const keepAsTaskOnly = !fixedPersonal || values.personal_kind !== "event";
     const payload = { user_id: user.id, subject_id: isLifeTask(values.task_type) ? null : (values.subject_id || null), title: values.title.trim(),
       task_type: values.task_type, deadline_date: values.deadline_date || null, deadline_time: values.deadline_time || null,
       priority: isLifeTask(values.task_type) ? "medium" : values.priority, estimated_minutes: Number(values.estimated_minutes) || 0,
-      notes: isLifeTask(values.task_type) ? `${values.notes.trim()} ${personalTaskOnlyMarker}`.trim() : values.notes.trim() || null };
+      notes: isLifeTask(values.task_type) && keepAsTaskOnly
+        ? `${values.notes.trim()} ${personalTaskOnlyMarker}`.trim()
+        : values.notes.trim() || null };
     if (fixedPersonal && (!payload.deadline_date || !payload.deadline_time)) {
       form.querySelector("[data-task-error]").textContent = "Alege data și ora pentru a rezerva activitatea în program.";
       return;
