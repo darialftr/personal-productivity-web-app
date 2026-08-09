@@ -97,9 +97,9 @@
       ? `${school.length} ${school.length === 1 ? "oră" : "ore"} · ${String(school[0].start_time).slice(0, 5)}–${String(school.at(-1).end_time).slice(0, 5)}`
       : current.length
         ? `${current.length} ${current.length === 1 ? "activitate" : "activități"}`
-        : "Zi neconfigurată";
+        : "";
     return `<section class="schedule-spa-day">
-      <div class="schedule-spa-day-head"><div><strong>${dayNames[day]}</strong><small>${summary}</small></div>
+      <div class="schedule-spa-day-head"><div><strong>${dayNames[day]}</strong>${summary ? `<small>${summary}</small>` : ""}</div>
         <button type="button" class="schedule-spa-day-add" data-build-day="${day}" aria-label="Configurează ${dayNames[day]}">+</button></div>
       ${current.length ? current.map(renderItem).join("") : `<button class="schedule-spa-empty schedule-spa-empty-action" data-build-day="${day}"><strong>Adaugă materiile</strong><span>Alegi ordinea, Itera pune orele.</span></button>`}
     </section>`;

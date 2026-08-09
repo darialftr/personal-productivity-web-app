@@ -482,6 +482,27 @@ body {
     white-space: normal;
   }
 
+  .schedule-spa-header-actions [data-build-schedule] {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    width: 100%;
+    height: auto;
+    min-height: 42px;
+    padding: 9px 10px;
+    overflow: hidden;
+    font-size: .7rem;
+    line-height: 1.15;
+    white-space: nowrap;
+  }
+
+  .schedule-spa-header-actions [data-build-schedule] > span {
+    flex: 0 0 auto;
+    font-size: 1rem;
+    line-height: 1;
+  }
+
   .schedule-spa-week {
     grid-template-columns: repeat(7, minmax(230px, 82vw));
     gap: 9px;
