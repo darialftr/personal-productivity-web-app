@@ -97,7 +97,7 @@
     const items = allItems(selected);
     return `<div class="calendar-spa-detail-head"><div><p class="eyebrow">Zi selectată</p><h3>${formatDate(selected)}</h3></div>
       <button class="icon-button" data-add-selected aria-label="Adaugă"><span aria-hidden="true">+</span></button></div>
-      <div class="calendar-spa-detail-list">${items.length ? items.map(item => `<button class="calendar-spa-detail-item" ${item.source === "event" ? `data-edit-event="${item.id}"` : 'data-open-tasks'} style="--item:${itemColor(item)}">
+      <div class="calendar-spa-detail-list">${items.length ? items.map(item => `<button class="calendar-spa-detail-item" ${item.source === "event" ? `data-edit-event="${item.id}"` : `data-open-task="${item.id}"`} style="--item:${itemColor(item)}">
         <span>${String(item.start_time || "—").slice(0, 5)}</span><span><strong>${escapeHtml(item.title)}</strong>
         <small>${item.source === "task" ? escapeHtml(subjectName(item.subject_id) || taskTypeLabel(item.task_type)) : escapeHtml(subjectName(item.subject_id) || item.event_type)}</small></span></button>`).join("") :
         '<div class="calendar-spa-empty">Nimic planificat în această zi.</div>'}</div>`;
@@ -125,7 +125,10 @@
     root.querySelectorAll("[data-month]").forEach(button => button.addEventListener("click", () => changeMonth(Number(button.dataset.month))));
     root.querySelectorAll("[data-date]").forEach(button => button.addEventListener("click", () => { selected = button.dataset.date; render(); }));
     root.querySelectorAll("[data-edit-event]").forEach(button => button.addEventListener("click", () => openDialog(events.find(item => item.id === button.dataset.editEvent))));
-    root.querySelectorAll("[data-open-tasks]").forEach(button => button.addEventListener("click", () => IteraShell.navigate("tasks", { updateUrl: true })));
+    root.querySelectorAll("[data-open-task]").forEach(button => button.addEventListener("click", () => {
+      IteraShell.navigate("tasks", { updateUrl: true });
+      global.IteraTasksView?.openTask(button.dataset.openTask);
+    }));
   }
 
   function changeMonth(delta) {

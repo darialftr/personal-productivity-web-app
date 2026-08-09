@@ -57,6 +57,7 @@ let currentEnergy = 3;
 let currentEnergyDate = formatDateForInput(now);
 let energySaveVersion = 0;
 let recommendedTask = null;
+let recommendedNavigation = null;
 let pendingDayPlan = [];
 let pendingRecoveryPlan = [];
 let focusAudioContext = null;
@@ -1529,6 +1530,11 @@ function startFocusSession() {
 }
 
 function startRecommendedFocusSession() {
+  if (recommendedNavigation) {
+    openPage(recommendedNavigation);
+    return;
+  }
+
   if (recommendedTask && isLifeTaskType(recommendedTask.task_type || recommendedTask.type)) {
     startTaskFocus(recommendedTask, null);
     return;
@@ -1814,7 +1820,11 @@ function getRecommendedSessionMinutes() {
 function renderNowRecommendation() {
   const today = parseLocalDate(formatDateForInput(new Date()));
   const openTasks = tasks
-    .filter((task) => !task.completed)
+    .filter((task) => {
+      if (task.completed) return false;
+      const personal = isLifeTaskType(task.task_type || task.type);
+      return !personal || task.calendarHidden;
+    })
     .map((task) => {
       const deadline = task.deadline ? parseLocalDate(task.deadline) : null;
       const daysUntil = deadline ? Math.round((deadline - today) / 86400000) : 30;
@@ -1831,8 +1841,10 @@ function renderNowRecommendation() {
   recommendedTask = openTasks[0] || null;
   const title = document.getElementById("nowRecommendationTitle");
   const reason = document.getElementById("nowRecommendationReason");
+  const actionButton = document.getElementById("startRecommendedSession");
   const energyMessage = document.getElementById("energyRecommendation");
   const minutes = getRecommendedSessionMinutes();
+  recommendedNavigation = null;
 
   const energyLabels = {
     1: "Astăzi păstrăm planul foarte ușor.",
@@ -1844,17 +1856,43 @@ function renderNowRecommendation() {
   energyMessage.textContent = energyLabels[currentEnergy];
 
   if (!recommendedTask) {
+    const nowMinutes = new Date().getHours() * 60 + new Date().getMinutes();
+    const nextPersonalEvent = getAllCalendarItems()
+      .filter((item) =>
+        item.date === formatDateForInput(new Date()) &&
+        item.time &&
+        getMinutesFromTime(item.time) >= nowMinutes &&
+        isLifeTaskType(item.type) &&
+        !item.completed
+      )
+      .sort(sortEvents)[0];
+    if (nextPersonalEvent) {
+      title.textContent = `La ${nextPersonalEvent.time} ai „${nextPersonalEvent.title}”.`;
+      reason.textContent = "Este un eveniment cu oră fixă, deci nu pornește o sesiune de focus.";
+      actionButton.textContent = "Vezi în calendar";
+      recommendedNavigation = "calendar";
+      return;
+    }
     title.textContent = "Ai terminat tot ce era planificat pentru azi.";
     reason.textContent = `Dacă vrei, poți păstra ${minutes} de minute pentru o recapitulare ușoară.`;
+    actionButton.textContent = "Vezi taskurile";
+    recommendedNavigation = "tasks";
     return;
   }
+
+  actionButton.textContent = isLifeTaskType(recommendedTask.task_type || recommendedTask.type)
+    ? "Începe taskul"
+    : "Pornește sesiunea";
 
   const subject = recommendedTask.subject || subjectName(recommendedTask.subject_id);
   const finishTime = new Date(Date.now() + minutes * 60000).toLocaleTimeString("ro-RO", {
     hour: "2-digit",
     minute: "2-digit"
   });
-  title.textContent = subject
+  const personalTask = isLifeTaskType(recommendedTask.task_type || recommendedTask.type);
+  title.textContent = personalTask
+    ? `Îți recomand să începi cu „${recommendedTask.title}”.`
+    : subject
     ? `Îți recomand să începi cu ${subject.toLowerCase()}.`
     : `Îți recomand să începi cu „${recommendedTask.title}”.`;
   const urgency = recommendedTask.daysUntil <= 0
