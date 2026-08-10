@@ -115,12 +115,15 @@
     const minutes = data.sessions.reduce((sum, item) => sum + Number(item.duration_minutes || 0), 0);
     const tests = data.tasks.filter(item => item.task_type === "test").length;
     const regularTasks = data.tasks.length - tests;
+    const pdfItems = [...data.books, ...data.resources];
+    const savedPdfProgress = user?.user_metadata?.[PDF_PROGRESS_METADATA_KEY] || {};
     root.innerHTML = `
       <a class="subjects-spa-back" href="#/subjects">← Materii</a>
       <section class="subject-spa-hero" style="--subject:${subject.color || "#f3a9c5"}">
         <div><p class="eyebrow">Materia ta</p><h2>${escapeHtml(subject.name)}</h2>
-        <p>${escapeHtml(subject.teacher_name || "Spațiul tău de studiu")}${subject.room ? ` · ${escapeHtml(subject.room)}` : ""}</p></div>
-        <button class="primary-small-button" data-study-timer>▶ Start focus</button>
+        ${subject.teacher_name ? `<p>${escapeHtml(subject.teacher_name)}${subject.room ? ` · ${escapeHtml(subject.room)}` : ""}</p>` : '<button class="subject-inline-edit" data-edit-subject>+ Adaugă profesorul și sala</button>'}</div>
+        <div class="subject-hero-actions"><button class="subject-edit-button" data-edit-subject>Editează materia</button>
+        <button class="primary-small-button" data-study-timer>▶ Start focus</button></div>
       </section>
       <section class="subject-spa-stats"><article><span>Medie</span><strong>${average}</strong></article>
         <article><span>Task-uri</span><strong>${regularTasks}</strong></article>
@@ -128,13 +131,45 @@
         <article><span>Ore studiate</span><strong>${formatMinutes(minutes)}</strong></article></section>
       <div class="subject-spa-columns">
         <section class="subject-spa-panel"><div class="subject-spa-panel-head"><h3>Note</h3><button data-add-grade aria-label="Adaugă o notă"><span aria-hidden="true">+</span></button></div>
-          ${data.grades.length ? data.grades.map(item => `<div class="subject-spa-row"><b>${item.grade}</b><span>${escapeHtml(item.description || item.grade_type || "Notă")}</span><small>${item.grade_date || ""}</small></div>`).join("") : empty("Nicio notă")}</section>
+          ${data.grades.length ? data.grades.map(item => `<div class="subject-spa-row"><b>${item.grade}</b><span>${escapeHtml(item.description || item.grade_type || "Notă")}</span><small>${item.grade_date || ""}</small></div>`).join("") : emptyAction("Nicio notă încă", "Adaugă prima notă", "data-add-grade")}</section>
         <section class="subject-spa-panel"><h3>Task-uri active</h3>${data.tasks.length ? data.tasks.map(item => `<a class="subject-spa-row" href="#/tasks"><b>✓</b><span>${escapeHtml(item.title)}</span><small>${item.deadline_date || ""}</small></a>`).join("") : empty("Niciun task activ")}</section>
-        <section class="subject-spa-panel"><div class="subject-spa-panel-head"><h3>Resurse și cărți</h3>
-          <button data-add-pdf><span aria-hidden="true">+</span> PDF</button></div>${[...data.books, ...data.resources].length ?
-          [...data.books, ...data.resources].map(item => `<button class="subject-spa-row subject-spa-resource" data-open-pdf="${item.id}" data-file-path="${escapeHtml(item.file_path || "")}" data-resource-title="${escapeHtml(item.title)}"><b>◇</b><span>${escapeHtml(item.title)}</span><small>${escapeHtml(item.author || item.resource_type || "")}</small></button>`).join("") : empty("Nicio resursă")}</section>
-        <section class="subject-spa-panel"><h3>Obiective</h3>${data.goals.length ? data.goals.map(item => `<div class="subject-spa-row"><b>${item.completed ? "✓" : "○"}</b><span>${escapeHtml(item.title)}</span></div>`).join("") : empty("Niciun obiectiv")}</section>
+        <section class="subject-spa-panel subject-resources-panel"><div class="subject-spa-panel-head"><div><p class="card-kicker">Biblioteca ta</p><h3>Resurse și cărți</h3></div>
+          <button data-add-pdf><span aria-hidden="true">+</span><span>PDF</span></button></div><div class="subject-resource-list">${pdfItems.length ?
+          pdfItems.map(item => {
+            const lastPage = Math.max(1, Number(savedPdfProgress[item.file_path]?.page) || 1);
+            const hasProgress = lastPage > 1;
+            return `<button class="subject-spa-resource" data-open-pdf="${item.id}" data-file-path="${escapeHtml(item.file_path || "")}" data-resource-title="${escapeHtml(item.title)}">
+              <span class="subject-resource-icon" aria-hidden="true"><b>PDF</b><i></i></span>
+              <span class="subject-resource-copy"><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(item.author || item.resource_type || "Document PDF")}</small>
+                <span class="subject-resource-status ${hasProgress ? "has-progress" : ""}"><i aria-hidden="true"></i>${hasProgress ? `Continuă de la pagina ${lastPage}` : "Pregătit pentru studiu"}</span></span>
+              <span class="subject-resource-open"><span>Deschide</span><b aria-hidden="true">→</b></span>
+            </button>`;
+          }).join("") : emptyAction("Biblioteca este goală", "Adaugă primul PDF", "data-add-pdf")}</div></section>
+        <section class="subject-spa-panel subject-goals-panel"><div class="subject-spa-panel-head"><h3>Obiective</h3><button data-add-goal aria-label="Adaugă un obiectiv"><span aria-hidden="true">+</span></button></div>${data.goals.length ? data.goals.map(item => `<button class="subject-spa-row subject-goal-row ${item.completed ? "completed" : ""}" data-goal-id="${item.id}" data-goal-completed="${Boolean(item.completed)}"><b>${item.completed ? "✓" : "○"}</b><span>${escapeHtml(item.title)}</span></button>`).join("") : emptyAction("Niciun obiectiv încă", "Creează primul obiectiv", "data-add-goal")}</section>
       </div>
+      <dialog class="subjects-spa-dialog subject-grade-dialog"><form data-grade-form>
+        <div class="subjects-spa-dialog-head"><div><p class="card-kicker">Progres</p><h3>Adaugă o notă</h3></div><button type="button" class="icon-button" data-close-grade>×</button></div>
+        <div class="subjects-spa-fields"><label>Nota<input name="grade" type="number" min="1" max="10" step="0.01" inputmode="decimal" required placeholder="10"></label>
+        <label>Data<input name="grade_date" type="date" value="${new Date().toISOString().slice(0, 10)}" required></label></div>
+        <label>La ce?<input name="description" maxlength="160" placeholder="Ex: Test algebră (opțional)"></label>
+        <p class="subjects-spa-error" data-grade-error></p>
+        <div class="subjects-spa-actions"><button class="primary-button">Salvează nota</button></div>
+      </form></dialog>
+      <dialog class="subjects-spa-dialog subject-detail-dialog"><form data-subject-edit-form>
+        <div class="subjects-spa-dialog-head"><div><p class="card-kicker">Detalii materie</p><h3>Editează materia</h3></div><button type="button" class="icon-button" data-close-subject-edit>×</button></div>
+        <label>Nume<input name="name" required value="${escapeHtml(subject.name)}"></label><div class="subjects-spa-fields">
+        <label>Profesor<input name="teacher_name" value="${escapeHtml(subject.teacher_name || "")}" placeholder="Ex: Andrei Popescu"></label>
+        <label>Sala<input name="room" value="${escapeHtml(subject.room || "")}" placeholder="Opțional"></label>
+        <label>Culoare<input name="color" type="color" value="${escapeHtml(subject.color || "#f3a9c5")}"></label></div>
+        <p class="subjects-spa-error" data-subject-edit-error></p>
+        <div class="subjects-spa-actions"><button class="primary-button">Salvează modificările</button></div>
+      </form></dialog>
+      <dialog class="subjects-spa-dialog subject-goal-dialog"><form data-goal-form>
+        <div class="subjects-spa-dialog-head"><div><p class="card-kicker">Un pas clar</p><h3>Obiectiv nou</h3></div><button type="button" class="icon-button" data-close-goal>×</button></div>
+        <label>Ce vrei să obții?<input name="title" required maxlength="160" placeholder="Ex: Termin capitolul de algebră"></label>
+        <p class="subjects-spa-error" data-goal-error></p>
+        <div class="subjects-spa-actions"><button class="primary-button">Adaugă obiectivul</button></div>
+      </form></dialog>
       <dialog class="subject-pdf-upload"><form data-pdf-form>
         <div class="subjects-spa-dialog-head"><h3>Adaugă un PDF</h3><button type="button" class="icon-button" data-close-pdf-upload>×</button></div>
         <label>Titlu<input name="title" required placeholder="Ex: Manual de matematică"></label>
@@ -183,9 +218,20 @@
           <p class="subjects-spa-error" data-viewer-error></p>
         </div>
       </dialog>`;
-    root.querySelector("[data-add-grade]").addEventListener("click", () => addGrade(id));
+    root.querySelectorAll("[data-add-grade]").forEach(button => button.addEventListener("click", () => root.querySelector(".subject-grade-dialog").showModal()));
+    root.querySelector("[data-close-grade]").addEventListener("click", () => root.querySelector(".subject-grade-dialog").close());
+    root.querySelector("[data-grade-form]").addEventListener("submit", event => addGrade(event, id));
     root.querySelector("[data-study-timer]").addEventListener("click", event => toggleTimer(id, event.currentTarget));
-    root.querySelector("[data-add-pdf]").addEventListener("click", () => root.querySelector(".subject-pdf-upload").showModal());
+    root.querySelectorAll("[data-edit-subject]").forEach(button => button.addEventListener("click", () => root.querySelector(".subject-detail-dialog").showModal()));
+    root.querySelector("[data-close-subject-edit]").addEventListener("click", () => root.querySelector(".subject-detail-dialog").close());
+    root.querySelector("[data-subject-edit-form]").addEventListener("submit", event => updateSubject(event, id));
+    root.querySelectorAll("[data-add-goal]").forEach(button => button.addEventListener("click", () => root.querySelector(".subject-goal-dialog").showModal()));
+    root.querySelector("[data-close-goal]").addEventListener("click", () => root.querySelector(".subject-goal-dialog").close());
+    root.querySelector("[data-goal-form]").addEventListener("submit", event => addGoal(event, id));
+    root.querySelectorAll("[data-goal-id]").forEach(button => button.addEventListener("click", () => {
+      void toggleGoal(button.dataset.goalId, button.dataset.goalCompleted === "true", id);
+    }));
+    root.querySelectorAll("[data-add-pdf]").forEach(button => button.addEventListener("click", () => root.querySelector(".subject-pdf-upload").showModal()));
     root.querySelector("[data-close-pdf-upload]").addEventListener("click", () => root.querySelector(".subject-pdf-upload").close());
     root.querySelector("[data-pdf-form]").addEventListener("submit", event => uploadPdf(event, id));
     root.querySelectorAll("[data-open-pdf]").forEach(button => button.addEventListener("click", () => {
@@ -194,16 +240,93 @@
     bindPdfViewer();
   }
 
-  async function addGrade(subjectId) {
-    const value = prompt("Nota (1–10)");
-    if (value === null) return;
-    const grade = Number(value);
-    if (!Number.isFinite(grade) || grade < 1 || grade > 10) return;
-    const description = prompt("Descriere opțională") || null;
-    const { error } = await supabaseClient.from("subject_grades").insert({
-      user_id: user.id, subject_id: subjectId, grade, description, grade_date: new Date().toISOString().slice(0, 10)
+  async function updateSubject(event, subjectId) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const values = Object.fromEntries(new FormData(form));
+    const submitButton = form.querySelector("button[type='submit'], .primary-button");
+    const errorElement = form.querySelector("[data-subject-edit-error]");
+    submitButton.disabled = true;
+    errorElement.textContent = "";
+    const { error } = await supabaseClient.from("subjects").update({
+      name: values.name.trim(),
+      teacher_name: values.teacher_name.trim() || null,
+      room: values.room.trim() || null,
+      color: values.color
+    }).eq("id", subjectId).eq("user_id", user.id);
+    submitButton.disabled = false;
+    if (error) {
+      errorElement.textContent = "Detaliile materiei nu au putut fi salvate.";
+      return;
+    }
+    form.closest("dialog").close();
+    mounted = false;
+    await mountDetail(subjectId);
+  }
+
+  async function addGoal(event, subjectId) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const title = String(new FormData(form).get("title") || "").trim();
+    const submitButton = form.querySelector("button[type='submit'], .primary-button");
+    const errorElement = form.querySelector("[data-goal-error]");
+    if (!title) return;
+    submitButton.disabled = true;
+    errorElement.textContent = "";
+    const { error } = await supabaseClient.from("subject_goals").insert({
+      user_id: user.id,
+      subject_id: subjectId,
+      title,
+      completed: false
     });
-    if (!error) { mounted = false; await mountDetail(subjectId); }
+    submitButton.disabled = false;
+    if (error) {
+      errorElement.textContent = "Obiectivul nu a putut fi adăugat.";
+      return;
+    }
+    form.closest("dialog").close();
+    mounted = false;
+    await mountDetail(subjectId);
+  }
+
+  async function toggleGoal(goalId, completed, subjectId) {
+    const { error } = await supabaseClient.from("subject_goals")
+      .update({ completed: !completed })
+      .eq("id", goalId)
+      .eq("user_id", user.id);
+    if (error) return;
+    mounted = false;
+    await mountDetail(subjectId);
+  }
+
+  async function addGrade(event, subjectId) {
+    event.preventDefault();
+    const form = event.currentTarget;
+    const values = Object.fromEntries(new FormData(form));
+    const grade = Number(values.grade);
+    const submitButton = form.querySelector(".primary-button");
+    const errorElement = form.querySelector("[data-grade-error]");
+    if (!Number.isFinite(grade) || grade < 1 || grade > 10) {
+      errorElement.textContent = "Introdu o notă între 1 și 10.";
+      return;
+    }
+    submitButton.disabled = true;
+    errorElement.textContent = "";
+    const { error } = await supabaseClient.from("subject_grades").insert({
+      user_id: user.id,
+      subject_id: subjectId,
+      grade,
+      description: values.description.trim() || null,
+      grade_date: values.grade_date
+    });
+    submitButton.disabled = false;
+    if (error) {
+      errorElement.textContent = "Nota nu a putut fi salvată.";
+      return;
+    }
+    form.closest("dialog").close();
+    mounted = false;
+    await mountDetail(subjectId);
   }
 
   async function uploadPdf(event, subjectId) {
@@ -640,6 +763,9 @@
   }
 
   function empty(text) { return `<div class="subject-spa-empty">${text}</div>`; }
+  function emptyAction(text, label, attribute) {
+    return `<div class="subject-empty-action"><span>${escapeHtml(text)}</span><button type="button" ${attribute}>${escapeHtml(label)} <b aria-hidden="true">→</b></button></div>`;
+  }
   function formatMinutes(value) { return value < 60 ? `${value}m` : `${Math.floor(value / 60)}h ${value % 60}m`; }
   function escapeHtml(value) { return String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;").replaceAll("'", "&#039;"); }
   document.addEventListener("visibilitychange", () => {
