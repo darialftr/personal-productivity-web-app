@@ -354,6 +354,10 @@ function isLifeTaskType(type) {
   return ["personal", "selfcare", "home", "health", "errand", "goal"].includes(type);
 }
 
+function isCareTask(task) {
+  return (task?.type || task?.task_type) === "selfcare";
+}
+
 function isFixedPersonalTaskType(type) {
   return ["personal", "selfcare", "home", "health", "errand"].includes(type);
 }
@@ -1232,11 +1236,11 @@ function setQuickTaskScope(scope, preferredType = "") {
     document.getElementById("quickTaskPriority").value = "medium";
     document.getElementById("quickTaskDateLabel").textContent = goal ? "Data țintă" : "Data";
     document.getElementById("quickTaskDurationLabel").textContent = goal ? "Timp alocat" : "Durată";
-    document.getElementById("quickTaskTime").required = fixedPersonal;
+    document.getElementById("quickTaskTime").required = fixedPersonal && destination.value === "event";
     document.getElementById("quickTaskTimeHint").textContent = fixedPersonal
       ? destination.value === "event"
         ? "Evenimentul va ocupa acest interval în Calendar."
-        : "Taskul rămâne în planul zilei, fără să apară în Calendar."
+        : "Opțional: las-o liberă și Itera alege automat un moment potrivit."
       : "Opțional: adaugă o oră doar dacă obiectivul are un moment precis.";
     document.getElementById("quickTaskTitle").placeholder = goal
       ? "Ex: Alerg primul meu 5K"
@@ -1299,7 +1303,7 @@ async function handleQuickTaskSubmit(event) {
     ? "medium"
     : document.getElementById("quickTaskPriority").value;
 
-  if (fixedPersonal && !deadlineTime) {
+  if (fixedPersonal && destination === "event" && !deadlineTime) {
     showToast("Alege ora la care vrei să păstrăm acest interval în program.", "!");
     document.getElementById("quickTaskTime").focus();
     return;
@@ -2169,7 +2173,7 @@ function buildDayPlan() {
     plannedMinutes += duration;
     busyIntervals.push({ start: slot, end: slot + duration });
     busyIntervals.sort((first, second) => first.start - second.start);
-    cursor = roundToQuarter(slot + duration + 10);
+    cursor = roundToQuarter(slot + duration + (isCareTask(task) ? 0 : 10));
   }
 
   return {
@@ -2203,7 +2207,7 @@ function openDayPlanner() {
     intro.textContent =
       `Am găsit intervale libere pentru ${plan.entries.length} din ${plan.totalTasks} ${plan.totalTasks === 1 ? "task" : "task-uri"} · ${formatMinutes(plan.plannedMinutes)} în ritmul energiei ${currentEnergy}/5.${plan.unscheduled.length ? ` ${plan.unscheduled.length} rămân pentru reprogramare.` : ""}`;
     list.innerHTML = plan.entries.map((entry, index) => `
-      ${index ? '<div class="day-plan-break"><span></span>Pauză scurtă</div>' : ""}
+      ${index && !isCareTask(plan.entries[index - 1].task) ? '<div class="day-plan-break"><span></span>Pauză scurtă</div>' : ""}
       <div class="day-plan-row">
         <time>${escapeHtml(entry.start)}</time>
         <span class="day-plan-line"><i></i></span>

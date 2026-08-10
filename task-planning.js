@@ -35,6 +35,7 @@
     return !String(task?.notes || "").includes(personalTaskOnlyMarker);
   };
   const isPersonalTask = task => personalTypes.includes(task?.task_type || task?.type) && !isPersonalEvent(task);
+  const isCareTask = task => (task?.task_type || task?.type) === "selfcare";
   const isPlannable = task => task && !task.completed && task.task_type !== "goal" && task.type !== "goal" &&
     !isPersonalEvent(task) && Boolean(task.deadline_date || task.deadline);
 
@@ -171,7 +172,7 @@
       }
 
       if (!chosen) { unscheduled.push(task); continue; }
-      const breakMinutes = duration >= 90 ? 20 : 15;
+      const breakMinutes = isCareTask(task) ? 0 : duration >= 90 ? 20 : 15;
       chosen.state.busy.push({ start: chosen.slot, end: chosen.slot + duration + breakMinutes });
       chosen.state.busy = mergeIntervals(chosen.state.busy);
       chosen.state.used += duration;

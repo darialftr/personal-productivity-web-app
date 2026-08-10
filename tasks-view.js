@@ -154,6 +154,9 @@
     root.querySelector("[data-close-task]").addEventListener("click", closeDialog);
     root.querySelector("[data-task-form]").addEventListener("submit", saveTask);
     root.querySelector('[name="task_type"]').addEventListener("change", event => syncTaskFormType(event.target.value));
+    root.querySelector('[name="personal_kind"]').addEventListener("change", () =>
+      syncTaskFormType(root.querySelector('[name="task_type"]').value)
+    );
     root.querySelector("[data-delete-task]").addEventListener("click", deleteTask);
     root.querySelector("[data-task-search]").addEventListener("change", event => { search = event.target.value.trim().toLowerCase(); render(); });
     root.querySelectorAll("[data-task-filter]").forEach(button => button.addEventListener("click", () => { filter = button.dataset.taskFilter; render(); }));
@@ -212,6 +215,7 @@
     const life = isLifeTask(type);
     const goal = type === "goal";
     const fixedPersonal = isFixedPersonalTask(type);
+    const personalEvent = fixedPersonal && form.elements.personal_kind.value === "event";
     form.querySelector("[data-task-subject-field]").hidden = life;
     form.querySelector("[data-task-priority-field]").hidden = life;
     form.querySelector("[data-task-kind-field]").hidden = !fixedPersonal;
@@ -222,9 +226,11 @@
     form.querySelector("[data-task-date-label]").textContent = goal ? "Data țintă" : life ? "Data" : "Deadline";
     form.querySelector("[data-task-duration-label]").textContent = goal ? "Timp alocat" : life ? "Durată" : "Minute estimate";
     form.elements.deadline_date.required = fixedPersonal;
-    form.elements.deadline_time.required = fixedPersonal;
+    form.elements.deadline_time.required = personalEvent;
     form.querySelector("[data-task-time-hint]").textContent = fixedPersonal
-      ? "Ora fixează un interval pe care Itera îl păstrează în program."
+      ? personalEvent
+        ? "Evenimentul are nevoie de o oră fixă."
+        : "Opțional: las-o liberă și Itera alege automat un moment potrivit."
       : goal
         ? "Opțional: adaugă o oră doar dacă obiectivul are un moment precis."
         : "Las-o liberă și Itera alege ora după prioritate.";
@@ -243,8 +249,12 @@
       notes: isLifeTask(values.task_type) && keepAsTaskOnly
         ? `${values.notes.trim()} ${personalTaskOnlyMarker}`.trim()
         : values.notes.trim() || null };
-    if (fixedPersonal && (!payload.deadline_date || !payload.deadline_time)) {
-      form.querySelector("[data-task-error]").textContent = "Alege data și ora pentru a rezerva activitatea în program.";
+    if (fixedPersonal && !payload.deadline_date) {
+      form.querySelector("[data-task-error]").textContent = "Alege data până la care vrei să faci activitatea.";
+      return;
+    }
+    if (fixedPersonal && values.personal_kind === "event" && !payload.deadline_time) {
+      form.querySelector("[data-task-error]").textContent = "Alege ora evenimentului.";
       return;
     }
     submitButton.disabled = true;
