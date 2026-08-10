@@ -80,8 +80,6 @@ async function initializeApp() {
   await loadHomeData();
   if (!currentUser) return;
   hydrateDailyEnergy();
-  const initialPlan = await rebuildSmartTaskPlan();
-  if (initialPlan?.changed) await loadHomeData();
   applyAccountPreferences();
   initializeShellViews();
   updateCurrentDate();
@@ -145,7 +143,19 @@ document.addEventListener(
 
   renderAll();
   hideAppLaunchScreen();
+  void refreshSmartPlanAfterLaunch();
   void maintainActiveExamPlans();
+}
+
+async function refreshSmartPlanAfterLaunch() {
+  try {
+    const initialPlan = await rebuildSmartTaskPlan();
+    if (!initialPlan?.changed) return;
+    await loadHomeData();
+    renderAll();
+  } catch (error) {
+    console.warn("Itera background planning:", error);
+  }
 }
 
 function hideAppLaunchScreen() {
