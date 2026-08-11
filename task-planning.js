@@ -147,17 +147,21 @@
 
     for (const task of candidates) {
       const deadline = task.deadline_date || task.deadline;
-      const latest = deadline > today ? addDays(deadline, -1) : today;
-      const preferred = preferredPlanningDate(task, today);
+      const personal = isPersonalTask(task);
       const possibleDates = [];
-      for (let date = preferred; date <= latest; date = addDays(date, 1)) possibleDates.push(date);
-      for (let date = addDays(preferred, -1); date >= today; date = addDays(date, -1)) possibleDates.push(date);
+      if (personal) {
+        if (deadline >= today) possibleDates.push(deadline);
+      } else {
+        const latest = deadline > today ? addDays(deadline, -1) : today;
+        const preferred = preferredPlanningDate(task, today);
+        for (let date = preferred; date <= latest; date = addDays(date, 1)) possibleDates.push(date);
+        for (let date = addDays(preferred, -1); date >= today; date = addDays(date, -1)) possibleDates.push(date);
+      }
       const duration = taskDuration(task);
       let chosen = null;
 
       for (const date of possibleDates) {
         const state = ensureDay(date);
-        const personal = isPersonalTask(task);
         if (!personal && state.used + duration > state.capacity) continue;
         const currentMinutes = now.getHours() * 60 + now.getMinutes();
         let earliest = dayStart(date, scheduleItems, personal);

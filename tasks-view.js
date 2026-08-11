@@ -68,7 +68,7 @@
   }
 
   function visibleTasks() {
-    return tasks.filter(task => {
+    const visible = tasks.filter(task => {
       if (isPersonalEventLike(task) || isAutomaticReviewTask(task)) return false;
       const matchesSearch = task.title.toLowerCase().includes(search);
       if (!matchesSearch) return false;
@@ -81,6 +81,12 @@
       }
       return !task.completed;
     });
+    if (filter === "today") {
+      visible.sort((first, second) =>
+        String(plannedTime(first) || "23:59").localeCompare(String(plannedTime(second) || "23:59"))
+      );
+    }
+    return visible;
   }
 
   function render() {
@@ -125,7 +131,7 @@
 
   function renderTask(task) {
     const subject = subjects.find(item => item.id === task.subject_id);
-    const deadlineLabel = task.deadline_date ? formatTaskDate(task.deadline_date) : "";
+    const dateLabel = task.deadline_date ? formatTaskDate(task.deadline_date) : "";
     const plan = taskPlan(task);
     const planLabel = plan ? `Planificat ${formatTaskDate(plan.date)} · ${plan.time}` : "";
     const contextLabel = subject?.name || taskTypeLabel(task.task_type);
@@ -137,7 +143,7 @@
       ${personalEvent
         ? '<span class="tasks-spa-event-icon" aria-label="Eveniment"></span>'
         : `<button class="tasks-spa-check" data-toggle-task="${task.id}" aria-label="Schimbă starea">${task.completed ? "✓" : ""}</button>`}
-      <div><strong>${escapeHtml(task.title)}</strong><small>${escapeHtml(contextLabel)}${planLabel ? ` · ${escapeHtml(planLabel)}` : ""}${deadlineLabel && (!plan || plan.date !== task.deadline_date) ? ` · termen ${escapeHtml(deadlineLabel)}` : ""}</small></div>
+      <div><strong>${escapeHtml(task.title)}</strong><small>${escapeHtml(contextLabel)}${planLabel ? ` · ${escapeHtml(planLabel)}` : ""}${dateLabel && (!plan || plan.date !== task.deadline_date) ? ` · ${isLifeTask(task.task_type) ? "ziua aleasă" : "termen"} ${escapeHtml(dateLabel)}` : ""}</small></div>
       ${personalEvent
         ? '<span class="tasks-spa-badge tasks-spa-event-badge">Eveniment</span>'
         : `<span class="tasks-spa-badge priority-${escapeHtml(task.priority || "medium")}">${task.estimated_minutes || 0}m</span>`}
@@ -233,7 +239,11 @@
       form.elements.subject_id.value = "";
       form.elements.priority.value = "medium";
     }
-    form.querySelector("[data-task-date-label]").textContent = goal ? "Data țintă" : life ? "Data" : "Deadline";
+    form.querySelector("[data-task-date-label]").textContent = goal
+      ? "Data țintă"
+      : life
+        ? "Ziua în care vrei să faci asta"
+        : "Deadline";
     form.querySelector("[data-task-duration-label]").textContent = goal ? "Timp alocat" : life ? "Durată" : "Minute estimate";
     form.elements.deadline_date.required = fixedPersonal;
     form.elements.deadline_time.required = personalEvent;
@@ -260,7 +270,7 @@
         ? `${values.notes.trim()} ${personalTaskOnlyMarker}`.trim()
         : values.notes.trim() || null };
     if (fixedPersonal && !payload.deadline_date) {
-      form.querySelector("[data-task-error]").textContent = "Alege data până la care vrei să faci activitatea.";
+      form.querySelector("[data-task-error]").textContent = "Alege ziua în care vrei să faci activitatea.";
       return;
     }
     if (fixedPersonal && values.personal_kind === "event" && !payload.deadline_time) {
@@ -336,39 +346,56 @@
     list.querySelectorAll("[data-plan-grip]").forEach(handle => {
       let row = null;
       let moved = false;
+      let pointerId = null;
+      let startX = 0;
+      let startY = 0;
       handle.addEventListener("click", event => {
         event.preventDefault();
         event.stopPropagation();
       });
       handle.addEventListener("pointerdown", event => {
+        if (event.pointerType === "mouse" && event.button !== 0) return;
         event.preventDefault();
         event.stopPropagation();
         row = handle.closest("[data-plan-order]");
+        if (!row) return;
         moved = false;
-        handle.setPointerCapture?.(event.pointerId);
-        row?.classList.add("is-reordering");
-        list.classList.add("plan-reorder-active");
+        pointerId = event.pointerId;
+        startX = event.clientX;
+        startY = event.clientY;
+        window.addEventListener("pointermove", move, { passive: false });
+        window.addEventListener("pointerup", finish);
+        window.addEventListener("pointercancel", finish);
       });
-      handle.addEventListener("pointermove", event => {
-        if (!row || !handle.hasPointerCapture?.(event.pointerId)) return;
-        moved = true;
+      const move = event => {
+        if (!row || event.pointerId !== pointerId) return;
+        if (!moved && Math.hypot(event.clientX - startX, event.clientY - startY) < 6) return;
+        event.preventDefault();
+        if (!moved) {
+          moved = true;
+          row.classList.add("is-reordering");
+          row.style.pointerEvents = "none";
+          list.classList.add("plan-reorder-active");
+        }
         const target = document.elementFromPoint(event.clientX, event.clientY)?.closest("[data-plan-order]");
         if (!target || target === row || target.parentElement !== list) return;
         const rect = target.getBoundingClientRect();
         list.insertBefore(row, event.clientY < rect.top + rect.height / 2 ? target : target.nextSibling);
-      });
+      };
       const finish = event => {
-        if (!row) return;
-        if (handle.hasPointerCapture?.(event.pointerId)) handle.releasePointerCapture(event.pointerId);
+        if (!row || event.pointerId !== pointerId) return;
+        window.removeEventListener("pointermove", move);
+        window.removeEventListener("pointerup", finish);
+        window.removeEventListener("pointercancel", finish);
         row.classList.remove("is-reordering");
+        row.style.pointerEvents = "";
         list.classList.remove("plan-reorder-active");
         row = null;
+        pointerId = null;
         if (!moved) return;
         const order = [...list.querySelectorAll("[data-plan-order]")].map(item => item.dataset.planOrder);
         void saveReorderedPlan(order);
       };
-      handle.addEventListener("pointerup", finish);
-      handle.addEventListener("pointercancel", finish);
     });
   }
 

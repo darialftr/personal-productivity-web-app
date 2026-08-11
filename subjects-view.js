@@ -884,6 +884,9 @@
     container.querySelectorAll(handleSelector).forEach(handle => {
       let item = null;
       let moved = false;
+      let pointerId = null;
+      let startX = 0;
+      let startY = 0;
       handle.addEventListener("click", event => {
         event.preventDefault();
         event.stopPropagation();
@@ -893,33 +896,46 @@
         event.preventDefault();
         event.stopPropagation();
         item = handle.closest(itemSelector);
+        if (!item) return;
         moved = false;
-        handle.setPointerCapture?.(event.pointerId);
-        item?.classList.add("is-reordering");
-        container.classList.add("reorder-active");
+        pointerId = event.pointerId;
+        startX = event.clientX;
+        startY = event.clientY;
+        window.addEventListener("pointermove", move, { passive: false });
+        window.addEventListener("pointerup", finish);
+        window.addEventListener("pointercancel", finish);
       });
-      handle.addEventListener("pointermove", event => {
-        if (!item || !handle.hasPointerCapture?.(event.pointerId)) return;
-        moved = true;
+      const move = event => {
+        if (!item || event.pointerId !== pointerId) return;
+        if (!moved && Math.hypot(event.clientX - startX, event.clientY - startY) < 6) return;
+        event.preventDefault();
+        if (!moved) {
+          moved = true;
+          item.classList.add("is-reordering");
+          item.style.pointerEvents = "none";
+          container.classList.add("reorder-active");
+        }
         const target = document.elementFromPoint(event.clientX, event.clientY)?.closest(itemSelector);
         if (!target || target === item || target.parentElement !== container) return;
         const rect = target.getBoundingClientRect();
         const before = event.clientY < rect.top + rect.height / 2 ||
           (Math.abs(event.clientY - (rect.top + rect.height / 2)) < rect.height / 3 && event.clientX < rect.left + rect.width / 2);
         container.insertBefore(item, before ? target : target.nextSibling);
-      });
+      };
       const finish = event => {
-        if (!item) return;
-        if (handle.hasPointerCapture?.(event.pointerId)) handle.releasePointerCapture(event.pointerId);
+        if (!item || event.pointerId !== pointerId) return;
+        window.removeEventListener("pointermove", move);
+        window.removeEventListener("pointerup", finish);
+        window.removeEventListener("pointercancel", finish);
         item.classList.remove("is-reordering");
+        item.style.pointerEvents = "";
         container.classList.remove("reorder-active");
         item = null;
+        pointerId = null;
         if (!moved) return;
         const order = [...container.querySelectorAll(itemSelector)].map(element => element.dataset.orderKey);
         void onCommit(order);
       };
-      handle.addEventListener("pointerup", finish);
-      handle.addEventListener("pointercancel", finish);
     });
   }
 
