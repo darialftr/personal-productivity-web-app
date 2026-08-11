@@ -56,6 +56,7 @@ let focusSessionSaved = false;
 let currentEnergy = 3;
 let currentEnergyDate = formatDateForInput(now);
 let energySaveVersion = 0;
+let energyPromptDismissedUntil = 0;
 let recommendedTask = null;
 let recommendedNavigation = null;
 let pendingDayPlan = [];
@@ -64,7 +65,6 @@ let focusAudioContext = null;
 let focusAudioSource = null;
 let focusAudioGain = null;
 let activeSoundscape = "none";
-let pendingReviewSuggestion = null;
 const appLaunchStartedAt = Date.now();
 
 let currentUser = null;
@@ -73,6 +73,9 @@ let subjects = [];
 let events = [];
 let tasks = [];
 let scheduleItems = [];
+let studySessions = [];
+let taskRealtimeChannel = null;
+let realtimeRefreshTimer = null;
 
 initializeApp();
 
@@ -88,7 +91,9 @@ async function initializeApp() {
   initializeAccountSettings();
   initializeFocusControls();
   initializeEnergyCheckin();
+  initializeEnergyPrompt();
   initializeNotificationCenter();
+  initializeRealtimeSync();
   initializeFloatingTimer();
   IteraPush.initialize();
   initializeEventForm();
@@ -107,6 +112,7 @@ async function initializeApp() {
     updateCurrentDate();
     renderTodayTimeline();
     renderNowRecommendation();
+    maybePromptEnergy();
   }, 60000);
   window.addEventListener("focus", async () => {
   await loadHomeData();
@@ -128,6 +134,12 @@ window.addEventListener("itera:plan-updated", async () => {
   renderAll();
 });
 
+window.addEventListener("itera:task-updated", async () => {
+  await loadHomeData();
+  renderAll();
+  globalThis.IteraTasksView?.refresh?.();
+});
+
 document.addEventListener(
   "visibilitychange",
   async () => {
@@ -143,8 +155,29 @@ document.addEventListener(
 
   renderAll();
   hideAppLaunchScreen();
+  window.setTimeout(maybePromptEnergy, 700);
   void refreshSmartPlanAfterLaunch();
   void maintainActiveExamPlans();
+}
+
+function initializeRealtimeSync() {
+  if (!currentUser || taskRealtimeChannel || !supabaseClient?.channel) return;
+  taskRealtimeChannel = supabaseClient
+    .channel(`itera-tasks-${currentUser.id}`)
+    .on("postgres_changes", {
+      event: "*",
+      schema: "public",
+      table: "tasks",
+      filter: `user_id=eq.${currentUser.id}`
+    }, () => {
+      clearTimeout(realtimeRefreshTimer);
+      realtimeRefreshTimer = setTimeout(async () => {
+        await loadHomeData();
+        renderAll();
+        globalThis.IteraTasksView?.refresh?.();
+      }, 180);
+    })
+    .subscribe();
 }
 
 async function refreshSmartPlanAfterLaunch() {
@@ -276,7 +309,8 @@ async function loadHomeData() {
 
   currentUser = session.user;
 
-  const [profileResult, subjectsResult, eventsResult, tasksResult, scheduleResult] =
+  const todayString = formatDateForInput(new Date());
+  const [profileResult, subjectsResult, eventsResult, tasksResult, scheduleResult, sessionsResult] =
     await Promise.all([
       supabaseClient
         .from("profiles")
@@ -304,15 +338,24 @@ async function loadHomeData() {
         .select("*")
         .eq("user_id", currentUser.id)
         .order("day_of_week")
-        .order("start_time")
+        .order("start_time"),
+      supabaseClient
+        .from("subject_study_sessions")
+        .select("subject_id,duration_minutes,study_date")
+        .eq("user_id", currentUser.id)
+        .eq("study_date", todayString)
     ]);
 
   profile = profileResult.data || null;
   subjects = subjectsResult.data || [];
   events = (eventsResult.data || []).map(normalizeHomeEvent);
-  tasks = (tasksResult.data || []).map(normalizeHomeTask);
+  const visibleTaskRows = (tasksResult.data || []).filter(task =>
+    !/recapitulare recomandată automat după o sesiune de studiu/i.test(String(task.notes || ""))
+  );
+  tasks = visibleTaskRows.map(normalizeHomeTask);
   scheduleItems = scheduleResult.data || [];
-  const reminderTasks = (tasksResult.data || []).map((task) => {
+  studySessions = sessionsResult.data || [];
+  const reminderTasks = visibleTaskRows.map((task) => {
     const plan = globalThis.IteraPlanning?.getTaskPlan(currentUser, task);
     return plan ? { ...task, deadline_date: plan.date, deadline_time: plan.time } : task;
   });
@@ -1829,7 +1872,12 @@ async function finishFocusSession({ reason = "manual" } = {}) {
     `Sesiunea de ${studiedMinutes} min a fost salvată.`,
     "✿"
   );
-  offerReviewSuggestion(studiedMinutes);
+  emitFocusTimerState();
+  await loadHomeData();
+  renderAll();
+  window.dispatchEvent(new CustomEvent("itera:study-session-saved", {
+    detail: { subjectId: focusSubjectId, minutes: studiedMinutes }
+  }));
 }
 
 function hydrateDailyEnergy() {
@@ -1866,14 +1914,26 @@ function syncEnergyCheckinUI() {
   if (value) value.textContent = `${currentEnergy}/5`;
 }
 
-async function saveDailyEnergy(level, previousLevel) {
+async function saveDailyEnergy(level, previousLevel, period = getEnergyPromptPeriod()) {
   if (!currentUser) return;
   const requestVersion = ++energySaveVersion;
   const today = formatDateForInput(new Date());
+  const existingCheckins = currentUser.user_metadata?.itera_energy_checkins || {};
+  const todayCheckins = existingCheckins[today] || {};
+  const nextCheckins = Object.fromEntries(
+    Object.entries({
+      ...existingCheckins,
+      [today]: {
+        ...todayCheckins,
+        ...(period ? { [period]: { level, at: new Date().toISOString() } } : {})
+      }
+    }).sort(([first], [second]) => second.localeCompare(first)).slice(0, 14)
+  );
   const nextMetadata = {
     ...(currentUser.user_metadata || {}),
     itera_energy_level: level,
-    itera_energy_date: today
+    itera_energy_date: today,
+    itera_energy_checkins: nextCheckins
   };
   const { data, error } = await supabaseClient.auth.updateUser({
     data: nextMetadata
@@ -1915,6 +1975,63 @@ function initializeEnergyCheckin() {
       saveDailyEnergy(currentEnergy, previousLevel);
     });
   });
+}
+
+function getEnergyPromptPeriod(date = new Date()) {
+  const minutesNow = date.getHours() * 60 + date.getMinutes();
+  if (minutesNow >= 6 * 60 && minutesNow < 12 * 60) return "morning";
+  const daySchedule = scheduleItems.filter(item => Number(item.day_of_week) === date.getDay());
+  const schoolEnd = daySchedule.reduce((latest, item) => {
+    const value = String(item.end_time || item.start_time || "").slice(0, 5);
+    if (!value) return latest;
+    const [hours, minutes] = value.split(":").map(Number);
+    return Math.max(latest, hours * 60 + minutes);
+  }, 0);
+  const afternoonStart = schoolEnd ? schoolEnd + 15 : 14 * 60;
+  return minutesNow >= afternoonStart && minutesNow < 21 * 60 ? "afternoon" : null;
+}
+
+function initializeEnergyPrompt() {
+  const modal = document.getElementById("energyPromptModal");
+  if (!modal) return;
+  modal.querySelectorAll("[data-prompt-energy]").forEach(button => {
+    button.addEventListener("click", async () => {
+      const previousLevel = currentEnergy;
+      currentEnergy = Number(button.dataset.promptEnergy);
+      currentEnergyDate = formatDateForInput(new Date());
+      syncEnergyCheckinUI();
+      closeModal("energyPromptModal");
+      await saveDailyEnergy(currentEnergy, previousLevel, getEnergyPromptPeriod());
+      showToast("Am ajustat ritmul zilei după energia ta.", "✓");
+    });
+  });
+  document.getElementById("energyPromptLater")?.addEventListener("click", () => {
+    energyPromptDismissedUntil = Date.now() + 60 * 60000;
+    closeModal("energyPromptModal");
+  });
+}
+
+function maybePromptEnergy() {
+  if (!currentUser || Date.now() < energyPromptDismissedUntil) return;
+  const period = getEnergyPromptPeriod();
+  if (!period) return;
+  const today = formatDateForInput(new Date());
+  const checkins = currentUser.user_metadata?.itera_energy_checkins?.[today] || {};
+  if (checkins[period]) return;
+  const modal = document.getElementById("energyPromptModal");
+  if (!modal || modal.classList.contains("visible")) return;
+  if (document.querySelector(".modal-overlay.visible")) return;
+  const afternoon = period === "afternoon";
+  document.getElementById("energyPromptKicker").textContent = afternoon
+    ? "După program"
+    : "Startul zilei";
+  document.getElementById("energyPromptTitle").textContent = afternoon
+    ? "Cum mai este energia ta?"
+    : "Cu ce energie începi azi?";
+  document.getElementById("energyPromptDescription").textContent = afternoon
+    ? "Reașez taskurile rămase fără să îți stric seara."
+    : "Îți construiesc un ritm realist pentru ziua de azi.";
+  openModal("energyPromptModal");
 }
 
 function getRecommendedSessionMinutes() {
@@ -1982,7 +2099,7 @@ function renderNowRecommendation() {
       return;
     }
     title.textContent = "Ai terminat tot ce era planificat pentru azi.";
-    reason.textContent = `Dacă vrei, poți păstra ${minutes} de minute pentru o recapitulare ușoară.`;
+    reason.textContent = "Planul este închis. Poți lua pauza fără să te gândești la ce ai uitat.";
     actionButton.textContent = "Vezi taskurile";
     recommendedNavigation = "tasks";
     return;
@@ -1998,18 +2115,26 @@ function renderNowRecommendation() {
     minute: "2-digit"
   });
   const personalTask = isLifeTaskType(recommendedTask.task_type || recommendedTask.type);
-  title.textContent = personalTask
-    ? `Îți recomand să începi cu „${recommendedTask.title}”.`
-    : subject
-    ? `Îți recomand să începi cu ${subject.toLowerCase()}.`
-    : `Îți recomand să începi cu „${recommendedTask.title}”.`;
+  const plannedTime = getTaskPlanTime(recommendedTask);
+  const nowMinutes = new Date().getHours() * 60 + new Date().getMinutes();
+  const plannedMinutes = plannedTime ? getMinutesFromTime(plannedTime) : null;
+  const shouldStartNow = plannedMinutes !== null && nowMinutes >= plannedMinutes;
+  title.textContent = shouldStartNow
+    ? `Acum este momentul pentru „${recommendedTask.title}”.`
+    : personalTask
+      ? `Îți recomand să începi cu „${recommendedTask.title}”.`
+      : subject
+        ? `Îți recomand să începi cu ${subject.toLowerCase()}.`
+        : `Îți recomand să începi cu „${recommendedTask.title}”.`;
   const urgency = recommendedTask.daysUntil <= 0
     ? "are termen astăzi"
     : recommendedTask.daysUntil === 1
       ? "este pentru mâine"
       : `are termen peste ${recommendedTask.daysUntil} zile`;
-  reason.textContent =
-    `„${recommendedTask.title}” ${urgency}. Dacă începi acum, termini înainte de ${finishTime}.`;
+  reason.textContent = shouldStartNow
+    ? `Era planificat la ${plannedTime}. Începe doar primele 5 minute — Itera ține ritmul de acolo.`
+    : `„${recommendedTask.title}” ${urgency}. Dacă începi acum, termini înainte de ${finishTime}.`;
+  if (shouldStartNow) actionButton.textContent = "Încep acum";
 }
 
 function getMinutesFromTime(value) {
@@ -3301,11 +3426,6 @@ function initializeFloatingTimer() {
       scheduleTaskContinuation(Number(button.dataset.resumeMinutes));
     });
   });
-  document.getElementById("dismissReviewSuggestion")?.addEventListener("click", () => {
-    pendingReviewSuggestion = null;
-    closeModal("reviewSuggestionModal");
-  });
-  document.getElementById("scheduleReviewSuggestion")?.addEventListener("click", scheduleSuggestedReview);
   activeSoundscape = currentUser?.user_metadata?.itera_soundscape || "none";
   syncSoundscapeButtons();
   document.querySelectorAll("[data-soundscape]").forEach((button) => {
@@ -3592,6 +3712,33 @@ function startTaskFocus(task, subject) {
   }, 1000);
 }
 
+function startSubjectFocus(subject, durationMinutes = 45) {
+  if (!subject?.id) return;
+  if (getFocusTimerState().active) {
+    showToast("Ai deja o sesiune în desfășurare. Finalizeaz-o înainte să începi alta.", "!");
+    return;
+  }
+  clearInterval(focusTimerInterval);
+  focusInitialSeconds = Math.max(5, Number(durationMinutes) || 45) * 60;
+  focusSecondsRemaining = focusInitialSeconds;
+  focusPaused = false;
+  focusStartedAt = new Date();
+  focusSubjectId = subject.id;
+  focusTaskId = null;
+  focusTaskTitle = null;
+  focusSessionSaved = false;
+  updateFocusTimerDisplay();
+  showFloatingTimer(subject.name || "Studiu", "Studiu individual");
+  void playFocusCue("start");
+  if (activeSoundscape !== "none") void setFocusSoundscape(activeSoundscape);
+  focusTimerInterval = setInterval(() => {
+    if (focusPaused) return;
+    focusSecondsRemaining -= 1;
+    updateFocusTimerDisplay();
+    if (focusSecondsRemaining <= 0) finishFocusSession({ reason: "elapsed" });
+  }, 1000);
+}
+
 async function completeFocusedTask() {
   const taskId = focusTaskId;
   const studiedMinutes = await saveCurrentFocusSession();
@@ -3608,93 +3755,15 @@ async function completeFocusedTask() {
     return;
   }
 
+  await globalThis.IteraPush?.cancelTaskReminders(taskId);
   closeTaskSession();
   window.dispatchEvent(new CustomEvent("itera:task-updated"));
   await loadHomeData();
   renderAll();
+  window.dispatchEvent(new CustomEvent("itera:study-session-saved", {
+    detail: { subjectId: focusSubjectId, minutes: studiedMinutes }
+  }));
   showToast("Task finalizat și timpul salvat.", "✓");
-  offerReviewSuggestion(studiedMinutes);
-}
-
-function offerReviewSuggestion(studiedMinutes) {
-  if (!currentUser || !focusSubjectId || Number(studiedMinutes) < 5) return;
-  const subject = subjects.find((item) => item.id === focusSubjectId);
-  if (!subject) return;
-
-  const reviewDate = new Date();
-  reviewDate.setDate(reviewDate.getDate() + 3);
-  const date = formatDateForInput(reviewDate);
-  const preferredStart = [0, 6].includes(reviewDate.getDay()) ? 11 * 60 : 17 * 60;
-  const availableSlot = findAvailableSlot(
-    preferredStart,
-    15,
-    mergeIntervals(getDayIntervals(date)),
-    22 * 60
-  );
-  const fallbackSlot = availableSlot === null
-    ? findAvailableSlot(8 * 60, 15, mergeIntervals(getDayIntervals(date)), 22 * 60)
-    : null;
-  const time = formatClockMinutes(availableSlot ?? fallbackSlot ?? 18 * 60);
-
-  pendingReviewSuggestion = {
-    subjectId: subject.id,
-    subjectName: subject.name,
-    date,
-    time
-  };
-  document.getElementById("reviewSuggestionSubject").textContent = subject.name;
-  document.getElementById("reviewSuggestionDate").textContent =
-    `${formatReadableDate(date)} · ${time}`;
-  openModal("reviewSuggestionModal");
-}
-
-async function scheduleSuggestedReview() {
-  if (!pendingReviewSuggestion || !currentUser) return;
-  const suggestion = { ...pendingReviewSuggestion };
-  const button = document.getElementById("scheduleReviewSuggestion");
-  const duplicate = tasks.find((task) =>
-    !task.completed &&
-    task.subject_id === suggestion.subjectId &&
-    task.deadline === suggestion.date &&
-    normalizeSearchText(task.title).startsWith("recapitulare")
-  );
-
-  if (duplicate) {
-    pendingReviewSuggestion = null;
-    closeModal("reviewSuggestionModal");
-    showToast("Recapitularea este deja în planul tău.", "✓");
-    return;
-  }
-
-  button.disabled = true;
-  button.textContent = "Se programează…";
-  const { data, error } = await supabaseClient.from("tasks").insert({
-    user_id: currentUser.id,
-    subject_id: suggestion.subjectId,
-    title: `Recapitulare · ${suggestion.subjectName}`,
-    task_type: "homework",
-    deadline_date: suggestion.date,
-    deadline_time: suggestion.time,
-    priority: "low",
-    estimated_minutes: 15,
-    notes: "Recapitulare recomandată automat după o sesiune de studiu.",
-    completed: false,
-    progress: 0
-  }).select("*").single();
-
-  button.disabled = false;
-  button.textContent = "Programează";
-  if (error) {
-    showToast("Recapitularea nu a putut fi programată.", "!");
-    return;
-  }
-
-  tasks.unshift(normalizeHomeTask(data));
-  await globalThis.IteraPush?.scheduleTaskReminders(data);
-  pendingReviewSuggestion = null;
-  closeModal("reviewSuggestionModal");
-  renderAll();
-  showToast(`Recapitulare programată ${formatReadableDate(suggestion.date)}, la ${suggestion.time}.`, "✓");
 }
 
 async function scheduleTaskContinuation(minutes) {
@@ -3755,6 +3824,7 @@ function closeTaskSession() {
 
 globalThis.IteraFocus = Object.freeze({
   startTask: startTaskFocus,
+  startSubject: startSubjectFocus,
   getState: getFocusTimerState,
   togglePause: toggleFocusPause,
   finish: finishFocusSession
@@ -3919,6 +3989,13 @@ function renderHomeSummary() {
   document.getElementById(
     "estimatedWorkTime"
   ).textContent = formatMinutes(totalMinutes);
+
+  const studiedToday = studySessions.reduce(
+    (sum, session) => sum + Number(session.duration_minutes || 0),
+    0
+  );
+  const studiedTodayElement = document.getElementById("studiedTodayTime");
+  if (studiedTodayElement) studiedTodayElement.textContent = formatMinutes(studiedToday);
 
   const currentDate = new Date();
   const mondayOffset = (currentDate.getDay() + 6) % 7;

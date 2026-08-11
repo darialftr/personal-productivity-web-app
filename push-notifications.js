@@ -218,6 +218,15 @@
       .eq("source_id", taskId)
       .in("notification_type", ["task-reminder", "task-start", "task-deadline", "task-continuation"])
       .in("status", ["pending", "failed"]);
+    try {
+      const registration = await navigator.serviceWorker?.ready;
+      const visibleNotifications = await registration?.getNotifications?.({ tag: `task-${taskId}` }) || [];
+      visibleNotifications.forEach(notification => notification.close());
+      const continuationNotifications = await registration?.getNotifications?.({ tag: `task-continuation-${taskId}` }) || [];
+      continuationNotifications.forEach(notification => notification.close());
+    } catch (_) {
+      // Some browsers do not expose already displayed notifications.
+    }
     return { ok: !error, error };
   }
 

@@ -1,8 +1,12 @@
 "use strict";
 
 (function (global) {
-  let root, user, mounted = false, timerStartedAt = null, timerInterval = null;
+  let root, user, mounted = false;
+  let activeSubjectId = null;
   let pdfDocument = null, pdfPage = 1, pdfScale = 1.15, pdfRendering = false;
+  let pdfLoadToken = 0, pdfLoadingTask = null, pdfRenderTask = null;
+  const pdfDocumentCache = new Map();
+  const pdfSignedUrlCache = new Map();
   let currentPdfPath = null;
   const pdfLastPages = new Map();
   const PDF_PROGRESS_METADATA_KEY = "itera_pdf_progress";
@@ -23,6 +27,7 @@
 
   async function mountList() {
     unmount();
+    activeSubjectId = null;
     mounted = true;
     root = document.getElementById("subjectsViewRoot");
     root.innerHTML = '<div class="subjects-spa-state">Se încarcă materiile…</div>';
@@ -55,14 +60,33 @@
     root.querySelector("[data-add-subject]").addEventListener("click", () => root.querySelector("dialog").showModal());
     root.querySelector("[data-close-subject]").addEventListener("click", () => root.querySelector("dialog").close());
     root.querySelector("[data-subject-form]").addEventListener("submit", saveSubject);
+    bindPointerReorder(
+      root.querySelector(".subjects-spa-grid"),
+      "[data-subject-order]",
+      "[data-reorder-handle]",
+      saveSubjectOrder
+    );
   }
 
   function subjectCard(subject) {
-    return `<a class="subjects-spa-card" href="#/subjects/${subject.id}" style="--subject:${subject.color || "#f3a9c5"}">
+    return `<a class="subjects-spa-card" href="#/subjects/${subject.id}" data-subject-order="${subject.id}" data-order-key="${subject.id}" style="--subject:${subject.color || "#f3a9c5"}">
       <span class="subjects-spa-icon">${escapeHtml(subject.icon || subject.name.charAt(0))}</span>
       <div><p class="eyebrow">Materie</p><h3>${escapeHtml(subject.name)}</h3>
       <small>${escapeHtml(subject.teacher_name || "Fără profesor")}${subject.room ? ` · ${escapeHtml(subject.room)}` : ""}</small></div>
-      <span class="subjects-spa-arrow">›</span></a>`;
+      <span class="subjects-spa-arrow">›</span><span class="reorder-grip" data-reorder-handle aria-label="Mută materia">⋮⋮</span></a>`;
+  }
+
+  async function saveSubjectOrder(order) {
+    const results = await Promise.all(order.map((id, position) =>
+      supabaseClient.from("subjects").update({ position }).eq("id", id).eq("user_id", user.id)
+    ));
+    if (results.some(result => result.error)) {
+      global.showToast?.("Ordinea materiilor nu a putut fi salvată.", "!");
+      mounted = false;
+      await mountList();
+      return;
+    }
+    global.showToast?.("Ordinea materiilor a fost salvată.", "✓");
   }
 
   async function saveSubject(event) {
@@ -83,6 +107,7 @@
 
   async function mountDetail(subjectId) {
     unmount();
+    activeSubjectId = subjectId;
     mounted = true;
     root = document.getElementById("subjectDetailViewRoot");
     root.innerHTML = '<div class="subjects-spa-state">Se încarcă materia…</div>';
@@ -115,7 +140,15 @@
     const minutes = data.sessions.reduce((sum, item) => sum + Number(item.duration_minutes || 0), 0);
     const tests = data.tasks.filter(item => item.task_type === "test").length;
     const regularTasks = data.tasks.length - tests;
-    const pdfItems = [...data.books, ...data.resources];
+    const storedPdfOrder = user?.user_metadata?.itera_pdf_order?.[id] || [];
+    const pdfOrderIndex = new Map(storedPdfOrder.map((key, index) => [String(key), index]));
+    const pdfItems = [
+      ...data.books.map(item => ({ ...item, orderKey: `book:${item.id}` })),
+      ...data.resources.map(item => ({ ...item, orderKey: `resource:${item.id}` }))
+    ].sort((first, second) =>
+      (pdfOrderIndex.get(first.orderKey) ?? 9999) - (pdfOrderIndex.get(second.orderKey) ?? 9999) ||
+      String(first.created_at || "").localeCompare(String(second.created_at || ""))
+    );
     const savedPdfProgress = user?.user_metadata?.[PDF_PROGRESS_METADATA_KEY] || {};
     root.innerHTML = `
       <a class="subjects-spa-back" href="#/subjects">← Materii</a>
@@ -138,11 +171,11 @@
           pdfItems.map(item => {
             const lastPage = Math.max(1, Number(savedPdfProgress[item.file_path]?.page) || 1);
             const hasProgress = lastPage > 1;
-            return `<button class="subject-spa-resource" data-open-pdf="${item.id}" data-file-path="${escapeHtml(item.file_path || "")}" data-resource-title="${escapeHtml(item.title)}">
+            return `<button class="subject-spa-resource" data-open-pdf="${item.id}" data-order-key="${escapeHtml(item.orderKey)}" data-file-path="${escapeHtml(item.file_path || "")}" data-resource-title="${escapeHtml(item.title)}">
               <span class="subject-resource-icon" aria-hidden="true"><b>PDF</b><i></i></span>
               <span class="subject-resource-copy"><strong>${escapeHtml(item.title)}</strong><small>${escapeHtml(item.author || item.resource_type || "Document PDF")}</small>
                 <span class="subject-resource-status ${hasProgress ? "has-progress" : ""}"><i aria-hidden="true"></i>${hasProgress ? `Continuă de la pagina ${lastPage}` : "Pregătit pentru studiu"}</span></span>
-              <span class="subject-resource-open"><span>Deschide</span><b aria-hidden="true">→</b></span>
+              <span class="subject-resource-open"><span>Deschide</span><b aria-hidden="true">→</b></span><span class="reorder-grip resource-reorder-grip" data-reorder-handle aria-label="Mută PDF-ul">⋮⋮</span>
             </button>`;
           }).join("") : emptyAction("Biblioteca este goală", "Adaugă primul PDF", "data-add-pdf")}</div></section>
         <section class="subject-spa-panel subject-goals-panel"><div class="subject-spa-panel-head"><h3>Obiective</h3><button data-add-goal aria-label="Adaugă un obiectiv"><span aria-hidden="true">+</span></button></div>${data.goals.length ? data.goals.map(item => `<button class="subject-spa-row subject-goal-row ${item.completed ? "completed" : ""}" data-goal-id="${item.id}" data-goal-completed="${Boolean(item.completed)}"><b>${item.completed ? "✓" : "○"}</b><span>${escapeHtml(item.title)}</span></button>`).join("") : emptyAction("Niciun obiectiv încă", "Creează primul obiectiv", "data-add-goal")}</section>
@@ -207,7 +240,12 @@
             <button type="button" data-pdf-task>+ Repetă pagina</button>
           </div>
           <div class="pdf-study-layout">
-            <div class="pdf-canvas-wrap"><canvas data-pdf-canvas></canvas></div>
+            <div class="pdf-canvas-wrap">
+              <button type="button" class="pdf-edge-nav pdf-edge-prev" data-pdf-edge-prev aria-label="Pagina anterioară">‹</button>
+              <canvas data-pdf-canvas></canvas>
+              <div class="pdf-loading-state" data-pdf-loading hidden><span></span><strong>Deschid documentul…</strong></div>
+              <button type="button" class="pdf-edge-nav pdf-edge-next" data-pdf-edge-next aria-label="Pagina următoare">›</button>
+            </div>
             <aside class="pdf-notes-panel" data-pdf-notes-panel hidden>
               <div><strong>Notiță la pagina <span data-pdf-note-page>1</span></strong><button type="button" data-pdf-note-close aria-label="Închide notița">×</button></div>
               <textarea data-pdf-note rows="10" placeholder="Idei, formule sau lucruri de repetat…"></textarea>
@@ -221,7 +259,9 @@
     root.querySelectorAll("[data-add-grade]").forEach(button => button.addEventListener("click", () => root.querySelector(".subject-grade-dialog").showModal()));
     root.querySelector("[data-close-grade]").addEventListener("click", () => root.querySelector(".subject-grade-dialog").close());
     root.querySelector("[data-grade-form]").addEventListener("submit", event => addGrade(event, id));
-    root.querySelector("[data-study-timer]").addEventListener("click", event => toggleTimer(id, event.currentTarget));
+    root.querySelector("[data-study-timer]").addEventListener("click", () => {
+      global.IteraFocus?.startSubject(subject, 45);
+    });
     root.querySelectorAll("[data-edit-subject]").forEach(button => button.addEventListener("click", () => root.querySelector(".subject-detail-dialog").showModal()));
     root.querySelector("[data-close-subject-edit]").addEventListener("click", () => root.querySelector(".subject-detail-dialog").close());
     root.querySelector("[data-subject-edit-form]").addEventListener("submit", event => updateSubject(event, id));
@@ -237,7 +277,38 @@
     root.querySelectorAll("[data-open-pdf]").forEach(button => button.addEventListener("click", () => {
       if (button.dataset.filePath) openPdf(button.dataset.filePath, button.dataset.resourceTitle, id);
     }));
+    bindPointerReorder(
+      root.querySelector(".subject-resource-list"),
+      "[data-order-key]",
+      "[data-reorder-handle]",
+      order => savePdfOrder(id, order)
+    );
+    const warmResources = () => warmPdfUrls(pdfItems.slice(0, 4));
+    if ("requestIdleCallback" in global) global.requestIdleCallback(warmResources, { timeout: 1800 });
+    else global.setTimeout(warmResources, 500);
     bindPdfViewer();
+  }
+
+  async function warmPdfUrls(items) {
+    await Promise.all(items.filter(item => item.file_path && !pdfSignedUrlCache.has(item.file_path)).map(async item => {
+      const { data, error } = await supabaseClient.storage.from("subject-files").createSignedUrl(item.file_path, 3600);
+      if (!error && data?.signedUrl) {
+        pdfSignedUrlCache.set(item.file_path, { url: data.signedUrl, expiresAt: Date.now() + 55 * 60000 });
+      }
+    }));
+  }
+
+  async function savePdfOrder(subjectId, order) {
+    const previous = user?.user_metadata?.itera_pdf_order || {};
+    const { data, error } = await supabaseClient.auth.updateUser({
+      data: { itera_pdf_order: { ...previous, [subjectId]: order } }
+    });
+    if (error) {
+      global.showToast?.("Ordinea PDF-urilor nu a putut fi salvată.", "!");
+      return;
+    }
+    if (data?.user) user = data.user;
+    global.showToast?.("Ordinea PDF-urilor a fost salvată.", "✓");
   }
 
   async function updateSubject(event, subjectId) {
@@ -403,11 +474,26 @@
       event.preventDefault();
       closePdfViewer(viewer);
     });
+    viewer.addEventListener("click", event => {
+      if (event.target === viewer) void closePdfViewer(viewer);
+    });
+    viewer.addEventListener("keydown", event => {
+      if (["INPUT", "TEXTAREA"].includes(event.target?.tagName)) return;
+      if (event.key === "ArrowLeft") {
+        event.preventDefault();
+        void changePdfPage(pdfPage - 1);
+      } else if (event.key === "ArrowRight") {
+        event.preventDefault();
+        void changePdfPage(pdfPage + 1);
+      }
+    });
     viewer.addEventListener("close", () => {
       void flushPdfProgress();
     });
     viewer.querySelector("[data-pdf-prev]").addEventListener("click", () => changePdfPage(pdfPage - 1));
     viewer.querySelector("[data-pdf-next]").addEventListener("click", () => changePdfPage(pdfPage + 1));
+    viewer.querySelector("[data-pdf-edge-prev]").addEventListener("click", () => changePdfPage(pdfPage - 1));
+    viewer.querySelector("[data-pdf-edge-next]").addEventListener("click", () => changePdfPage(pdfPage + 1));
     viewer.querySelector("[data-pdf-page]").addEventListener("change", event => changePdfPage(Number(event.target.value)));
     viewer.querySelector("[data-pdf-zoom-in]").addEventListener("click", () => changePdfZoom(0.15));
     viewer.querySelector("[data-pdf-zoom-out]").addEventListener("click", () => changePdfZoom(-0.15));
@@ -447,47 +533,88 @@
   async function openPdf(filePath, title, subjectId) {
     const viewer = root.querySelector(".subject-pdf-viewer");
     const errorElement = viewer.querySelector("[data-viewer-error]");
+    const loadingElement = viewer.querySelector("[data-pdf-loading]");
+    const canvas = viewer.querySelector("[data-pdf-canvas]");
+    const loadToken = ++pdfLoadToken;
+    pdfLoadingTask?.destroy?.();
+    pdfRenderTask?.cancel?.();
+    pdfDocument = null;
+    pdfRendering = false;
     errorElement.textContent = "";
     viewer.querySelector("[data-pdf-title]").textContent = title;
     currentPdfPath = filePath;
     currentPdfTitle = title || "Document";
     currentPdfSubjectId = subjectId || null;
-    viewer.showModal();
+    canvas.style.visibility = "hidden";
+    canvas.width = 1;
+    canvas.height = 1;
+    loadingElement.hidden = false;
+    viewer.classList.add("is-loading");
+    if (!viewer.open) viewer.showModal();
 
     if (!global.pdfjsLib) {
       errorElement.textContent = "Viewerul PDF nu s-a putut încărca.";
-      return;
-    }
-
-    const [signedUrlResult, savedProgress] = await Promise.all([
-      supabaseClient.storage.from("subject-files").createSignedUrl(filePath, 3600),
-      loadPdfProgress(filePath)
-    ]);
-    const { data, error } = signedUrlResult;
-    if (error || !data?.signedUrl) {
-      errorElement.textContent = "PDF-ul nu a putut fi deschis.";
+      loadingElement.hidden = true;
       return;
     }
 
     try {
-      global.pdfjsLib.GlobalWorkerOptions.workerSrc =
-        "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js";
-      pdfDocument = await global.pdfjsLib.getDocument(data.signedUrl).promise;
+      const savedProgressPromise = loadPdfProgress(filePath);
+      let nextDocument = pdfDocumentCache.get(filePath) || null;
+      if (!nextDocument) {
+        const cachedUrl = pdfSignedUrlCache.get(filePath);
+        let signedUrl = cachedUrl?.expiresAt > Date.now() ? cachedUrl.url : null;
+        if (!signedUrl) {
+          const { data, error } = await supabaseClient.storage
+            .from("subject-files")
+            .createSignedUrl(filePath, 3600);
+          if (error || !data?.signedUrl) throw new Error("signed-url");
+          signedUrl = data.signedUrl;
+          pdfSignedUrlCache.set(filePath, { url: signedUrl, expiresAt: Date.now() + 55 * 60000 });
+        }
+        if (loadToken !== pdfLoadToken) return;
+        global.pdfjsLib.GlobalWorkerOptions.workerSrc =
+          "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.worker.min.js";
+        const loadingTask = global.pdfjsLib.getDocument(signedUrl);
+        pdfLoadingTask = loadingTask;
+        nextDocument = await loadingTask.promise;
+        if (pdfLoadingTask === loadingTask) pdfLoadingTask = null;
+        if (loadToken !== pdfLoadToken) return;
+        pdfDocumentCache.set(filePath, nextDocument);
+        if (pdfDocumentCache.size > 3) {
+          const oldestKey = pdfDocumentCache.keys().next().value;
+          if (oldestKey !== filePath) {
+            pdfDocumentCache.get(oldestKey)?.destroy?.();
+            pdfDocumentCache.delete(oldestKey);
+          }
+        }
+      }
+      const savedProgress = await savedProgressPromise;
+      if (loadToken !== pdfLoadToken) return;
+      pdfDocument = nextDocument;
       pdfPage = Math.max(1, Math.min(
         pdfDocument.numPages,
         Number(savedProgress?.page || pdfLastPages.get(filePath) || 1)
       ));
       pdfScale = Math.max(0.55, Math.min(2.5, Number(savedProgress?.zoom) || 1.15));
       viewer.querySelector("[data-pdf-count]").textContent = `/ ${pdfDocument.numPages}`;
-      await renderPdfPage();
+      await renderPdfPage(loadToken);
       await renderPdfAnnotation();
     } catch (error) {
-      errorElement.textContent = "PDF-ul nu a putut fi randat.";
+      if (loadToken === pdfLoadToken && error?.name !== "RenderingCancelledException") {
+        errorElement.textContent = "PDF-ul nu a putut fi deschis.";
+      }
+    } finally {
+      if (loadToken === pdfLoadToken) {
+        loadingElement.hidden = true;
+        viewer.classList.remove("is-loading");
+        canvas.style.visibility = pdfDocument ? "visible" : "hidden";
+      }
     }
   }
 
   async function changePdfPage(nextPage) {
-    if (!pdfDocument || pdfRendering) return;
+    if (!pdfDocument) return;
     if (!await persistPdfNoteIfDirty()) {
       root.querySelector("[data-pdf-note-status]").textContent = "Salvează notița înainte să schimbi pagina.";
       return;
@@ -502,31 +629,47 @@
     await renderPdfPage();
   }
 
-  async function renderPdfPage() {
+  async function renderPdfPage(expectedLoadToken = pdfLoadToken) {
     if (!pdfDocument) return;
+    pdfRenderTask?.cancel?.();
     pdfRendering = true;
     const viewer = root.querySelector(".subject-pdf-viewer");
+    const documentSnapshot = pdfDocument;
+    const pageNumber = pdfPage;
+    const pathSnapshot = currentPdfPath;
+    let currentRenderTask = null;
     try {
-      const page = await pdfDocument.getPage(pdfPage);
+      const page = await documentSnapshot.getPage(pageNumber);
+      if (expectedLoadToken !== pdfLoadToken || documentSnapshot !== pdfDocument) return;
       const viewport = page.getViewport({ scale: pdfScale });
       const canvas = viewer.querySelector("[data-pdf-canvas]");
       const context = canvas.getContext("2d");
       canvas.width = viewport.width;
       canvas.height = viewport.height;
-      await page.render({ canvasContext: context, viewport }).promise;
-      viewer.querySelector("[data-pdf-page]").value = pdfPage;
+      const renderTask = page.render({ canvasContext: context, viewport });
+      currentRenderTask = renderTask;
+      pdfRenderTask = renderTask;
+      await renderTask.promise;
+      if (expectedLoadToken !== pdfLoadToken || documentSnapshot !== pdfDocument) return;
+      viewer.querySelector("[data-pdf-page]").value = pageNumber;
       viewer.querySelector("[data-pdf-zoom]").textContent = `${Math.round(pdfScale * 100)}%`;
-      viewer.querySelector("[data-pdf-note-page]").textContent = String(pdfPage);
+      viewer.querySelector("[data-pdf-note-page]").textContent = String(pageNumber);
       viewer.querySelector("[data-viewer-error]").textContent = "";
-      if (currentPdfPath) {
-        pdfLastPages.set(currentPdfPath, pdfPage);
-        schedulePdfProgressSave(currentPdfPath, pdfPage, pdfScale);
+      if (pathSnapshot) {
+        pdfLastPages.set(pathSnapshot, pageNumber);
+        schedulePdfProgressSave(pathSnapshot, pageNumber, pdfScale);
       }
       await renderPdfAnnotation();
+      [pageNumber - 1, pageNumber + 1]
+        .filter(number => number >= 1 && number <= documentSnapshot.numPages)
+        .forEach(number => { void documentSnapshot.getPage(number); });
     } catch (error) {
-      viewer.querySelector("[data-viewer-error]").textContent = "Pagina nu a putut fi afișată. Încearcă din nou.";
+      if (error?.name !== "RenderingCancelledException" && expectedLoadToken === pdfLoadToken) {
+        viewer.querySelector("[data-viewer-error]").textContent = "Pagina nu a putut fi afișată. Încearcă din nou.";
+      }
     } finally {
       pdfRendering = false;
+      if (pdfRenderTask === currentRenderTask) pdfRenderTask = null;
     }
   }
 
@@ -543,6 +686,9 @@
       return;
     }
     viewer.close();
+    pdfLoadToken += 1;
+    pdfLoadingTask?.destroy?.();
+    pdfRenderTask?.cancel?.();
     pdfDocument = null;
     currentPdfPath = null;
     currentPdfSubjectId = null;
@@ -723,32 +869,6 @@
     return pdfProgressWrite;
   }
 
-  async function toggleTimer(subjectId, button) {
-    if (!timerStartedAt) {
-      timerStartedAt = new Date();
-      button.textContent = "■ Oprește focus";
-      timerInterval = setInterval(() => {
-        const seconds = Math.floor((Date.now() - timerStartedAt.getTime()) / 1000);
-        button.textContent = `■ ${String(Math.floor(seconds / 60)).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
-      }, 1000);
-      return;
-    }
-    clearInterval(timerInterval);
-    const endedAt = new Date(), duration = Math.max(1, Math.round((endedAt - timerStartedAt) / 60000));
-    const { error } = await supabaseClient.from("subject_study_sessions").insert({
-      user_id: user.id, subject_id: subjectId, started_at: timerStartedAt.toISOString(),
-      ended_at: endedAt.toISOString(), duration_minutes: duration, source: "manual",
-      study_date: formatLocalDate(endedAt)
-    });
-    if (error) {
-      button.textContent = "Încearcă din nou";
-      return;
-    }
-    timerStartedAt = null;
-    mounted = false;
-    await mountDetail(subjectId);
-  }
-
   function unmount() {
     void flushPdfProgress();
     if (focusTimerListener) {
@@ -757,9 +877,50 @@
     }
     mounted = false;
     root = null;
-    if (timerInterval) clearInterval(timerInterval);
-    timerInterval = null;
-    timerStartedAt = null;
+  }
+
+  function bindPointerReorder(container, itemSelector, handleSelector, onCommit) {
+    if (!container) return;
+    container.querySelectorAll(handleSelector).forEach(handle => {
+      let item = null;
+      let moved = false;
+      handle.addEventListener("click", event => {
+        event.preventDefault();
+        event.stopPropagation();
+      });
+      handle.addEventListener("pointerdown", event => {
+        if (event.pointerType === "mouse" && event.button !== 0) return;
+        event.preventDefault();
+        event.stopPropagation();
+        item = handle.closest(itemSelector);
+        moved = false;
+        handle.setPointerCapture?.(event.pointerId);
+        item?.classList.add("is-reordering");
+        container.classList.add("reorder-active");
+      });
+      handle.addEventListener("pointermove", event => {
+        if (!item || !handle.hasPointerCapture?.(event.pointerId)) return;
+        moved = true;
+        const target = document.elementFromPoint(event.clientX, event.clientY)?.closest(itemSelector);
+        if (!target || target === item || target.parentElement !== container) return;
+        const rect = target.getBoundingClientRect();
+        const before = event.clientY < rect.top + rect.height / 2 ||
+          (Math.abs(event.clientY - (rect.top + rect.height / 2)) < rect.height / 3 && event.clientX < rect.left + rect.width / 2);
+        container.insertBefore(item, before ? target : target.nextSibling);
+      });
+      const finish = event => {
+        if (!item) return;
+        if (handle.hasPointerCapture?.(event.pointerId)) handle.releasePointerCapture(event.pointerId);
+        item.classList.remove("is-reordering");
+        container.classList.remove("reorder-active");
+        item = null;
+        if (!moved) return;
+        const order = [...container.querySelectorAll(itemSelector)].map(element => element.dataset.orderKey);
+        void onCommit(order);
+      };
+      handle.addEventListener("pointerup", finish);
+      handle.addEventListener("pointercancel", finish);
+    });
   }
 
   function empty(text) { return `<div class="subject-spa-empty">${text}</div>`; }
@@ -772,5 +933,12 @@
     if (document.visibilityState === "hidden") void flushPdfProgress();
   });
   global.addEventListener("pagehide", () => void flushPdfProgress());
+  global.addEventListener("itera:study-session-saved", () => {
+    if (mounted && activeSubjectId) {
+      if (root?.querySelector(".subject-pdf-viewer")?.open) return;
+      mounted = false;
+      void mountDetail(activeSubjectId);
+    }
+  });
   global.IteraSubjectsView = Object.freeze({ mountList, mountDetail, unmount });
 })(window);

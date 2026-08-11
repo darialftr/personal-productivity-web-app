@@ -8795,6 +8795,382 @@ html[data-mode="dark"] .subject-spa-resource {
   }
 }
 
+/* ITERA FLOW 2 — direct manipulation, contextual check-ins and faster reading. */
+.studied-summary-stat {
+  border-bottom-color: transparent;
+}
+
+.reorder-grip,
+.task-plan-grip {
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--surface-soft) 78%, transparent);
+  border: 1px solid color-mix(in srgb, var(--primary) 12%, var(--border));
+  border-radius: 999px;
+  font-family: system-ui, sans-serif;
+  font-size: 0.78rem;
+  letter-spacing: -0.18em;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+}
+
+.reorder-grip:active,
+.task-plan-grip:active {
+  cursor: grabbing;
+}
+
+.subjects-spa-card {
+  grid-template-columns: auto minmax(0, 1fr) auto 28px;
+}
+
+.subjects-spa-card .reorder-grip {
+  width: 28px;
+  height: 38px;
+}
+
+.subject-spa-resource {
+  grid-template-columns: 44px minmax(0, 1fr) auto 30px;
+}
+
+.resource-reorder-grip {
+  width: 28px;
+  height: 38px;
+}
+
+.reorder-active {
+  cursor: grabbing;
+}
+
+.is-reordering {
+  z-index: 8;
+  opacity: 0.94;
+  transform: scale(1.025) rotate(0.35deg) !important;
+  box-shadow: 0 24px 56px color-mix(in srgb, var(--text) 18%, transparent) !important;
+}
+
+.reorder-active > :not(.is-reordering) {
+  transition: transform 240ms var(--itera-ease-fluid);
+}
+
+.tasks-spa-item:has(.task-plan-grip) {
+  grid-template-columns: auto minmax(0, 1fr) auto auto auto 34px;
+}
+
+.task-plan-grip {
+  grid-column: 6;
+  width: 32px;
+  height: 38px;
+  padding: 0;
+}
+
+.plan-reorder-active .tasks-swipe-delete {
+  visibility: hidden;
+}
+
+.tasks-swipe-row.is-reordering {
+  overflow: visible;
+}
+
+.task-form-intro {
+  margin: -6px 0 0;
+  padding: 11px 14px;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--primary-soft) 42%, var(--surface));
+  border-radius: 15px;
+  font-size: 0.75rem;
+  line-height: 1.5;
+}
+
+.task-title-field input {
+  min-height: 54px;
+  padding-inline: 16px;
+  border-radius: 17px;
+  font-size: 1rem;
+}
+
+.tasks-spa-dialog form {
+  gap: 14px;
+}
+
+.tasks-spa-dialog .tasks-spa-fields {
+  padding: 14px;
+  background: color-mix(in srgb, var(--surface-soft) 60%, transparent);
+  border: 1px solid color-mix(in srgb, var(--primary) 10%, var(--border));
+  border-radius: 20px;
+}
+
+.energy-prompt-card {
+  width: min(520px, 100%);
+  overflow: hidden;
+  text-align: center;
+  background:
+    radial-gradient(circle at 50% -8%, color-mix(in srgb, var(--primary) 22%, transparent), transparent 42%),
+    color-mix(in srgb, var(--surface) 94%, transparent);
+}
+
+.energy-prompt-orb {
+  width: 58px;
+  height: 58px;
+  display: grid;
+  place-items: center;
+  margin: 0 auto 16px;
+  border-radius: 22px;
+  background: linear-gradient(145deg, var(--primary-light), var(--primary));
+  box-shadow: 0 16px 34px color-mix(in srgb, var(--primary) 26%, transparent);
+  animation: energyOrbFloat 3s ease-in-out infinite;
+}
+
+.energy-prompt-orb span {
+  width: 22px;
+  height: 22px;
+  border: 3px solid white;
+  border-radius: 50%;
+  box-shadow: 9px -7px 0 -6px white, -8px 7px 0 -6px white;
+}
+
+.energy-prompt-card h2 {
+  margin: 5px 0 8px;
+  font-family: "DM Serif Display", serif;
+  font-size: clamp(1.8rem, 5vw, 2.45rem);
+  font-weight: 400;
+}
+
+.energy-prompt-card > p:not(.card-kicker) {
+  margin: 0 auto;
+  max-width: 360px;
+  color: var(--muted);
+  line-height: 1.55;
+}
+
+.energy-prompt-options {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 8px;
+  margin: 25px 0 18px;
+}
+
+.energy-prompt-options button {
+  min-width: 0;
+  min-height: 92px;
+  display: grid;
+  justify-items: center;
+  align-content: center;
+  gap: 11px;
+  padding: 10px 5px;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--surface-soft) 72%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--primary) 11%, var(--border));
+  border-radius: 18px;
+  transition:
+    transform 340ms var(--itera-ease-spring),
+    background 240ms ease,
+    border-color 240ms ease;
+}
+
+.energy-prompt-options button > span {
+  width: 18px;
+  height: calc(8px + var(--energy-height, 0px));
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--primary) 46%, var(--muted));
+}
+
+.energy-prompt-options button:nth-child(1) > span { --energy-height: 2px; }
+.energy-prompt-options button:nth-child(2) > span { --energy-height: 7px; }
+.energy-prompt-options button:nth-child(3) > span { --energy-height: 13px; }
+.energy-prompt-options button:nth-child(4) > span { --energy-height: 20px; }
+.energy-prompt-options button:nth-child(5) > span { --energy-height: 28px; }
+
+.energy-prompt-options small {
+  overflow: hidden;
+  max-width: 100%;
+  font-size: 0.58rem;
+  font-weight: 750;
+  text-overflow: ellipsis;
+}
+
+.energy-prompt-later {
+  min-height: 42px;
+  padding: 0 17px;
+  color: var(--muted);
+  background: transparent;
+  border: 0;
+  border-radius: 999px;
+  font-weight: 750;
+}
+
+@keyframes energyOrbFloat {
+  0%, 100% { transform: translateY(0) rotate(-1deg); }
+  50% { transform: translateY(-5px) rotate(1deg); }
+}
+
+.pdf-canvas-wrap {
+  position: relative;
+}
+
+.pdf-loading-state {
+  position: absolute;
+  inset: 0;
+  z-index: 5;
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 13px;
+  color: var(--muted);
+  background: color-mix(in srgb, var(--surface) 78%, transparent);
+  backdrop-filter: blur(18px);
+}
+
+.pdf-loading-state[hidden] {
+  display: none;
+}
+
+.pdf-loading-state span {
+  width: 34px;
+  height: 34px;
+  border: 3px solid color-mix(in srgb, var(--primary) 18%, transparent);
+  border-top-color: var(--primary);
+  border-radius: 50%;
+  animation: pdfLoadSpin 700ms linear infinite;
+}
+
+.pdf-loading-state strong {
+  font-size: 0.75rem;
+}
+
+@keyframes pdfLoadSpin {
+  to { transform: rotate(360deg); }
+}
+
+.pdf-edge-nav {
+  position: absolute;
+  top: 50%;
+  z-index: 6;
+  width: 48px;
+  height: 58px;
+  display: grid;
+  place-items: center;
+  margin: 0;
+  color: var(--text);
+  background: color-mix(in srgb, var(--surface) 78%, transparent);
+  border: 1px solid color-mix(in srgb, var(--primary) 14%, var(--border));
+  border-radius: 999px;
+  box-shadow: 0 12px 30px color-mix(in srgb, var(--text) 12%, transparent);
+  backdrop-filter: blur(18px);
+  font-size: 2rem;
+  line-height: 1;
+  opacity: 0.76;
+  transform: translateY(-50%);
+  transition:
+    opacity 200ms ease,
+    transform 300ms var(--itera-ease-spring);
+}
+
+.pdf-edge-prev {
+  left: 12px;
+}
+
+.pdf-edge-next {
+  right: 12px;
+}
+
+.pdf-edge-nav:hover {
+  opacity: 1;
+  transform: translateY(-50%) scale(1.06);
+}
+
+@media (min-width: 761px) and (max-width: 1180px) {
+  .main-content {
+    padding-inline: 24px;
+  }
+
+  .hero-grid,
+  .bottom-grid,
+  .subject-spa-columns,
+  .admission-spa-grid {
+    gap: 12px;
+  }
+
+  .subjects-spa-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .subject-spa-resource {
+    grid-template-columns: 40px minmax(0, 1fr) 34px;
+  }
+
+  .subject-resource-open > span,
+  .subject-spa-resource .resource-reorder-grip {
+    display: none;
+  }
+}
+
+@media (max-width: 760px) {
+  .tasks-spa-item:has(.task-plan-grip) {
+    grid-template-columns: 32px minmax(0, 1fr) auto;
+    padding-right: 48px;
+  }
+
+  .task-plan-grip {
+    position: absolute;
+    top: 9px;
+    right: 8px;
+    width: 32px;
+    height: 38px;
+  }
+
+  .subjects-spa-card {
+    grid-template-columns: 38px minmax(0, 1fr) auto 27px;
+  }
+
+  .subject-spa-resource {
+    grid-template-columns: 41px minmax(0, 1fr) 32px 28px;
+  }
+
+  .subject-resource-open {
+    grid-column: 3;
+  }
+
+  .energy-prompt-card {
+    width: calc(100% - 16px);
+    margin: 8px;
+    padding: 24px 16px calc(18px + env(safe-area-inset-bottom));
+    border-radius: 30px;
+  }
+
+  .energy-prompt-options {
+    gap: 5px;
+  }
+
+  .energy-prompt-options button {
+    min-height: 82px;
+    padding-inline: 2px;
+    border-radius: 16px;
+  }
+
+  .energy-prompt-options small {
+    font-size: 0.5rem;
+  }
+
+  .pdf-edge-nav {
+    position: fixed;
+    top: 50%;
+    width: 42px;
+    height: 52px;
+    margin: 0;
+    transform: translateY(-50%);
+  }
+
+  .pdf-edge-prev { left: 7px; }
+  .pdf-edge-next { right: 7px; }
+
+  .tasks-spa-dialog form {
+    padding: 18px 16px calc(18px + env(safe-area-inset-bottom));
+  }
+}
+
 /* One-tap subject flows and softer content arrival. */
 #subjectDetailViewRoot > :is(.subject-spa-hero, .subject-spa-stats, .subject-spa-columns) {
   animation: subjectContentFlow 480ms var(--itera-ease-fluid) both;

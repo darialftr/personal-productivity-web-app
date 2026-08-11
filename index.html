@@ -301,6 +301,15 @@
               </div>
             </div>
 
+            <div class="summary-stat studied-summary-stat">
+              <div class="summary-stat-icon blush" aria-hidden="true">↗</div>
+
+              <div>
+                <span>Studiat astăzi</span>
+                <strong id="studiedTodayTime">0m</strong>
+              </div>
+            </div>
+
           </article>
 
           <article class="soft-card home-next-card">
@@ -710,22 +719,21 @@
     </div>
   </div>
 
-  <!-- AUTOMATIC REVIEW SUGGESTION -->
-  <div class="modal-overlay" id="reviewSuggestionModal" aria-hidden="true">
-    <div class="modal-card review-suggestion-card">
-      <span class="review-suggestion-symbol" aria-hidden="true">↻</span>
-      <p class="card-kicker">MEMORIE PE TERMEN LUNG</p>
-      <h2>Fixăm ce ai învățat?</h2>
-      <p>O recapitulare scurtă peste 3 zile te ajută să păstrezi informația.</p>
-      <div class="review-suggestion-plan">
-        <span id="reviewSuggestionSubject">Matematică</span>
-        <strong id="reviewSuggestionDate">Miercuri · 17:00</strong>
-        <small>15 minute</small>
+  <!-- CONTEXTUAL ENERGY CHECK-IN -->
+  <div class="modal-overlay energy-prompt-modal" id="energyPromptModal" aria-hidden="true">
+    <div class="modal-card energy-prompt-card">
+      <div class="energy-prompt-orb" aria-hidden="true"><span></span></div>
+      <p class="card-kicker" id="energyPromptKicker">Check-in rapid</p>
+      <h2 id="energyPromptTitle">Cum este energia ta acum?</h2>
+      <p id="energyPromptDescription">Ajustez ritmul zilei, nu obiectivele tale.</p>
+      <div class="energy-prompt-options" role="group" aria-label="Nivelul de energie">
+        <button type="button" data-prompt-energy="1"><span></span><small>Foarte joasă</small></button>
+        <button type="button" data-prompt-energy="2"><span></span><small>Joasă</small></button>
+        <button type="button" data-prompt-energy="3"><span></span><small>Echilibrată</small></button>
+        <button type="button" data-prompt-energy="4"><span></span><small>Bună</small></button>
+        <button type="button" data-prompt-energy="5"><span></span><small>Ridicată</small></button>
       </div>
-      <div class="review-suggestion-actions">
-        <button class="secondary-button" id="dismissReviewSuggestion" type="button">Nu acum</button>
-        <button class="primary-button" id="scheduleReviewSuggestion" type="button">Programează</button>
-      </div>
+      <button class="energy-prompt-later" id="energyPromptLater" type="button">Mai târziu</button>
     </div>
   </div>
 

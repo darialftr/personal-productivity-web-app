@@ -10,6 +10,8 @@
   const cleanTaskNotes = notes => String(notes || "").replace(personalTaskOnlyMarker, "").trim();
   const isPersonalEventLike = task =>
     isFixedPersonalTask(task.task_type) && !String(task.notes || "").includes(personalTaskOnlyMarker);
+  const isAutomaticReviewTask = task =>
+    /recapitulare recomandată automat după o sesiune de studiu/i.test(String(task.notes || ""));
   const taskTypeLabel = type => ({
     personal: "Personal", selfcare: "Self-care", home: "Casă",
     health: "Sănătate", errand: "De rezolvat", goal: "Obiectiv", test: "Test",
@@ -67,15 +69,17 @@
 
   function visibleTasks() {
     return tasks.filter(task => {
-      if (isPersonalEventLike(task)) return false;
+      if (isPersonalEventLike(task) || isAutomaticReviewTask(task)) return false;
       const matchesSearch = task.title.toLowerCase().includes(search);
       if (!matchesSearch) return false;
       if (filter === "today") return plannedDate(task) === today() && !task.completed;
       if (filter === "homework") return task.task_type === "homework" && !task.completed;
       if (filter === "test") return task.task_type === "test" && !task.completed;
       if (filter === "life") return isLifeTask(task.task_type) && !task.completed;
-      if (filter === "completed") return task.completed;
-      return true;
+      if (filter === "completed") {
+        return task.completed && task.completed_at && localDate(new Date(task.completed_at)) === today();
+      }
+      return !task.completed;
     });
   }
 
@@ -94,13 +98,16 @@
           ["test", "Teste"], ["life", "Personal"], ["completed", "Finalizate"]
         ].map(([value, label]) => `<button class="${filter === value ? "active" : ""}" data-task-filter="${value}">${label}</button>`).join("")}</div>
       </section>
-      <p class="tasks-swipe-hint">Glisează un task spre stânga pentru a-l șterge rapid.</p>
+      <p class="tasks-swipe-hint ${filter === "today" ? "plan-order-hint" : ""}">${filter === "today"
+        ? "Ține de ⋮⋮ și mută taskurile. Itera recalculează orele și pauzele imediat."
+        : "Glisează un task spre stânga pentru a-l șterge rapid."}</p>
       <section class="tasks-spa-list">${list.length ? list.map(renderTask).join("") :
         '<div class="tasks-spa-empty"><strong>Niciun task aici.</strong><span>Ai spațiu pentru următorul pas.</span></div>'}</section>
       <dialog class="tasks-spa-dialog"><form data-task-form>
-        <input type="hidden" name="id"><div class="tasks-spa-dialog-head"><h3 data-task-dialog-title>Task nou</h3>
+        <input type="hidden" name="id"><div class="tasks-spa-dialog-head"><div><p class="card-kicker">Următorul pas</p><h3 data-task-dialog-title>Task nou</h3></div>
         <button type="button" class="icon-button" data-close-task aria-label="Închide">×</button></div>
-        <label>Titlu<input name="title" required></label>
+        <p class="task-form-intro">Spune-i Iterei ce ai de făcut. Ora poate rămâne liberă — o alegem noi realist.</p>
+        <label class="task-title-field">Ce ai de făcut?<input name="title" required autocomplete="off" placeholder="Ex: Termin exercițiile la matematică"></label>
         <div class="tasks-spa-fields">
           <label data-task-subject-field>Materie<select name="subject_id"><option value="">Fără materie</option>${subjects.map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join("")}</select></label>
           <label>Tip<select name="task_type"><option value="homework">Temă</option><option value="test">Test</option><option value="project">Proiect</option><option value="study">Studiu</option><option value="personal">Personal</option><option value="selfcare">Self-care</option><option value="home">Casă</option><option value="health">Sănătate</option><option value="errand">De rezolvat</option><option value="goal">Obiectiv</option><option value="other">Altceva</option></select></label>
@@ -123,7 +130,8 @@
     const planLabel = plan ? `Planificat ${formatTaskDate(plan.date)} · ${plan.time}` : "";
     const contextLabel = subject?.name || taskTypeLabel(task.task_type);
     const personalEvent = isPersonalEventLike(task);
-    return `<div class="tasks-swipe-row" data-task-row="${task.id}">
+    const reorderable = filter === "today" && !task.completed && !personalEvent && Boolean(plan);
+    return `<div class="tasks-swipe-row" data-task-row="${task.id}" ${reorderable ? `data-plan-order="${task.id}" data-order-key="${task.id}"` : ""}>
       <button class="tasks-swipe-delete" data-swipe-delete="${task.id}" aria-label="Șterge ${escapeHtml(task.title)}">Șterge</button>
       <article class="tasks-spa-item ${task.completed ? "completed" : ""} ${isLifeTask(task.task_type) ? "life-task" : ""} ${personalEvent ? "personal-event" : ""}" data-swipe-surface style="--subject:${subject?.color || taskTypeColor(task.task_type)}">
       ${personalEvent
@@ -134,7 +142,8 @@
         ? '<span class="tasks-spa-badge tasks-spa-event-badge">Eveniment</span>'
         : `<span class="tasks-spa-badge priority-${escapeHtml(task.priority || "medium")}">${task.estimated_minutes || 0}m</span>`}
       ${task.completed || personalEvent ? "" : `<button class="tasks-spa-start" data-start-task="${task.id}"><span class="tasks-play-icon" aria-hidden="true"></span> Start</button>`}
-      <button class="tasks-spa-edit" data-edit-task="${task.id}">Editează</button></article></div>`;
+      <button class="tasks-spa-edit" data-edit-task="${task.id}">Editează</button>
+      ${reorderable ? '<button class="task-plan-grip" data-plan-grip aria-label="Mută taskul în plan">⋮⋮</button>' : ""}</article></div>`;
   }
 
   function formatTaskDate(value) {
@@ -180,6 +189,7 @@
     }));
     root.querySelectorAll("[data-swipe-delete]").forEach(button => button.addEventListener("click", () => deleteTaskById(button.dataset.swipeDelete)));
     bindSwipeRows();
+    bindPlanReorder();
   }
 
   function openDialog(task) {
@@ -278,6 +288,7 @@
     } else {
       await global.IteraPush?.scheduleTaskReminders(data);
     }
+    global.dispatchEvent(new CustomEvent("itera:task-updated", { detail: { id: data.id, saved: true } }));
   }
 
   async function autoScheduleOpenTasks(options = {}) {
@@ -306,6 +317,7 @@
         ? { ...task, deadline_date: plan.date, deadline_time: plan.time }
         : task);
     }));
+    if (!options.silent) filter = "today";
     render();
     global.dispatchEvent(new CustomEvent("itera:plan-updated"));
     const highlighted = options.highlightId && global.IteraPlanning.getTaskPlan(user, options.highlightId);
@@ -316,6 +328,122 @@
         ? `${result.scheduled} ${result.scheduled === 1 ? "task planificat" : "taskuri planificate"}, cu pauze și fără ultima clipă.`
         : "Nu am găsit intervale libere înaintea termenelor.", result.scheduled ? "✓" : "!");
     }
+  }
+
+  function bindPlanReorder() {
+    const list = root.querySelector(".tasks-spa-list");
+    if (!list) return;
+    list.querySelectorAll("[data-plan-grip]").forEach(handle => {
+      let row = null;
+      let moved = false;
+      handle.addEventListener("click", event => {
+        event.preventDefault();
+        event.stopPropagation();
+      });
+      handle.addEventListener("pointerdown", event => {
+        event.preventDefault();
+        event.stopPropagation();
+        row = handle.closest("[data-plan-order]");
+        moved = false;
+        handle.setPointerCapture?.(event.pointerId);
+        row?.classList.add("is-reordering");
+        list.classList.add("plan-reorder-active");
+      });
+      handle.addEventListener("pointermove", event => {
+        if (!row || !handle.hasPointerCapture?.(event.pointerId)) return;
+        moved = true;
+        const target = document.elementFromPoint(event.clientX, event.clientY)?.closest("[data-plan-order]");
+        if (!target || target === row || target.parentElement !== list) return;
+        const rect = target.getBoundingClientRect();
+        list.insertBefore(row, event.clientY < rect.top + rect.height / 2 ? target : target.nextSibling);
+      });
+      const finish = event => {
+        if (!row) return;
+        if (handle.hasPointerCapture?.(event.pointerId)) handle.releasePointerCapture(event.pointerId);
+        row.classList.remove("is-reordering");
+        list.classList.remove("plan-reorder-active");
+        row = null;
+        if (!moved) return;
+        const order = [...list.querySelectorAll("[data-plan-order]")].map(item => item.dataset.planOrder);
+        void saveReorderedPlan(order);
+      };
+      handle.addEventListener("pointerup", finish);
+      handle.addEventListener("pointercancel", finish);
+    });
+  }
+
+  async function saveReorderedPlan(order) {
+    if (!order.length || !global.IteraPlanning) return;
+    const date = today();
+    const plan = { ...global.IteraPlanning.getPlan(user) };
+    const orderedTasks = order.map(id => tasks.find(task => String(task.id) === String(id))).filter(Boolean);
+    const existingStarts = orderedTasks.map(task => timeToMinutes(global.IteraPlanning.getTaskPlan(user, task)?.time)).filter(Number.isFinite);
+    let cursor = existingStarts.length ? Math.min(...existingStarts) : 15 * 60 + 30;
+    const day = new Date(`${date}T12:00:00`).getDay();
+    const fixed = [
+      ...scheduleItems.filter(item => Number(item.day_of_week) === day).map(item => ({
+        start: timeToMinutes(item.start_time),
+        end: timeToMinutes(item.end_time) || timeToMinutes(item.start_time) + 60
+      })),
+      ...calendarEvents.filter(item => item.event_date === date && item.start_time).map(item => ({
+        start: timeToMinutes(item.start_time),
+        end: timeToMinutes(item.end_time) || timeToMinutes(item.start_time) + 60
+      }))
+    ].filter(item => Number.isFinite(item.start) && Number.isFinite(item.end)).sort((a, b) => a.start - b.start);
+
+    orderedTasks.forEach(task => {
+      const duration = Math.max(15, Number(task.estimated_minutes) || 30);
+      let conflict = fixed.find(interval => cursor < interval.end && cursor + duration > interval.start);
+      while (conflict) {
+        cursor = conflict.end;
+        conflict = fixed.find(interval => cursor < interval.end && cursor + duration > interval.start);
+      }
+      const previous = global.IteraPlanning.getTaskPlan(user, task) || {};
+      plan[String(task.id)] = {
+        ...previous,
+        date,
+        time: minutesToTime(cursor),
+        duration,
+        source: "manual-order",
+        updatedAt: new Date().toISOString()
+      };
+      cursor += duration + (task.task_type === "selfcare" ? 0 : 15);
+    });
+
+    const previousUser = user;
+    user = {
+      ...user,
+      user_metadata: {
+        ...(user.user_metadata || {}),
+        itera_task_plan: plan
+      }
+    };
+    render();
+    const saved = await global.IteraPlanning.savePlan(user, plan);
+    if (!saved.ok) {
+      user = previousUser;
+      global.showToast?.("Noua ordine nu a putut fi salvată.", "!");
+      await reload();
+      return;
+    }
+    user = saved.user;
+    await Promise.all(orderedTasks.map(task => {
+      const entry = global.IteraPlanning.getTaskPlan(user, task);
+      return global.IteraPush?.scheduleTaskReminders({ ...task, deadline_date: entry.date, deadline_time: entry.time });
+    }));
+    global.dispatchEvent(new CustomEvent("itera:plan-updated"));
+    global.showToast?.("Planul și orele s-au reașezat.", "✓");
+  }
+
+  function timeToMinutes(value) {
+    if (!value) return null;
+    const [hours, minutes] = String(value).slice(0, 5).split(":").map(Number);
+    return Number.isFinite(hours) && Number.isFinite(minutes) ? hours * 60 + minutes : null;
+  }
+
+  function minutesToTime(value) {
+    const safe = Math.max(0, Math.min(1439, Math.round(value)));
+    return `${String(Math.floor(safe / 60)).padStart(2, "0")}:${String(safe % 60).padStart(2, "0")}`;
   }
 
   function bindSwipeRows() {
@@ -377,6 +505,7 @@
       const removal = await global.IteraPlanning?.removeTask(user, id);
       if (removal?.user) user = removal.user;
       await global.IteraPush?.scheduleTaskReminders({ ...task, completed });
+      global.dispatchEvent(new CustomEvent("itera:task-updated", { detail: { id, completed } }));
       await reload();
     }
   }
@@ -398,6 +527,7 @@
       if (removal?.user) user = removal.user;
       if (fromDialog) closeDialog();
       global.showToast?.("Task șters.", "✓");
+      global.dispatchEvent(new CustomEvent("itera:task-updated", { detail: { id, deleted: true } }));
       await reload();
     } else {
       if (deleteButton) { deleteButton.disabled = false; deleteButton.textContent = "Șterge"; }
@@ -409,8 +539,5 @@
     return String(value ?? "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;")
       .replaceAll('"', "&quot;").replaceAll("'", "&#039;");
   }
-  window.addEventListener("itera:task-updated", () => {
-    if (mounted) reload();
-  });
-  global.IteraTasksView = Object.freeze({ mount, unmount, openTask });
+  global.IteraTasksView = Object.freeze({ mount, unmount, openTask, refresh: reload });
 })(window);
