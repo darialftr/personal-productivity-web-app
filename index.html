@@ -885,9 +885,10 @@
             </select>
           </label>
           <label id="quickTaskDestinationField" hidden>
-            <span>Adaugă drept</span>
+            <span>Cum vrei să îl folosești?</span>
             <select id="quickTaskDestination">
-              <option value="task" selected>Task de bifat</option>
+              <option value="checklist" selected>Doar de bifat</option>
+              <option value="task">Task cu timer</option>
               <option value="event">Eveniment în calendar</option>
             </select>
           </label>
@@ -917,7 +918,7 @@
             <textarea id="quickTaskNotes" rows="3" placeholder="Detalii opționale"></textarea>
           </label>
         </div>
-        <p class="quick-task-hint" id="quickTaskHint">Va apărea automat în Task-uri, Calendar și pagina materiei.</p>
+        <p class="quick-task-hint" id="quickTaskHint" hidden>După salvare apare imediat peste tot unde este relevant.</p>
         <div class="form-actions">
           <button type="button" class="secondary-button" data-close-modal="quickTaskModal">Renunță</button>
           <button type="submit" class="primary-button" id="saveQuickTaskButton">Adaugă tema</button>
@@ -1154,18 +1155,17 @@
     <p id="toastMessage">Salvat cu succes.</p>
   </div>
 
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="supabase-config.js"></script>
-<script src="task-planning.js"></script>
-<script src="push-notifications.js"></script>
-<script src="auth-guard.js"></script>
-<script src="app-shell.js"></script>
-<script src="schedule-view.js"></script>
-<script src="tasks-view.js"></script>
-<script src="calendar-view.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js"></script>
-<script src="subjects-view.js"></script>
-<script src="progress-view.js"></script>
-<script src="app.js"></script>
+<script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script defer src="supabase-config.js"></script>
+<script defer src="task-planning.js"></script>
+<script defer src="push-notifications.js"></script>
+<script defer src="auth-guard.js"></script>
+<script defer src="app-shell.js"></script>
+<script defer src="schedule-view.js"></script>
+<script defer src="tasks-view.js"></script>
+<script defer src="calendar-view.js"></script>
+<script defer src="subjects-view.js"></script>
+<script defer src="progress-view.js"></script>
+<script defer src="app.js"></script>
 </body>
 </html>

@@ -76,12 +76,18 @@ let scheduleItems = [];
 let studySessions = [];
 let taskRealtimeChannel = null;
 let realtimeRefreshTimer = null;
+let modalScrollPosition = 0;
+let homeDataLoadPromise = null;
+let homeDataLoadedAt = 0;
+let reminderSyncAt = 0;
+let resumeRefreshTimer = null;
 
 initializeApp();
 
 async function initializeApp() {
-  await loadHomeData();
-  if (!currentUser) return;
+  const initialSession = await globalThis.IteraAuthSessionPromise;
+  if (!initialSession) return;
+  currentUser = initialSession.user;
   hydrateDailyEnergy();
   applyAccountPreferences();
   initializeShellViews();
@@ -107,6 +113,16 @@ async function initializeApp() {
   initializeExamMode();
   initializeRecoveryMode();
   initializeLaunchActions();
+  updateCurrentDate();
+  document.documentElement.classList.add("app-data-loading");
+  hideAppLaunchScreen();
+
+  await loadHomeData({ force: true, session: initialSession });
+  document.documentElement.classList.remove("app-data-loading");
+  hydrateDailyEnergy();
+  applyAccountPreferences();
+  renderAll();
+
   window.setInterval(() => {
     resetEnergyForNewDay();
     updateCurrentDate();
@@ -114,13 +130,7 @@ async function initializeApp() {
     renderNowRecommendation();
     maybePromptEnergy();
   }, 60000);
-  window.addEventListener("focus", async () => {
-  await loadHomeData();
-  hydrateDailyEnergy();
-  applyAccountPreferences();
-  updateCurrentDate();
-  renderAll();
-});
+  window.addEventListener("focus", scheduleResumeRefresh);
 
 window.addEventListener("itera:home-refresh", async () => {
   await loadHomeData();
@@ -142,22 +152,25 @@ window.addEventListener("itera:task-updated", async () => {
 
 document.addEventListener(
   "visibilitychange",
-  async () => {
-    if (!document.hidden) {
-      await loadHomeData();
-      hydrateDailyEnergy();
-      applyAccountPreferences();
-      updateCurrentDate();
-      renderAll();
-    }
+  () => {
+    if (!document.hidden) scheduleResumeRefresh();
   }
 );
 
-  renderAll();
-  hideAppLaunchScreen();
   window.setTimeout(maybePromptEnergy, 700);
   void refreshSmartPlanAfterLaunch();
   void maintainActiveExamPlans();
+}
+
+function scheduleResumeRefresh() {
+  clearTimeout(resumeRefreshTimer);
+  resumeRefreshTimer = window.setTimeout(async () => {
+    const refreshed = await loadHomeData({ maxAge: 12000 });
+    hydrateDailyEnergy();
+    applyAccountPreferences();
+    updateCurrentDate();
+    if (refreshed) renderAll();
+  }, 90);
 }
 
 function initializeRealtimeSync() {
@@ -198,13 +211,13 @@ function hideAppLaunchScreen() {
     return;
   }
 
-  const minimumDuration = 620;
+  const minimumDuration = 260;
   const remainingDelay = Math.max(0, minimumDuration - (Date.now() - appLaunchStartedAt));
 
   window.setTimeout(() => {
     launchScreen.classList.add("leaving");
     document.documentElement.classList.remove("app-booting");
-    window.setTimeout(() => launchScreen.remove(), 520);
+    window.setTimeout(() => launchScreen.remove(), 240);
   }, remainingDelay);
 }
 
@@ -297,11 +310,29 @@ function initializeShellViews() {
   });
 }
 
-async function loadHomeData() {
-  const {
-    data: { session },
-    error: sessionError
-  } = await supabaseClient.auth.getSession();
+async function loadHomeData(options = {}) {
+  const maxAge = Number(options.maxAge || 0);
+  if (!options.force && maxAge > 0 && currentUser && Date.now() - homeDataLoadedAt < maxAge) {
+    return false;
+  }
+  if (homeDataLoadPromise) return homeDataLoadPromise;
+
+  homeDataLoadPromise = loadHomeDataFromRemote(options);
+  try {
+    return await homeDataLoadPromise;
+  } finally {
+    homeDataLoadPromise = null;
+  }
+}
+
+async function loadHomeDataFromRemote(options = {}) {
+  let session = options.session || null;
+  let sessionError = null;
+  if (!session) {
+    const result = await supabaseClient.auth.getSession();
+    session = result.data?.session || null;
+    sessionError = result.error;
+  }
 
   if (sessionError || !session) {
     return;
@@ -310,13 +341,14 @@ async function loadHomeData() {
   currentUser = session.user;
 
   const todayString = formatDateForInput(new Date());
+  const profileRequest = globalThis.IteraOnboardingProfilePromise || supabaseClient
+    .from("profiles")
+    .select("*")
+    .eq("id", currentUser.id)
+    .maybeSingle();
   const [profileResult, subjectsResult, eventsResult, tasksResult, scheduleResult, sessionsResult] =
     await Promise.all([
-      supabaseClient
-        .from("profiles")
-        .select("*")
-        .eq("id", currentUser.id)
-        .maybeSingle(),
+      profileRequest,
       supabaseClient
         .from("subjects")
         .select("*")
@@ -357,12 +389,22 @@ async function loadHomeData() {
   studySessions = sessionsResult.data || [];
   const reminderTasks = visibleTaskRows.map((task) => {
     const plan = globalThis.IteraPlanning?.getTaskPlan(currentUser, task);
-    return plan ? { ...task, deadline_date: plan.date, deadline_time: plan.time } : task;
+    return plan ? {
+      ...task,
+      original_deadline_date: task.deadline_date,
+      deadline_date: plan.date,
+      deadline_time: plan.time
+    } : task;
   });
-  globalThis.IteraPush
-    ?.syncUpcomingReminders(reminderTasks, eventsResult.data || [])
-    .catch((error) => console.warn("Itera reminder sync:", error));
+  if (Date.now() - reminderSyncAt > 60000) {
+    reminderSyncAt = Date.now();
+    globalThis.IteraPush
+      ?.syncUpcomingReminders(reminderTasks, eventsResult.data || [])
+      .catch((error) => console.warn("Itera reminder sync:", error));
+  }
   populateHomeSubjects();
+  homeDataLoadedAt = Date.now();
+  return true;
 }
 
 function populateHomeSubjects() {
@@ -416,10 +458,12 @@ function isFixedPersonalTaskType(type) {
 }
 
 const PERSONAL_TASK_ONLY_MARKER = "[itera:task-only]";
+const PERSONAL_NO_TIMER_MARKER = "[itera:no-timer]";
+const PERSONAL_CATEGORY_PATTERN = /\[itera:category=([^\]]+)\]/i;
 
 function isPersonalEventLikeTask(task) {
   const type = task?.type || task?.task_type;
-  return isFixedPersonalTaskType(type) && !task?.calendarHidden;
+  return isFixedPersonalTaskType(type) && Boolean(task?.eventOnly);
 }
 
 function isActionableTask(task) {
@@ -495,7 +539,11 @@ async function saveTaskPlanEntries(entries) {
 }
 
 function cleanPersonalTaskNotes(notes) {
-  return String(notes || "").replace(PERSONAL_TASK_ONLY_MARKER, "").trim();
+  return String(notes || "")
+    .replace(PERSONAL_TASK_ONLY_MARKER, "")
+    .replace(PERSONAL_NO_TIMER_MARKER, "")
+    .replace(PERSONAL_CATEGORY_PATTERN, "")
+    .trim();
 }
 
 function taskTypeLabel(type) {
@@ -532,16 +580,23 @@ function normalizeHomeEvent(event) {
 
 function normalizeHomeTask(task) {
   const plan = globalThis.IteraPlanning?.getTaskPlan(currentUser, task) || null;
+  const storedCategory = String(task.notes || "").match(PERSONAL_CATEGORY_PATTERN)?.[1];
+  const normalizedType = storedCategory || task.task_type;
+  const taskOnly = String(task.notes || "").includes(PERSONAL_TASK_ONLY_MARKER);
   return {
     ...task,
-    type: task.task_type,
-    subject: subjectName(task.subject_id) || taskTypeLabel(task.task_type),
+    type: normalizedType,
+    task_type: normalizedType,
+    subject: subjectName(task.subject_id) || taskTypeLabel(normalizedType),
     deadline: task.deadline_date,
     deadlineTime: String(task.deadline_time || "").slice(0, 5),
     scheduledDate: plan?.date || task.deadline_date,
     scheduledTime: plan?.time || String(task.deadline_time || "").slice(0, 5),
     estimatedMinutes: task.estimated_minutes,
-    calendarHidden: String(task.notes || "").includes(PERSONAL_TASK_ONLY_MARKER),
+    calendarHidden: taskOnly,
+    noTimer: String(task.notes || "").includes(PERSONAL_NO_TIMER_MARKER),
+    eventOnly: String(task.notes || "").includes("[itera:event]") ||
+      (isFixedPersonalTaskType(normalizedType) && !taskOnly),
     notes: cleanPersonalTaskNotes(task.notes)
   };
 }
@@ -1010,7 +1065,11 @@ function openModal(modalId) {
   modal.classList.add("visible");
   modal.setAttribute("aria-hidden", "false");
 
-  document.body.style.overflow = "hidden";
+  if (!document.body.classList.contains("modal-scroll-locked")) {
+    modalScrollPosition = window.scrollY;
+    document.body.classList.add("modal-scroll-locked");
+    document.body.style.top = `-${modalScrollPosition}px`;
+  }
 }
 
 function closeModal(modalId) {
@@ -1023,7 +1082,11 @@ function closeModal(modalId) {
   modal.classList.remove("visible");
   modal.setAttribute("aria-hidden", "true");
 
-  document.body.style.overflow = "";
+  if (!document.querySelector(".modal-overlay.visible")) {
+    document.body.classList.remove("modal-scroll-locked");
+    document.body.style.top = "";
+    window.scrollTo(0, modalScrollPosition);
+  }
 }
 
 /* QUICK ACTIONS */
@@ -1282,18 +1345,18 @@ function setQuickTaskScope(scope, preferredType = "") {
     subject.value = "";
     const goal = nextType === "goal";
     const fixedPersonal = isFixedPersonalTaskType(nextType);
-    if (goal) destination.value = "task";
+    if (goal) destination.value = "checklist";
     document.getElementById("quickTaskDestinationField").hidden = goal;
     document.getElementById("quickTaskDurationField").classList.toggle("full-field", !goal);
     document.getElementById("quickTaskPriorityField").hidden = true;
     document.getElementById("quickTaskPriority").value = "medium";
-    document.getElementById("quickTaskDateLabel").textContent = goal ? "Data țintă" : "Data";
+    document.getElementById("quickTaskDateLabel").textContent = goal ? "Data țintă" : "Ziua în care vrei să faci asta";
     document.getElementById("quickTaskDurationLabel").textContent = goal ? "Timp alocat" : "Durată";
     document.getElementById("quickTaskTime").required = fixedPersonal && destination.value === "event";
     document.getElementById("quickTaskTimeHint").textContent = fixedPersonal
       ? destination.value === "event"
         ? "Evenimentul va ocupa acest interval în Calendar."
-        : "Opțional: las-o liberă și Itera alege automat un moment potrivit."
+        : "Opțional: las-o liberă și Itera alege automat un moment potrivit în ziua aleasă."
       : "Opțional: adaugă o oră doar dacă obiectivul are un moment precis.";
     document.getElementById("quickTaskTitle").placeholder = goal
       ? "Ex: Alerg primul meu 5K"
@@ -1305,7 +1368,9 @@ function setQuickTaskScope(scope, preferredType = "") {
       ? "Obiectivul va apărea în zona Personal și în Task-uri."
       : destination.value === "event"
         ? "Va apărea în Calendar ca interval personal."
-        : "Va apărea în Task-uri și în planul zilei, gata de bifat.";
+        : destination.value === "task"
+          ? "Va apărea în Task-uri cu opțiunea de timer."
+          : "Va apărea în Task-uri și în planul zilei, gata de bifat.";
     document.getElementById("saveQuickTaskButton").textContent = goal
       ? "Adaugă obiectivul"
       : destination.value === "event"
@@ -1315,7 +1380,7 @@ function setQuickTaskScope(scope, preferredType = "") {
   }
 
   typeInput.value = preferredType === "test" ? "test" : "homework";
-  destination.value = "task";
+  destination.value = "checklist";
   document.getElementById("quickTaskDestinationField").hidden = true;
   document.getElementById("quickTaskDurationField").classList.remove("full-field");
   document.getElementById("quickTaskPriorityField").hidden = false;
@@ -1329,7 +1394,7 @@ function setQuickTaskScope(scope, preferredType = "") {
   document.getElementById("quickTaskModalTitle").textContent =
     typeInput.value === "test" ? "Adaugă un test" : "Adaugă o temă";
   document.getElementById("quickTaskHint").textContent =
-    "Va apărea automat în Task-uri, Calendar și pagina materiei.";
+    "După salvare apare imediat în Task-uri, Calendar și pagina materiei.";
   document.getElementById("saveQuickTaskButton").textContent =
     typeInput.value === "test" ? "Adaugă testul" : "Adaugă tema";
 }
@@ -1350,7 +1415,6 @@ async function handleQuickTaskSubmit(event) {
   const deadlineDate = document.getElementById("quickTaskDate").value;
   let deadlineTime = document.getElementById("quickTaskTime").value || null;
   const fixedPersonal = isFixedPersonalTaskType(taskType);
-  const automaticTime = !isLifeTaskType(taskType) && !deadlineTime;
   const estimatedMinutes = Number(document.getElementById("quickTaskMinutes").value) || 45;
   const priority = isLifeTaskType(taskType)
     ? "medium"
@@ -1384,20 +1448,37 @@ async function handleQuickTaskSubmit(event) {
   saveButton.textContent = "Se salvează…";
 
   if (destination === "event" && isLifeTaskType(taskType) && taskType !== "goal") {
-    const { data, error } = await supabaseClient
+    const eventNotes = document.getElementById("quickTaskNotes").value.trim();
+    const eventPayload = {
+      user_id: currentUser.id,
+      subject_id: null,
+      title,
+      event_type: taskType,
+      event_date: deadlineDate,
+      start_time: deadlineTime,
+      end_time: formatClockMinutes(getMinutesFromTime(deadlineTime) + estimatedMinutes),
+      notes: eventNotes || null
+    };
+    let { data, error } = await supabaseClient
       .from("calendar_events")
-      .insert({
-        user_id: currentUser.id,
-        subject_id: null,
-        title,
-        event_type: taskType,
-        event_date: deadlineDate,
-        start_time: deadlineTime,
-        end_time: formatClockMinutes(getMinutesFromTime(deadlineTime) + estimatedMinutes),
-        notes: document.getElementById("quickTaskNotes").value.trim() || null
-      })
+      .insert(eventPayload)
       .select("*")
       .single();
+
+    if (error && taskType !== "personal" && (
+      ["23514", "22P02"].includes(error.code) ||
+      /event_type|constraint|invalid input/i.test(`${error.message || ""} ${error.details || ""}`)
+    )) {
+      ({ data, error } = await supabaseClient
+        .from("calendar_events")
+        .insert({
+          ...eventPayload,
+          event_type: "personal",
+          notes: `${eventNotes} [itera:category=${taskType}]`.trim()
+        })
+        .select("*")
+        .single());
+    }
 
     saveButton.disabled = false;
     saveButton.textContent = "Adaugă evenimentul";
@@ -1414,25 +1495,43 @@ async function handleQuickTaskSubmit(event) {
     return;
   }
 
-  const { data, error } = await supabaseClient
+  const rawNotes = document.getElementById("quickTaskNotes").value.trim();
+  const personalMarkers = isLifeTaskType(taskType)
+    ? [
+        PERSONAL_TASK_ONLY_MARKER,
+        destination === "checklist" ? PERSONAL_NO_TIMER_MARKER : "",
+        taskType !== "personal" ? `[itera:category=${taskType}]` : ""
+      ].filter(Boolean).join(" ")
+    : "";
+  const taskPayload = {
+    user_id: currentUser.id,
+    subject_id: subjectId,
+    title,
+    task_type: taskType,
+    deadline_date: deadlineDate,
+    deadline_time: deadlineTime,
+    priority,
+    estimated_minutes: estimatedMinutes,
+    notes: `${rawNotes} ${personalMarkers}`.trim() || null,
+    completed: false,
+    progress: 0
+  };
+  let { data, error } = await supabaseClient
     .from("tasks")
-    .insert({
-      user_id: currentUser.id,
-      subject_id: subjectId,
-      title,
-      task_type: taskType,
-      deadline_date: deadlineDate,
-      deadline_time: deadlineTime,
-      priority,
-      estimated_minutes: estimatedMinutes,
-      notes: isLifeTaskType(taskType)
-        ? `${document.getElementById("quickTaskNotes").value.trim()} ${PERSONAL_TASK_ONLY_MARKER}`.trim()
-        : document.getElementById("quickTaskNotes").value.trim() || null,
-      completed: false,
-      progress: 0
-    })
+    .insert(taskPayload)
     .select("*")
     .single();
+
+  if (error && isLifeTaskType(taskType) && taskType !== "personal" && (
+    ["23514", "22P02"].includes(error.code) ||
+    /task_type|constraint|invalid input/i.test(`${error.message || ""} ${error.details || ""}`)
+  )) {
+    ({ data, error } = await supabaseClient
+      .from("tasks")
+      .insert({ ...taskPayload, task_type: "personal" })
+      .select("*")
+      .single());
+  }
 
   saveButton.disabled = false;
   saveButton.textContent = taskType === "test"
@@ -1449,6 +1548,12 @@ async function handleQuickTaskSubmit(event) {
   }
 
   tasks.unshift(normalizeHomeTask(data));
+  closeModal("quickTaskModal");
+  renderAll();
+  window.dispatchEvent(new CustomEvent("itera:task-updated", {
+    detail: { id: data.id, saved: true }
+  }));
+  showToast("Adăugat. Planul se actualizează acum.", "✓");
   const smartPlan = taskType !== "goal" && destination !== "event"
     ? await rebuildSmartTaskPlan()
     : null;
@@ -1457,20 +1562,7 @@ async function handleQuickTaskSubmit(event) {
     ? { ...data, deadline_date: plannedEntry.date, deadline_time: plannedEntry.time }
     : data);
   if (plannedEntry) await loadHomeData();
-  closeModal("quickTaskModal");
   renderAll();
-  showToast(
-    `${taskType === "test"
-      ? "Testul"
-      : taskType === "goal"
-        ? "Obiectivul"
-      : isLifeTaskType(taskType)
-        ? "Taskul"
-        : "Tema"} apare acum în Task-uri${
-      !isLifeTaskType(taskType) ? " și Calendar. Îl găsești și la Materii." : "."
-    }${plannedEntry ? ` Itera l-a planificat pe ${formatReadableDate(plannedEntry.date)}, la ${plannedEntry.time}, înainte de termen.` : ""}`,
-    "✓"
-  );
 }
 
 function prepareEventModal(
@@ -2057,8 +2149,8 @@ function renderNowRecommendation() {
       return {
         ...task,
         daysUntil,
-        recommendationScore: priorityScore + difficultyScore + Math.max(0, 35 - daysUntil * 7) -
-          (isLifeTaskType(task.task_type || task.type) ? 60 : 0)
+        recommendationScore: priorityScore + difficultyScore + Math.max(0, 35 - daysUntil * 7) +
+          (daysUntil < 0 ? 120 : 0) - (isLifeTaskType(task.task_type || task.type) && daysUntil >= 0 ? 35 : 0)
       };
     })
     .sort((a, b) => b.recommendationScore - a.recommendationScore);
@@ -2115,11 +2207,15 @@ function renderNowRecommendation() {
     minute: "2-digit"
   });
   const personalTask = isLifeTaskType(recommendedTask.task_type || recommendedTask.type);
+  const overdueTask = recommendedTask.daysUntil < 0;
+  const checklistTask = Boolean(recommendedTask.noTimer);
   const plannedTime = getTaskPlanTime(recommendedTask);
   const nowMinutes = new Date().getHours() * 60 + new Date().getMinutes();
   const plannedMinutes = plannedTime ? getMinutesFromTime(plannedTime) : null;
   const shouldStartNow = plannedMinutes !== null && nowMinutes >= plannedMinutes;
-  title.textContent = shouldStartNow
+  title.textContent = overdueTask
+    ? `Este restant: „${recommendedTask.title}”. Îl închidem acum.`
+    : shouldStartNow
     ? `Acum este momentul pentru „${recommendedTask.title}”.`
     : personalTask
       ? `Îți recomand să începi cu „${recommendedTask.title}”.`
@@ -2131,10 +2227,13 @@ function renderNowRecommendation() {
     : recommendedTask.daysUntil === 1
       ? "este pentru mâine"
       : `are termen peste ${recommendedTask.daysUntil} zile`;
-  reason.textContent = shouldStartNow
+  reason.textContent = overdueTask
+    ? "Nu îl mai mutăm încă o dată. Începe cu primul pas mic și termină-l înainte de următorul lucru."
+    : shouldStartNow
     ? `Era planificat la ${plannedTime}. Începe doar primele 5 minute — Itera ține ritmul de acolo.`
     : `„${recommendedTask.title}” ${urgency}. Dacă începi acum, termini înainte de ${finishTime}.`;
-  if (shouldStartNow) actionButton.textContent = "Încep acum";
+  if (overdueTask || shouldStartNow) actionButton.textContent = checklistTask ? "Deschide și bifează" : "Încep acum";
+  if (checklistTask) recommendedNavigation = "tasks";
 }
 
 function getMinutesFromTime(value) {
@@ -3840,13 +3939,13 @@ function buildNotifications() {
       if (days > 3) return null;
       return {
         icon: days < 0 ? "!" : "✓",
-        title: days < 0 ? `${task.title} este întârziat` : task.title,
+        title: days < 0 ? `Acum: ${task.title}` : task.title,
         text: days === 0
           ? `Planificat astăzi${getTaskPlanTime(task) ? ` la ${getTaskPlanTime(task)}` : ""} · termen ${formatRelativeDate(task.deadline)}`
           : days === 1
             ? `Planificat mâine${getTaskPlanTime(task) ? ` la ${getTaskPlanTime(task)}` : ""} · termen ${formatRelativeDate(task.deadline)}`
             : days < 0
-              ? "Replanifică-l sau finalizează-l acum."
+            ? `Este restant de ${Math.abs(days)} ${Math.abs(days) === 1 ? "zi" : "zile"}. Nu îl mai amâna — deschide-l și fă primul pas.`
               : `Planificat peste ${days} zile · termen ${formatRelativeDate(task.deadline)}`,
         action: "tasks",
         targetId: task.id,
@@ -3958,7 +4057,8 @@ function renderHomeSummary() {
   );
 
   const taskEvents = tasks.filter(
-    (task) => isActionableTask(task) && getTaskPlanDate(task) === todayString
+    (task) => isActionableTask(task) && !task.completed && task.type !== "goal" &&
+      getTaskPlanDate(task) && getTaskPlanDate(task) <= todayString
   );
 
   const remainingTasks = taskEvents.filter(
@@ -3966,7 +4066,7 @@ function renderHomeSummary() {
   );
 
   const totalMinutes = remainingTasks.reduce(
-    (sum, event) => sum + Number(event.duration || 0),
+    (sum, event) => sum + Number(event.estimatedMinutes || event.estimated_minutes || event.duration || 0),
     0
   );
 
@@ -4151,17 +4251,19 @@ function renderTodayTasks() {
     "todayTaskList"
   );
 
-  const taskEvents = getTodayEvents().filter(
-    (event) =>
-      event.type === "homework" ||
-      event.type === "test" ||
-      event.type === "project"
-  );
+  const todayString = formatDateForInput(new Date());
+  const taskEvents = tasks
+    .filter((task) =>
+      isActionableTask(task) && !task.completed && task.type !== "goal" &&
+      getTaskPlanDate(task) && getTaskPlanDate(task) <= todayString
+    )
+    .map(convertTaskToCalendarItem)
+    .sort(sortEvents);
 
   renderTaskCollection(
     taskList,
     taskEvents,
-    "Nu ai task-uri pentru astăzi."
+    "Nu ai task-uri pentru astăzi și nimic restant."
   );
 }
 

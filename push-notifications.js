@@ -316,12 +316,29 @@
       .filter((task) => !task.completed && isUpcoming(task.deadline_date))
       .slice(0, 20)
       .map(scheduleTaskReminders);
+    const today = new Date(now.getTime() - now.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+    const overdueJobs = tasks
+      .filter((task) => {
+        const originalDate = task.original_deadline_date || task.deadline_date;
+        return !task.completed && originalDate && originalDate < today && !isPersonalEventLike(task);
+      })
+      .slice(0, 5)
+      .map((task) => queueReminder({
+        title: "Acum: închide taskul restant",
+        body: `Lasă următorul lucru pe mai târziu și rezolvă „${task.title}”. Începe cu primul pas.`,
+        scheduledFor: new Date(Date.now() + 5000),
+        targetUrl: "./index.html#/tasks",
+        tag: `overdue-${task.id}`,
+        notificationType: "task-reminder",
+        sourceId: task.id,
+        dedupeKey: `overdue-nudge-${task.id}-${today}`
+      }));
     const eventJobs = events
       .filter((event) => event.event_type === "test" && isUpcoming(event.event_date))
       .slice(0, 10)
       .map(scheduleTestEventReminders);
 
-    return Promise.all([...taskJobs, ...eventJobs]);
+    return Promise.all([...taskJobs, ...overdueJobs, ...eventJobs]);
   }
 
   function formatReminderDistance(minutes) {

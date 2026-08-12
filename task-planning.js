@@ -150,7 +150,7 @@
       const personal = isPersonalTask(task);
       const possibleDates = [];
       if (personal) {
-        if (deadline >= today) possibleDates.push(deadline);
+        possibleDates.push(deadline >= today ? deadline : today);
       } else {
         const latest = deadline > today ? addDays(deadline, -1) : today;
         const preferred = preferredPlanningDate(task, today);
@@ -164,7 +164,9 @@
         const state = ensureDay(date);
         if (!personal && state.used + duration > state.capacity) continue;
         const currentMinutes = now.getHours() * 60 + now.getMinutes();
-        let earliest = dayStart(date, scheduleItems, personal);
+        let earliest = personal && deadline < today && date === today
+          ? roundQuarter(currentMinutes + 15)
+          : dayStart(date, scheduleItems, personal);
         const preferredTime = minutesFromTime(task.deadline_time || task.deadlineTime);
         if (preferredTime !== null) earliest = Math.max(earliest, preferredTime);
         if (date === today) earliest = Math.max(earliest, roundQuarter(currentMinutes + 15));

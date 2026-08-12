@@ -91,6 +91,14 @@ body {
   }
 }
 
+/* Final motion override: keep navigation composited and avoid blur-based page transitions. */
+[data-app-view].active-page,
+#subjectDetailViewRoot > :is(.subject-spa-hero, .subject-spa-stats, .subject-spa-columns) {
+  animation-name: iteraNativeViewIn !important;
+  animation-duration: 240ms !important;
+  animation-timing-function: var(--itera-ease-native) !important;
+}
+
 /* Schedule day builder: fast weekly setup with safe text containment. */
 .schedule-spa-header-actions {
   display: flex;
@@ -4191,6 +4199,172 @@ html[data-mode="dark"] :is(
     box-shadow 360ms var(--itera-ease-fluid),
     border-color 240ms ease,
     background 240ms ease;
+}
+
+/* Performance + interaction polish: fast native-feeling surfaces, without heavy blur per card. */
+:root {
+  --itera-ease-native: cubic-bezier(0.22, 1, 0.36, 1);
+  --itera-surface-shadow: 0 1px 2px color-mix(in srgb, var(--text) 4%, transparent),
+    0 12px 30px color-mix(in srgb, var(--text) 6%, transparent);
+}
+
+html {
+  scroll-behavior: auto;
+}
+
+body {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+.app-launch-screen {
+  transition: opacity 210ms ease, visibility 210ms ease;
+}
+
+html.app-data-loading #homePage :is(
+  .now-recommendation,
+  .focus-card,
+  .soft-card,
+  .personal-home-card
+) {
+  position: relative;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+html.app-data-loading #homePage :is(
+  .now-recommendation,
+  .focus-card,
+  .soft-card,
+  .personal-home-card
+)::after {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  background: linear-gradient(
+    105deg,
+    color-mix(in srgb, var(--surface) 82%, transparent) 20%,
+    color-mix(in srgb, white 56%, transparent) 42%,
+    color-mix(in srgb, var(--surface) 82%, transparent) 64%
+  );
+  transform: translate3d(-105%, 0, 0);
+  animation: iteraDataSheen 950ms ease-in-out infinite;
+  content: "";
+}
+
+@keyframes iteraDataSheen {
+  to { transform: translate3d(105%, 0, 0); }
+}
+
+[data-app-view].active-page {
+  animation: iteraNativeViewIn 240ms var(--itera-ease-native) both;
+}
+
+@keyframes iteraNativeViewIn {
+  from { opacity: 0; transform: translate3d(0, 7px, 0); }
+  to { opacity: 1; transform: translate3d(0, 0, 0); }
+}
+
+:is(
+  .soft-card,
+  .focus-card,
+  .now-recommendation,
+  .personal-home-card,
+  .schedule-spa-day,
+  .schedule-spa-state,
+  .tasks-spa-toolbar,
+  .tasks-spa-list,
+  .tasks-spa-state,
+  .calendar-spa-card,
+  .calendar-spa-state,
+  .subjects-spa-card,
+  .subjects-spa-state,
+  .subject-spa-panel,
+  .subject-spa-stats article,
+  .subject-spa-hero,
+  .progress-spa-state,
+  .progress-spa-panel,
+  .grades-spa-average,
+  .grades-spa-subjects,
+  .admission-spa-hero
+) {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  background-color: color-mix(in srgb, var(--surface) 96%, var(--primary-soft)) !important;
+  box-shadow: var(--itera-surface-shadow) !important;
+}
+
+:is(
+  button,
+  .nav-item,
+  .mobile-nav-item,
+  .subjects-spa-card,
+  .subject-spa-resource,
+  .tasks-spa-item
+) {
+  -webkit-tap-highlight-color: transparent;
+  transition-duration: 180ms !important;
+  transition-timing-function: var(--itera-ease-native) !important;
+}
+
+:is(button, .nav-item, .mobile-nav-item, .subjects-spa-card):active {
+  transform: scale(0.97);
+}
+
+.primary-button,
+.primary-small-button,
+.start-focus-button,
+.mobile-main-add-button {
+  box-shadow: 0 9px 22px color-mix(in srgb, var(--primary) 20%, transparent) !important;
+}
+
+.page-section > :is(.hero-grid, .content-grid, .personal-home-card, .home-intelligence-grid),
+.subject-spa-columns,
+.subjects-spa-grid,
+.tasks-spa-list {
+  transform: translateZ(0);
+}
+
+@supports (content-visibility: auto) {
+  #homePage > :is(.content-grid, .personal-home-card, .home-intelligence-grid),
+  .subject-spa-columns > *,
+  .subjects-spa-grid > *,
+  .tasks-spa-list > * {
+    content-visibility: auto;
+    contain-intrinsic-size: auto 240px;
+  }
+}
+
+@media (max-width: 1024px) {
+  :is(.app-shell, .main-content, .page-section) {
+    background-attachment: scroll !important;
+  }
+
+  :is(
+    .soft-card,
+    .focus-card,
+    .now-recommendation,
+    .personal-home-card,
+    .tasks-spa-item,
+    .subjects-spa-card,
+    .subject-spa-panel,
+    .subject-spa-resource
+  ) {
+    box-shadow: 0 1px 2px color-mix(in srgb, var(--text) 4%, transparent),
+      0 8px 22px color-mix(in srgb, var(--text) 5%, transparent) !important;
+  }
+
+  .mobile-navigation {
+    -webkit-backdrop-filter: blur(14px) saturate(1.12);
+    backdrop-filter: blur(14px) saturate(1.12);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-app-view].active-page {
+    animation: none;
+  }
 }
 
 .subject-resource-icon {
@@ -8758,6 +8932,422 @@ html[data-mode="dark"] .subject-spa-resource {
   text-decoration-thickness: 1px;
 }
 
+/* ITERA MOBILE FLOW — stable sheets, compact subject pages and direct actions. */
+body.modal-scroll-locked {
+  position: fixed;
+  right: 0;
+  left: 0;
+  width: 100%;
+  overflow: hidden;
+}
+
+/* App-like interaction: interface copy stays fixed, editable controls remain selectable. */
+html,
+body,
+#app,
+.app-shell,
+.modal-overlay,
+dialog {
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+:is(input, textarea, select, [contenteditable="true"]) {
+  -webkit-user-select: text;
+  user-select: text;
+  -webkit-touch-callout: default;
+}
+
+img,
+svg,
+canvas,
+button,
+a {
+  -webkit-user-drag: none;
+  user-drag: none;
+}
+
+.tasks-trash-icon {
+  position: relative;
+  width: 20px;
+  height: 21px;
+  display: block;
+  border: 2px solid currentColor;
+  border-top: 0;
+  border-radius: 0 0 5px 5px;
+}
+
+.tasks-trash-icon::before,
+.tasks-trash-icon::after {
+  position: absolute;
+  content: "";
+}
+
+.tasks-trash-icon::before {
+  top: -6px;
+  left: -4px;
+  width: 24px;
+  height: 2px;
+  border-radius: 999px;
+  background: currentColor;
+}
+
+.tasks-trash-icon::after {
+  top: -10px;
+  left: 5px;
+  width: 7px;
+  height: 5px;
+  border: 2px solid currentColor;
+  border-bottom: 0;
+  border-radius: 4px 4px 0 0;
+}
+
+.quick-task-card,
+.quick-task-card *,
+.tasks-spa-dialog,
+.tasks-spa-dialog * {
+  box-sizing: border-box;
+}
+
+.quick-task-card {
+  max-width: calc(100vw - 24px);
+}
+
+.subject-spa-panel-head > button[data-add-pdf] {
+  width: auto;
+  min-width: 88px;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  padding: 0 15px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+@media (min-width: 761px) and (max-width: 1180px) {
+  .subject-spa-hero {
+    align-items: end;
+    padding: 24px;
+  }
+
+  .subject-spa-hero > div:first-child {
+    min-width: 0;
+  }
+
+  .subject-spa-hero h2 {
+    overflow-wrap: anywhere;
+    font-size: clamp(2.35rem, 6vw, 3.7rem);
+  }
+
+  .subject-hero-actions {
+    flex: 0 0 auto;
+  }
+
+  .subject-spa-columns {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .quick-task-card {
+    width: min(680px, calc(100vw - 40px));
+  }
+}
+
+@media (max-width: 760px) {
+  .modal-overlay {
+    width: 100vw;
+    max-width: 100vw;
+    overflow: hidden;
+  }
+
+  #quickTaskModal {
+    align-items: flex-end;
+    padding: max(8px, env(safe-area-inset-top)) 0 0;
+  }
+
+  .quick-task-card {
+    width: 100%;
+    max-width: 100%;
+    height: min(92dvh, 780px);
+    max-height: calc(100dvh - max(8px, env(safe-area-inset-top)));
+    display: flex;
+    flex-direction: column;
+    padding: 0;
+    overflow: hidden;
+    border-right: 0;
+    border-bottom: 0;
+    border-left: 0;
+    border-radius: 28px 28px 0 0;
+  }
+
+  .quick-task-card .modal-header {
+    z-index: 3;
+    flex: 0 0 auto;
+    align-items: center;
+    margin: 0;
+    padding: 17px 18px 12px;
+    background: color-mix(in srgb, var(--surface) 92%, transparent);
+    border-bottom: 1px solid color-mix(in srgb, var(--primary) 10%, var(--border));
+    backdrop-filter: blur(22px);
+  }
+
+  .quick-task-card .modal-header h2 {
+    font-size: clamp(1.8rem, 9vw, 2.35rem);
+    line-height: 1;
+  }
+
+  .quick-task-card .modal-close-button {
+    width: 44px;
+    height: 44px;
+    border-radius: 16px;
+  }
+
+  .quick-task-card form {
+    min-height: 0;
+    display: block;
+    overflow-x: hidden;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 14px 16px 0;
+  }
+
+  .quick-task-card .form-layout {
+    width: 100%;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 12px;
+  }
+
+  .quick-task-card .form-layout > label,
+  .quick-task-card .full-field {
+    width: 100%;
+    min-width: 0;
+    grid-column: 1;
+  }
+
+  .quick-task-card .form-layout input,
+  .quick-task-card .form-layout select,
+  .quick-task-card .form-layout textarea {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    min-height: 50px;
+    padding: 12px 14px;
+    border-radius: 16px;
+    font-size: 16px;
+  }
+
+  .quick-task-card .form-layout textarea {
+    min-height: 76px;
+  }
+
+  .quick-task-card .quick-task-field-hint {
+    margin: 2px 2px 0;
+    font-size: 0.66rem;
+  }
+
+  .quick-task-card .form-actions {
+    position: sticky;
+    z-index: 4;
+    right: -16px;
+    bottom: 0;
+    left: -16px;
+    display: block;
+    margin: 16px -16px 0;
+    padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
+    background: color-mix(in srgb, var(--surface) 92%, transparent);
+    border-top: 1px solid color-mix(in srgb, var(--primary) 12%, var(--border));
+    backdrop-filter: blur(22px);
+  }
+
+  .quick-task-card .form-actions .secondary-button {
+    display: none;
+  }
+
+  .quick-task-card .form-actions .primary-button {
+    width: 100%;
+    min-height: 52px;
+    border-radius: 18px;
+  }
+
+  .tasks-spa-dialog {
+    inset: auto 0 0;
+    width: 100%;
+    max-width: 100%;
+    max-height: calc(100dvh - max(8px, env(safe-area-inset-top)));
+    margin: 0;
+    overflow: hidden;
+    border-radius: 28px 28px 0 0;
+  }
+
+  .tasks-spa-dialog form {
+    max-height: calc(100dvh - max(8px, env(safe-area-inset-top)));
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: 17px 16px 0;
+  }
+
+  .tasks-spa-dialog .tasks-spa-fields {
+    grid-template-columns: minmax(0, 1fr);
+    padding: 12px;
+  }
+
+  .tasks-spa-dialog input,
+  .tasks-spa-dialog select,
+  .tasks-spa-dialog textarea {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    font-size: 16px;
+  }
+
+  .tasks-spa-dialog .tasks-spa-actions {
+    position: sticky;
+    z-index: 3;
+    bottom: 0;
+    margin: 12px -16px 0;
+    padding: 10px 16px calc(10px + env(safe-area-inset-bottom));
+    background: color-mix(in srgb, var(--surface) 94%, transparent);
+    border-top: 1px solid var(--border);
+    backdrop-filter: blur(20px);
+  }
+
+  .tasks-swipe-delete {
+    width: 88px;
+    color: white;
+  }
+
+  .subject-spa-hero {
+    width: 100%;
+    display: grid !important;
+    grid-template-columns: minmax(0, 1fr);
+    align-items: start;
+    gap: 16px;
+    padding: 20px;
+    overflow: hidden;
+  }
+
+  .subject-spa-hero > div:first-child,
+  .subject-spa-hero h2 {
+    min-width: 0;
+    max-width: 100%;
+  }
+
+  .subject-spa-hero h2 {
+    overflow-wrap: anywhere;
+    font-size: clamp(2.5rem, 14vw, 4rem);
+    line-height: 0.95;
+  }
+
+  .subject-inline-edit {
+    max-width: 100%;
+    min-height: 38px;
+    margin-top: 10px;
+    padding: 8px 12px;
+    white-space: normal;
+    text-align: left;
+  }
+
+  .subject-hero-actions {
+    position: static !important;
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .subject-hero-actions > button {
+    width: 100%;
+    min-width: 0;
+    min-height: 46px;
+    padding: 8px 10px;
+    overflow: hidden;
+    font-size: 0.73rem;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .subject-spa-stats {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .subject-spa-stats article {
+    min-width: 0;
+    padding: 14px;
+  }
+
+  .subject-spa-columns {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .subject-spa-panel {
+    min-width: 0;
+    padding: 16px;
+  }
+
+  .subject-spa-panel-head {
+    align-items: center;
+  }
+
+  .subject-spa-panel-head > div {
+    min-width: 0;
+  }
+
+  .subject-spa-panel-head > button[data-add-pdf] {
+    flex: 0 0 auto;
+    min-width: 82px;
+    min-height: 42px;
+    padding-inline: 13px;
+  }
+
+  .subject-spa-resource {
+    position: relative;
+    min-height: 124px;
+    grid-template-columns: 42px minmax(0, 1fr);
+    gap: 11px;
+    padding: 16px 58px 16px 14px;
+  }
+
+  .subject-resource-copy {
+    min-width: 0;
+  }
+
+  .subject-resource-copy strong,
+  .subject-resource-copy small,
+  .subject-resource-status {
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .subject-resource-open {
+    position: absolute;
+    top: 16px;
+    right: 12px;
+    width: 38px;
+    height: 38px;
+  }
+
+  .subject-resource-open > span {
+    display: none;
+  }
+
+  .resource-reorder-grip {
+    position: absolute;
+    right: 17px;
+    bottom: 15px;
+    width: 28px;
+    height: 34px;
+  }
+
+  #subjectDetailViewRoot {
+    padding-bottom: calc(100px + env(safe-area-inset-bottom));
+  }
+}
+
 @media (hover: hover) and (pointer: fine) {
   .subject-edit-button:hover,
   .subject-goal-row:hover {
@@ -9341,5 +9931,43 @@ html[data-mode="dark"] .subject-spa-resource {
     max-height: calc(100dvh - 16px);
     margin-bottom: 8px;
     border-radius: 28px;
+  }
+}
+
+@media (max-width: 760px) {
+  .tasks-spa-dialog form {
+    padding: 17px 16px 0;
+  }
+
+  .subject-spa-resource {
+    position: relative;
+    min-height: 124px;
+    grid-template-columns: 42px minmax(0, 1fr);
+    gap: 11px;
+    padding: 16px 58px 16px 14px;
+  }
+
+  .subject-resource-open {
+    position: absolute;
+    top: 16px;
+    right: 12px;
+    width: 38px;
+    height: 38px;
+  }
+
+  .resource-reorder-grip {
+    position: absolute;
+    right: 17px;
+    bottom: 15px;
+    width: 28px;
+    height: 34px;
+  }
+
+  .subject-spa-panel-head > button[data-add-pdf] {
+    width: auto;
+    min-width: 82px;
+    min-height: 42px;
+    padding: 0 13px;
+    border-radius: 999px;
   }
 }

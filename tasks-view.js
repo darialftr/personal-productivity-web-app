@@ -7,9 +7,21 @@
   const isLifeTask = type => lifeTaskTypes.includes(type);
   const isFixedPersonalTask = type => ["personal", "selfcare", "home", "health", "errand"].includes(type);
   const personalTaskOnlyMarker = "[itera:task-only]";
-  const cleanTaskNotes = notes => String(notes || "").replace(personalTaskOnlyMarker, "").trim();
-  const isPersonalEventLike = task =>
-    isFixedPersonalTask(task.task_type) && !String(task.notes || "").includes(personalTaskOnlyMarker);
+  const personalNoTimerMarker = "[itera:no-timer]";
+  const personalCategoryPattern = /\[itera:category=([^\]]+)\]/i;
+  const cleanTaskNotes = notes => String(notes || "")
+    .replace(personalTaskOnlyMarker, "")
+    .replace(personalNoTimerMarker, "")
+    .replace(personalCategoryPattern, "")
+    .replace("[itera:event]", "")
+    .trim();
+  const normalizeTask = task => {
+    const storedCategory = String(task.notes || "").match(personalCategoryPattern)?.[1];
+    return { ...task, task_type: storedCategory || task.task_type };
+  };
+  const isPersonalEventLike = task => String(task.notes || "").includes("[itera:event]") ||
+    (isFixedPersonalTask(task.task_type) && !String(task.notes || "").includes(personalTaskOnlyMarker));
+  const isChecklistTask = task => String(task.notes || "").includes(personalNoTimerMarker);
   const isAutomaticReviewTask = task =>
     /recapitulare recomandată automat după o sesiune de studiu/i.test(String(task.notes || ""));
   const taskTypeLabel = type => ({
@@ -56,7 +68,7 @@
       return;
     }
     subjects = subjectResult.data || [];
-    tasks = taskResult.data || [];
+    tasks = (taskResult.data || []).map(normalizeTask);
     scheduleItems = scheduleResult.data || [];
     calendarEvents = eventResult.data || [];
     render();
@@ -117,7 +129,7 @@
         <div class="tasks-spa-fields">
           <label data-task-subject-field>Materie<select name="subject_id"><option value="">Fără materie</option>${subjects.map(s => `<option value="${s.id}">${escapeHtml(s.name)}</option>`).join("")}</select></label>
           <label>Tip<select name="task_type"><option value="homework">Temă</option><option value="test">Test</option><option value="project">Proiect</option><option value="study">Studiu</option><option value="personal">Personal</option><option value="selfcare">Self-care</option><option value="home">Casă</option><option value="health">Sănătate</option><option value="errand">De rezolvat</option><option value="goal">Obiectiv</option><option value="other">Altceva</option></select></label>
-          <label data-task-kind-field hidden>Comportament<select name="personal_kind"><option value="task">Task cu timer</option><option value="event">Eveniment la oră fixă</option></select></label>
+          <label data-task-kind-field hidden>Cum îl faci?<select name="personal_kind"><option value="checklist">Doar îl bifez</option><option value="timer">Folosesc un timer</option></select></label>
           <label><span data-task-date-label>Deadline</span><input name="deadline_date" type="date"></label><label><span>Ora</span><input name="deadline_time" type="time"><small class="tasks-time-hint" data-task-time-hint>Las-o liberă și Itera alege ora după prioritate.</small></label>
           <label data-task-priority-field>Prioritate<select name="priority"><option value="low">Scăzută</option><option value="medium">Medie</option><option value="high">Ridicată</option></select></label>
           <label><span data-task-duration-label>Minute estimate</span><input name="estimated_minutes" type="number" min="0" value="30"></label>
@@ -138,7 +150,7 @@
     const personalEvent = isPersonalEventLike(task);
     const reorderable = filter === "today" && !task.completed && !personalEvent && Boolean(plan);
     return `<div class="tasks-swipe-row" data-task-row="${task.id}" ${reorderable ? `data-plan-order="${task.id}" data-order-key="${task.id}"` : ""}>
-      <button class="tasks-swipe-delete" data-swipe-delete="${task.id}" aria-label="Șterge ${escapeHtml(task.title)}">Șterge</button>
+      <button class="tasks-swipe-delete" data-swipe-delete="${task.id}" aria-label="Șterge ${escapeHtml(task.title)}"><span class="tasks-trash-icon" aria-hidden="true"></span></button>
       <article class="tasks-spa-item ${task.completed ? "completed" : ""} ${isLifeTask(task.task_type) ? "life-task" : ""} ${personalEvent ? "personal-event" : ""}" data-swipe-surface style="--subject:${subject?.color || taskTypeColor(task.task_type)}">
       ${personalEvent
         ? '<span class="tasks-spa-event-icon" aria-label="Eveniment"></span>'
@@ -147,7 +159,7 @@
       ${personalEvent
         ? '<span class="tasks-spa-badge tasks-spa-event-badge">Eveniment</span>'
         : `<span class="tasks-spa-badge priority-${escapeHtml(task.priority || "medium")}">${task.estimated_minutes || 0}m</span>`}
-      ${task.completed || personalEvent ? "" : `<button class="tasks-spa-start" data-start-task="${task.id}"><span class="tasks-play-icon" aria-hidden="true"></span> Start</button>`}
+      ${task.completed || personalEvent || isChecklistTask(task) ? "" : `<button class="tasks-spa-start" data-start-task="${task.id}"><span class="tasks-play-icon" aria-hidden="true"></span> Start</button>`}
       <button class="tasks-spa-edit" data-edit-task="${task.id}">Editează</button>
       ${reorderable ? '<button class="task-plan-grip" data-plan-grip aria-label="Mută taskul în plan">⋮⋮</button>' : ""}</article></div>`;
   }
@@ -207,7 +219,7 @@
         : task?.[name] ?? "";
     }
     if (!task) { form.elements.task_type.value = "homework"; form.elements.priority.value = "medium"; form.elements.estimated_minutes.value = "30"; }
-    form.elements.personal_kind.value = task && isPersonalEventLike(task) ? "event" : "task";
+    form.elements.personal_kind.value = task && !isChecklistTask(task) ? "timer" : "checklist";
     syncTaskFormType(form.elements.task_type.value);
     form.querySelector("[data-task-dialog-title]").textContent = task ? "Editează task-ul" : "Task nou";
     form.querySelector("[data-delete-task]").hidden = !task;
@@ -231,7 +243,6 @@
     const life = isLifeTask(type);
     const goal = type === "goal";
     const fixedPersonal = isFixedPersonalTask(type);
-    const personalEvent = fixedPersonal && form.elements.personal_kind.value === "event";
     form.querySelector("[data-task-subject-field]").hidden = life;
     form.querySelector("[data-task-priority-field]").hidden = life;
     form.querySelector("[data-task-kind-field]").hidden = !fixedPersonal;
@@ -246,11 +257,9 @@
         : "Deadline";
     form.querySelector("[data-task-duration-label]").textContent = goal ? "Timp alocat" : life ? "Durată" : "Minute estimate";
     form.elements.deadline_date.required = fixedPersonal;
-    form.elements.deadline_time.required = personalEvent;
+    form.elements.deadline_time.required = false;
     form.querySelector("[data-task-time-hint]").textContent = fixedPersonal
-      ? personalEvent
-        ? "Evenimentul are nevoie de o oră fixă."
-        : "Opțional: las-o liberă și Itera alege automat un moment potrivit."
+      ? "Opțional: las-o liberă și Itera alege automat un moment potrivit în ziua aleasă."
       : goal
         ? "Opțional: adaugă o oră doar dacă obiectivul are un moment precis."
         : "Las-o liberă și Itera alege ora după prioritate.";
@@ -262,38 +271,54 @@
     const submitButton = form.querySelector('[type="submit"]');
     form.querySelector("[data-task-error]").textContent = "";
     const fixedPersonal = isFixedPersonalTask(values.task_type);
-    const keepAsTaskOnly = !fixedPersonal || values.personal_kind !== "event";
+    const keepAsTaskOnly = fixedPersonal;
+    const categoryMarker = isLifeTask(values.task_type) && values.task_type !== "personal"
+      ? `[itera:category=${values.task_type}]`
+      : "";
+    const noTimerMarker = fixedPersonal && values.personal_kind === "checklist"
+      ? personalNoTimerMarker
+      : "";
     const payload = { user_id: user.id, subject_id: isLifeTask(values.task_type) ? null : (values.subject_id || null), title: values.title.trim(),
       task_type: values.task_type, deadline_date: values.deadline_date || null, deadline_time: values.deadline_time || null,
       priority: isLifeTask(values.task_type) ? "medium" : values.priority, estimated_minutes: Number(values.estimated_minutes) || 0,
       notes: isLifeTask(values.task_type) && keepAsTaskOnly
-        ? `${values.notes.trim()} ${personalTaskOnlyMarker}`.trim()
+        ? `${values.notes.trim()} ${personalTaskOnlyMarker} ${noTimerMarker} ${categoryMarker}`.trim()
         : values.notes.trim() || null };
     if (fixedPersonal && !payload.deadline_date) {
       form.querySelector("[data-task-error]").textContent = "Alege ziua în care vrei să faci activitatea.";
       return;
     }
-    if (fixedPersonal && values.personal_kind === "event" && !payload.deadline_time) {
-      form.querySelector("[data-task-error]").textContent = "Alege ora evenimentului.";
-      return;
-    }
     submitButton.disabled = true;
     submitButton.textContent = "Se salvează…";
-    const query = id
-      ? supabaseClient.from("tasks").update(payload).eq("id", id).eq("user_id", user.id)
-      : supabaseClient.from("tasks").insert(payload);
-    const { data, error } = await query.select("*").single();
+    const persist = nextPayload => (id
+      ? supabaseClient.from("tasks").update(nextPayload).eq("id", id).eq("user_id", user.id)
+      : supabaseClient.from("tasks").insert(nextPayload)).select("*").single();
+    let { data, error } = await persist(payload);
+    if (error && isLifeTask(values.task_type) && values.task_type !== "personal" && (
+      ["23514", "22P02"].includes(error.code) ||
+      /task_type|constraint|invalid input/i.test(`${error.message || ""} ${error.details || ""}`)
+    )) {
+      ({ data, error } = await persist({ ...payload, task_type: "personal" }));
+    }
     if (error) {
       submitButton.disabled = false;
       submitButton.textContent = "Salvează";
       form.querySelector("[data-task-error]").textContent = "Task-ul nu a putut fi salvat.";
       return;
     }
+    const normalizedData = normalizeTask(data);
+    closeDialog();
+    if (id) {
+      tasks = tasks.map(task => String(task.id) === String(id) ? normalizedData : task);
+    } else {
+      tasks.unshift(normalizedData);
+    }
+    render();
+    global.showToast?.("Salvat. Planul se actualizează acum.", "✓");
     const removal = await global.IteraPlanning?.removeTask(user, data.id);
     if (removal?.user) user = removal.user;
-    closeDialog();
     await reload();
-    if (!isPersonalEventLike(data) && data.task_type !== "goal" && data.deadline_date) {
+    if (!isPersonalEventLike(normalizedData) && normalizedData.task_type !== "goal" && normalizedData.deadline_date) {
       await autoScheduleOpenTasks({ silent: true, highlightId: data.id });
     } else {
       await global.IteraPush?.scheduleTaskReminders(data);
@@ -546,18 +571,27 @@
   async function deleteTaskById(id, fromDialog = false) {
     const deleteButton = root.querySelector(`[data-swipe-delete="${id}"]`)
       || (fromDialog ? root.querySelector("[data-delete-task]") : null);
-    if (deleteButton) { deleteButton.disabled = true; deleteButton.textContent = "…"; }
+    const taskIndex = tasks.findIndex(item => String(item.id) === String(id));
+    const removedTask = taskIndex >= 0 ? tasks[taskIndex] : null;
+    if (deleteButton) deleteButton.disabled = true;
+    if (!fromDialog && removedTask) {
+      tasks.splice(taskIndex, 1);
+      root.querySelector(`[data-task-row="${id}"]`)?.remove();
+      global.showToast?.("Task șters.", "✓");
+    }
     await global.IteraPush?.cancelTaskReminders(id);
     const { error } = await supabaseClient.from("tasks").delete().eq("id", id).eq("user_id", user.id);
     if (!error) {
       const removal = await global.IteraPlanning?.removeTask(user, id);
       if (removal?.user) user = removal.user;
       if (fromDialog) closeDialog();
-      global.showToast?.("Task șters.", "✓");
+      if (fromDialog) global.showToast?.("Task șters.", "✓");
       global.dispatchEvent(new CustomEvent("itera:task-updated", { detail: { id, deleted: true } }));
       await reload();
     } else {
-      if (deleteButton) { deleteButton.disabled = false; deleteButton.textContent = "Șterge"; }
+      if (removedTask && taskIndex >= 0) tasks.splice(taskIndex, 0, removedTask);
+      if (deleteButton) deleteButton.disabled = false;
+      await reload();
       global.showToast?.("Task-ul nu a putut fi șters.", "!");
     }
   }

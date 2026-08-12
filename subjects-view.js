@@ -18,6 +18,26 @@
   let pdfProgressWrite = Promise.resolve();
   let focusTimerListener = null;
   let pdfNoteDirty = false;
+  let pdfLibraryPromise = null;
+
+  function loadPdfLibrary() {
+    if (global.pdfjsLib) return Promise.resolve(global.pdfjsLib);
+    if (pdfLibraryPromise) return pdfLibraryPromise;
+
+    pdfLibraryPromise = new Promise((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = "https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js";
+      script.async = true;
+      script.onload = () => global.pdfjsLib ? resolve(global.pdfjsLib) : reject(new Error("pdf-library"));
+      script.onerror = () => reject(new Error("pdf-library"));
+      document.head.appendChild(script);
+    }).catch((error) => {
+      pdfLibraryPromise = null;
+      throw error;
+    });
+
+    return pdfLibraryPromise;
+  }
 
   async function session() {
     const { data: { session } } = await supabaseClient.auth.getSession();
@@ -552,11 +572,15 @@
     viewer.classList.add("is-loading");
     if (!viewer.open) viewer.showModal();
 
-    if (!global.pdfjsLib) {
+    try {
+      await loadPdfLibrary();
+    } catch {
       errorElement.textContent = "Viewerul PDF nu s-a putut încărca.";
       loadingElement.hidden = true;
+      viewer.classList.remove("is-loading");
       return;
     }
+    if (loadToken !== pdfLoadToken) return;
 
     try {
       const savedProgressPromise = loadPdfProgress(filePath);
@@ -955,6 +979,12 @@
       mounted = false;
       void mountDetail(activeSubjectId);
     }
+  });
+  global.addEventListener("itera:task-updated", () => {
+    if (!mounted || !activeSubjectId || root?.querySelector(".subject-pdf-viewer")?.open) return;
+    const subjectId = activeSubjectId;
+    mounted = false;
+    void mountDetail(subjectId);
   });
   global.IteraSubjectsView = Object.freeze({ mountList, mountDetail, unmount });
 })(window);

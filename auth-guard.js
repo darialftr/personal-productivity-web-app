@@ -1,6 +1,6 @@
 "use strict";
 
-protectCurrentPage();
+globalThis.IteraAuthSessionPromise = protectCurrentPage();
 
 async function protectCurrentPage() {
   const {
@@ -17,16 +17,20 @@ async function protectCurrentPage() {
     || window.location.pathname.endsWith("/");
 
   if (!isAppShell) {
-    return;
+    return session;
   }
 
-  const { data: profile, error: profileError } = await supabaseClient
+  globalThis.IteraOnboardingProfilePromise = supabaseClient
     .from("profiles")
-    .select("onboarding_completed")
+    .select("*")
     .eq("id", session.user.id)
     .maybeSingle();
 
-  if (!profileError && !profile?.onboarding_completed) {
-    window.location.replace("onboarding.html");
-  }
+  void globalThis.IteraOnboardingProfilePromise.then(({ data: profile, error: profileError }) => {
+    if (!profileError && !profile?.onboarding_completed) {
+      window.location.replace("onboarding.html");
+    }
+  });
+
+  return session;
 }

@@ -1,6 +1,6 @@
 "use strict";
 
-const CACHE_NAME = "itera-shell-v68";
+const CACHE_NAME = "itera-shell-v71";
 const APP_SHELL = [
   "./",
   "./index.html",
@@ -17,7 +17,6 @@ const APP_SHELL = [
   "./auth-guard.js",
   "./push-notifications.js",
   "./manifest.webmanifest",
-  "./itera-icon.png",
   "./itera-icon-192.png?v=3",
   "./itera-icon-512.png?v=3"
 ];
@@ -41,20 +40,57 @@ self.addEventListener("activate", (event) => {
 });
 
 self.addEventListener("fetch", (event) => {
-  if (event.request.method !== "GET" || !event.request.url.startsWith(self.location.origin)) {
+  if (event.request.method !== "GET") {
     return;
   }
 
-  event.respondWith(
-    fetch(event.request, { cache: "no-store" })
-      .then((response) => {
-        const copy = response.clone();
-        caches.open(CACHE_NAME).then((cache) => cache.put(event.request, copy));
-        return response;
-      })
-      .catch(() => caches.match(event.request).then((cached) => cached || caches.match("./index.html")))
-  );
+  const requestUrl = new URL(event.request.url);
+  const sameOrigin = requestUrl.origin === self.location.origin;
+  const cacheableExternal = ["script", "style", "font"].includes(event.request.destination);
+
+  if (!sameOrigin && !cacheableExternal) return;
+
+  if (event.request.mode === "navigate") {
+    event.respondWith(cacheFirstNavigation(event.request, event));
+    return;
+  }
+
+  event.respondWith(staleWhileRevalidate(event.request, event));
 });
+
+async function cacheFirstNavigation(request, event) {
+  const cache = await caches.open(CACHE_NAME);
+  const cached = await cache.match("./index.html");
+  const refresh = fetch(request).then((response) => {
+    if (response?.ok) cache.put("./index.html", response.clone());
+    return response;
+  }).catch(() => null);
+
+  if (cached) {
+    event.waitUntil(refresh.then(() => undefined));
+    return cached;
+  }
+
+  return (await refresh) || Response.error();
+}
+
+async function staleWhileRevalidate(request, event) {
+  const cache = await caches.open(CACHE_NAME);
+  const cached = await cache.match(request);
+  const refresh = fetch(request).then((response) => {
+    if (response && (response.ok || response.type === "opaque")) {
+      cache.put(request, response.clone());
+    }
+    return response;
+  }).catch(() => null);
+
+  if (cached) {
+    event.waitUntil(refresh.then(() => undefined));
+    return cached;
+  }
+
+  return (await refresh) || Response.error();
+}
 
 self.addEventListener("push", (event) => {
   let payload = {};
