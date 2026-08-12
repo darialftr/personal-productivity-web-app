@@ -178,6 +178,18 @@
         <div class="subject-hero-actions"><button class="subject-edit-button" data-edit-subject>Editează materia</button>
         <button class="primary-small-button" data-study-timer>▶ Start focus</button></div>
       </section>
+      <dialog class="subject-focus-dialog" data-subject-focus-dialog>
+        <form data-subject-focus-form>
+          <div class="subject-focus-head"><div><p class="card-kicker">Sesiune pentru ${escapeHtml(subject.name)}</p><h3>Cât timp studiezi?</h3></div>
+          <button type="button" class="icon-button" data-close-subject-focus aria-label="Închide">×</button></div>
+          <p class="subject-focus-copy">Alege o durată realistă. Timerul rămâne vizibil oriunde mergi în Itera.</p>
+          <div class="subject-focus-presets" role="group" aria-label="Durata sesiunii">
+            ${[25, 45, 60, 90].map(duration => `<button type="button" class="${duration === 45 ? "active" : ""}" data-subject-focus-duration="${duration}"><strong>${duration}</strong><span>min</span></button>`).join("")}
+          </div>
+          <label class="subject-focus-custom"><span>Altă durată</span><span><input name="duration" type="number" min="5" max="240" step="5" value="45" inputmode="numeric"> minute</span></label>
+          <button type="submit" class="primary-button subject-focus-start">▶ Pornește sesiunea</button>
+        </form>
+      </dialog>
       <section class="subject-spa-stats"><article><span>Medie</span><strong>${average}</strong></article>
         <article><span>Task-uri</span><strong>${regularTasks}</strong></article>
         <article><span>Teste</span><strong>${tests}</strong></article>
@@ -279,8 +291,29 @@
     root.querySelectorAll("[data-add-grade]").forEach(button => button.addEventListener("click", () => root.querySelector(".subject-grade-dialog").showModal()));
     root.querySelector("[data-close-grade]").addEventListener("click", () => root.querySelector(".subject-grade-dialog").close());
     root.querySelector("[data-grade-form]").addEventListener("submit", event => addGrade(event, id));
-    root.querySelector("[data-study-timer]").addEventListener("click", () => {
-      global.IteraFocus?.startSubject(subject, 45);
+    const focusDialog = root.querySelector("[data-subject-focus-dialog]");
+    const focusForm = root.querySelector("[data-subject-focus-form]");
+    const focusDurationInput = focusForm.elements.duration;
+    const selectFocusDuration = duration => {
+      focusDurationInput.value = String(duration);
+      focusForm.querySelectorAll("[data-subject-focus-duration]").forEach(button => {
+        button.classList.toggle("active", Number(button.dataset.subjectFocusDuration) === Number(duration));
+      });
+    };
+    root.querySelector("[data-study-timer]").addEventListener("click", () => focusDialog.showModal());
+    root.querySelector("[data-close-subject-focus]").addEventListener("click", () => focusDialog.close());
+    focusDialog.addEventListener("click", event => {
+      if (event.target === focusDialog) focusDialog.close();
+    });
+    focusForm.querySelectorAll("[data-subject-focus-duration]").forEach(button => {
+      button.addEventListener("click", () => selectFocusDuration(Number(button.dataset.subjectFocusDuration)));
+    });
+    focusDurationInput.addEventListener("input", () => selectFocusDuration(Number(focusDurationInput.value)));
+    focusForm.addEventListener("submit", event => {
+      event.preventDefault();
+      const duration = Math.max(5, Math.min(240, Number(focusDurationInput.value) || 45));
+      focusDialog.close();
+      global.IteraFocus?.startSubject(subject, duration);
     });
     root.querySelectorAll("[data-edit-subject]").forEach(button => button.addEventListener("click", () => root.querySelector(".subject-detail-dialog").showModal()));
     root.querySelector("[data-close-subject-edit]").addEventListener("click", () => root.querySelector(".subject-detail-dialog").close());
@@ -906,36 +939,65 @@
   function bindPointerReorder(container, itemSelector, handleSelector, onCommit) {
     if (!container) return;
     container.querySelectorAll(handleSelector).forEach(handle => {
-      let item = null;
-      let moved = false;
-      let pointerId = null;
-      let startX = 0;
-      let startY = 0;
       handle.addEventListener("click", event => {
         event.preventDefault();
         event.stopPropagation();
       });
-      handle.addEventListener("pointerdown", event => {
-        if (event.pointerType === "mouse" && event.button !== 0) return;
+    });
+    container.querySelectorAll(itemSelector).forEach(itemElement => {
+      let item = null;
+      let moved = false;
+      let armed = false;
+      let pointerId = null;
+      let startX = 0;
+      let startY = 0;
+      let holdTimer = null;
+      let suppressClick = false;
+
+      itemElement.addEventListener("click", event => {
+        if (!suppressClick) return;
         event.preventDefault();
-        event.stopPropagation();
-        item = handle.closest(itemSelector);
+        event.stopImmediatePropagation();
+        suppressClick = false;
+      }, true);
+
+      itemElement.addEventListener("pointerdown", event => {
+        if (event.pointerType === "mouse" && event.button !== 0) return;
+        const interactive = event.target.closest("button, input, select, textarea, [contenteditable='true']");
+        const handleHit = event.target.closest(handleSelector);
+        if (interactive && interactive !== itemElement && !handleHit) return;
+        item = itemElement;
         if (!item) return;
         moved = false;
+        armed = event.pointerType === "mouse";
         pointerId = event.pointerId;
         startX = event.clientX;
         startY = event.clientY;
+        if (!armed) {
+          holdTimer = window.setTimeout(() => {
+            armed = true;
+            item?.classList.add("reorder-armed");
+            navigator.vibrate?.(8);
+          }, 190);
+        }
         window.addEventListener("pointermove", move, { passive: false });
         window.addEventListener("pointerup", finish);
         window.addEventListener("pointercancel", finish);
-      });
+      }, true);
       const move = event => {
         if (!item || event.pointerId !== pointerId) return;
-        if (!moved && Math.hypot(event.clientX - startX, event.clientY - startY) < 6) return;
+        const distance = Math.hypot(event.clientX - startX, event.clientY - startY);
+        if (!armed) {
+          if (distance > 10) cancel();
+          return;
+        }
+        if (!moved && distance < 6) return;
         event.preventDefault();
         if (!moved) {
           moved = true;
+          suppressClick = true;
           item.classList.add("is-reordering");
+          item.classList.remove("reorder-armed");
           item.style.pointerEvents = "none";
           container.classList.add("reorder-active");
         }
@@ -946,19 +1008,34 @@
           (Math.abs(event.clientY - (rect.top + rect.height / 2)) < rect.height / 3 && event.clientX < rect.left + rect.width / 2);
         container.insertBefore(item, before ? target : target.nextSibling);
       };
-      const finish = event => {
-        if (!item || event.pointerId !== pointerId) return;
+      const cleanup = () => {
+        clearTimeout(holdTimer);
+        holdTimer = null;
         window.removeEventListener("pointermove", move);
         window.removeEventListener("pointerup", finish);
         window.removeEventListener("pointercancel", finish);
+      };
+      const cancel = () => {
+        cleanup();
+        item?.classList.remove("reorder-armed");
+        item = null;
+        pointerId = null;
+        armed = false;
+      };
+      const finish = event => {
+        if (!item || event.pointerId !== pointerId) return;
+        cleanup();
         item.classList.remove("is-reordering");
+        item.classList.remove("reorder-armed");
         item.style.pointerEvents = "";
         container.classList.remove("reorder-active");
         item = null;
         pointerId = null;
+        armed = false;
         if (!moved) return;
         const order = [...container.querySelectorAll(itemSelector)].map(element => element.dataset.orderKey);
         void onCommit(order);
+        window.setTimeout(() => { suppressClick = false; }, 350);
       };
     });
   }

@@ -368,37 +368,67 @@
   function bindPlanReorder() {
     const list = root.querySelector(".tasks-spa-list");
     if (!list) return;
-    list.querySelectorAll("[data-plan-grip]").forEach(handle => {
+    list.querySelectorAll("[data-plan-order]").forEach(rowElement => {
+      const surface = rowElement.querySelector("[data-swipe-surface]");
+      if (!surface) return;
       let row = null;
       let moved = false;
+      let armed = false;
       let pointerId = null;
       let startX = 0;
       let startY = 0;
-      handle.addEventListener("click", event => {
+      let holdTimer = null;
+      let suppressClick = false;
+
+      surface.addEventListener("click", event => {
+        if (!suppressClick) return;
         event.preventDefault();
-        event.stopPropagation();
-      });
-      handle.addEventListener("pointerdown", event => {
+        event.stopImmediatePropagation();
+        suppressClick = false;
+      }, true);
+
+      surface.addEventListener("pointerdown", event => {
         if (event.pointerType === "mouse" && event.button !== 0) return;
-        event.preventDefault();
-        event.stopPropagation();
-        row = handle.closest("[data-plan-order]");
+        const interactive = event.target.closest("button, input, select, textarea, [contenteditable='true']");
+        if (interactive && !interactive.matches("[data-plan-grip]")) return;
+        row = rowElement;
         if (!row) return;
         moved = false;
+        armed = event.pointerType === "mouse";
         pointerId = event.pointerId;
         startX = event.clientX;
         startY = event.clientY;
+        if (!armed) {
+          holdTimer = window.setTimeout(() => {
+            armed = true;
+            row?.classList.add("reorder-armed");
+            navigator.vibrate?.(8);
+          }, 190);
+        }
         window.addEventListener("pointermove", move, { passive: false });
         window.addEventListener("pointerup", finish);
         window.addEventListener("pointercancel", finish);
-      });
+      }, true);
       const move = event => {
         if (!row || event.pointerId !== pointerId) return;
-        if (!moved && Math.hypot(event.clientX - startX, event.clientY - startY) < 6) return;
+        const deltaX = event.clientX - startX;
+        const deltaY = event.clientY - startY;
+        const distance = Math.hypot(deltaX, deltaY);
+        if (!armed) {
+          if (distance > 10) cancel();
+          return;
+        }
+        if (!moved && distance < 6) return;
+        if (!moved && Math.abs(deltaX) > Math.abs(deltaY)) {
+          cancel();
+          return;
+        }
         event.preventDefault();
         if (!moved) {
           moved = true;
+          suppressClick = true;
           row.classList.add("is-reordering");
+          row.classList.remove("reorder-armed");
           row.style.pointerEvents = "none";
           list.classList.add("plan-reorder-active");
         }
@@ -407,19 +437,34 @@
         const rect = target.getBoundingClientRect();
         list.insertBefore(row, event.clientY < rect.top + rect.height / 2 ? target : target.nextSibling);
       };
-      const finish = event => {
-        if (!row || event.pointerId !== pointerId) return;
+      const cleanup = () => {
+        clearTimeout(holdTimer);
+        holdTimer = null;
         window.removeEventListener("pointermove", move);
         window.removeEventListener("pointerup", finish);
         window.removeEventListener("pointercancel", finish);
+      };
+      const cancel = () => {
+        cleanup();
+        row?.classList.remove("reorder-armed");
+        row = null;
+        pointerId = null;
+        armed = false;
+      };
+      const finish = event => {
+        if (!row || event.pointerId !== pointerId) return;
+        cleanup();
         row.classList.remove("is-reordering");
+        row.classList.remove("reorder-armed");
         row.style.pointerEvents = "";
         list.classList.remove("plan-reorder-active");
         row = null;
         pointerId = null;
+        armed = false;
         if (!moved) return;
         const order = [...list.querySelectorAll("[data-plan-order]")].map(item => item.dataset.planOrder);
         void saveReorderedPlan(order);
+        window.setTimeout(() => { suppressClick = false; }, 350);
       };
     });
   }
