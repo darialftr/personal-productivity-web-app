@@ -97,6 +97,7 @@
       });
       await persistSubscription(currentSubscription);
       updateUi("enabled");
+      void scheduleRhythmReminders();
       global.showToast?.("Notificările pe telefon sunt active.", "♡");
     } catch (error) {
       console.error("Itera push subscription:", error);
@@ -228,6 +229,99 @@
       // Some browsers do not expose already displayed notifications.
     }
     return { ok: !error, error };
+  }
+
+  async function cancelTimerReminders(timerId) {
+    if (!timerId) return { ok: true };
+    const { data: { session } } = await supabaseClient.auth.getSession();
+    if (!session) return { ok: false, error: new Error("Missing session") };
+    const { error } = await supabaseClient
+      .from("notification_queue")
+      .update({ status: "cancelled", updated_at: new Date().toISOString() })
+      .eq("user_id", session.user.id)
+      .eq("source_id", timerId)
+      .in("notification_type", ["focus-finished", "break-finished"])
+      .in("status", ["pending", "failed"]);
+    try {
+      const readyRegistration = await navigator.serviceWorker?.ready;
+      const visible = await readyRegistration?.getNotifications?.({ tag: "itera-active-timer" }) || [];
+      visible.forEach(notification => notification.close());
+    } catch (_) {}
+    return { ok: !error, error };
+  }
+
+  async function showTimerStatus({ title, body }) {
+    if (!("Notification" in global) || Notification.permission !== "granted") return false;
+    try {
+      const readyRegistration = registration || await navigator.serviceWorker.ready;
+      await readyRegistration.showNotification(title, {
+        body,
+        icon: "./itera-icon-192.png",
+        badge: "./itera-icon-192.png",
+        tag: "itera-active-timer",
+        renotify: false,
+        silent: true,
+        data: { url: "./index.html#/" }
+      });
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  async function scheduleRhythmReminders() {
+    if (!("Notification" in global) || Notification.permission !== "granted") return [];
+    try {
+      const readyRegistration = registration || await navigator.serviceWorker.ready;
+      currentSubscription ||= await readyRegistration.pushManager?.getSubscription();
+      if (!currentSubscription) return [];
+    } catch (_) {
+      return [];
+    }
+    const jobs = [];
+    const positiveStarts = [
+      "Bună dimineața. Azi nu trebuie să faci totul dintr-odată.",
+      "Un început calm, apoi primul pas. Itera este cu tine.",
+      "Ai o zi nouă în față. Alege ce contează și începem ușor."
+    ];
+    for (let offset = 0; offset < 2; offset += 1) {
+      const day = new Date();
+      day.setDate(day.getDate() + offset);
+      const dateKey = new Date(day.getTime() - day.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+      const weekend = [0, 6].includes(day.getDay());
+      const morning = new Date(day);
+      morning.setHours(weekend ? 9 : 7, weekend ? 0 : 15, 0, 0);
+      if (morning.getTime() > Date.now()) {
+        jobs.push(queueReminder({
+          title: "O zi bună începe blând",
+          body: positiveStarts[offset % positiveStarts.length],
+          scheduledFor: morning,
+          targetUrl: "./index.html#/",
+          tag: `morning-${dateKey}`,
+          notificationType: "morning-rhythm",
+          dedupeKey: `morning-rhythm-${dateKey}`
+        }));
+      }
+      [
+        [22, 15, "Închidem ziua încet", "Mai ai timp să pui telefonul jos și să te pregătești de somn."],
+        [22, 45, "Hei, chiar este timpul de odihnă", "Mâine îți va fi mai ușor dacă te culci acum."],
+        [23, 15, "Ultimul reminder de la Itera", "Gata pentru azi. Lasă restul pe mâine și mergi la somn."]
+      ].forEach(([hour, minute, title, body], index) => {
+        const bedtime = new Date(day);
+        bedtime.setHours(hour, minute, 0, 0);
+        if (bedtime.getTime() <= Date.now()) return;
+        jobs.push(queueReminder({
+          title,
+          body,
+          scheduledFor: bedtime,
+          targetUrl: "./index.html#/",
+          tag: `bedtime-${dateKey}`,
+          notificationType: "bedtime-rhythm",
+          dedupeKey: `bedtime-rhythm-${dateKey}-${index}`
+        }));
+      });
+    }
+    return Promise.all(jobs);
   }
 
   async function scheduleTaskReminders(task) {
@@ -399,8 +493,11 @@
     disableCurrentDevice,
     queueReminder,
     cancelTaskReminders,
+    cancelTimerReminders,
+    showTimerStatus,
     scheduleTaskReminders,
     scheduleTestEventReminders,
-    syncUpcomingReminders
+    syncUpcomingReminders,
+    scheduleRhythmReminders
   });
 })(window);

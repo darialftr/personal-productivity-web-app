@@ -84,20 +84,20 @@
       if (isPersonalEventLike(task) || isAutomaticReviewTask(task)) return false;
       const matchesSearch = task.title.toLowerCase().includes(search);
       if (!matchesSearch) return false;
-      if (filter === "today") return plannedDate(task) === today() && !task.completed;
+      if (filter === "today") return plannedDate(task) === today() && (!task.completed || (task.completed_at && localDate(new Date(task.completed_at)) === today()));
       if (filter === "homework") return task.task_type === "homework" && !task.completed;
       if (filter === "test") return task.task_type === "test" && !task.completed;
       if (filter === "life") return isLifeTask(task.task_type) && !task.completed;
       if (filter === "completed") {
         return task.completed && task.completed_at && localDate(new Date(task.completed_at)) === today();
       }
-      return !task.completed;
+      return !task.completed || (task.completed_at && localDate(new Date(task.completed_at)) === today());
     });
-    if (filter === "today") {
-      visible.sort((first, second) =>
-        String(plannedTime(first) || "23:59").localeCompare(String(plannedTime(second) || "23:59"))
-      );
-    }
+    visible.sort((first, second) => {
+      if (Boolean(first.completed) !== Boolean(second.completed)) return first.completed ? 1 : -1;
+      if (filter === "today") return String(plannedTime(first) || "23:59").localeCompare(String(plannedTime(second) || "23:59"));
+      return 0;
+    });
     return visible;
   }
 
@@ -595,16 +595,32 @@
   }
 
   async function toggleTask(id) {
-    const task = tasks.find(item => item.id === id), completed = !task.completed;
+    const task = tasks.find(item => String(item.id) === String(id));
+    if (!task) return;
+    const previous = { ...task };
+    const completed = !task.completed;
+    Object.assign(task, {
+      completed,
+      progress: completed ? 100 : 0,
+      completed_at: completed ? new Date().toISOString() : null
+    });
+    render();
     const { error } = await supabaseClient.from("tasks").update({ completed, progress: completed ? 100 : 0,
       completed_at: completed ? new Date().toISOString() : null }).eq("id", id).eq("user_id", user.id);
-    if (!error) {
+    if (error) {
+      Object.assign(task, previous);
+      render();
+      global.showToast?.("Task-ul nu a putut fi actualizat.", "!");
+      return;
+    }
+    if (completed) {
       const removal = await global.IteraPlanning?.removeTask(user, id);
       if (removal?.user) user = removal.user;
-      await global.IteraPush?.scheduleTaskReminders({ ...task, completed });
-      global.dispatchEvent(new CustomEvent("itera:task-updated", { detail: { id, completed } }));
-      await reload();
+      await global.IteraPush?.cancelTaskReminders(id);
+    } else {
+      await global.IteraPush?.scheduleTaskReminders(task);
     }
+    global.dispatchEvent(new CustomEvent("itera:task-updated", { detail: { id, completed } }));
   }
 
   async function deleteTask() {

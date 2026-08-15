@@ -53,6 +53,15 @@ let focusSubjectId = null;
 let focusTaskId = null;
 let focusTaskTitle = null;
 let focusSessionSaved = false;
+let focusEndsAt = null;
+let focusTimerMode = "focus";
+let focusTimerId = null;
+let focusSubjectName = "Focus";
+let focusTaskSnapshot = null;
+let focusResumeSubjectId = null;
+let focusResumeSubjectName = "Studiu";
+let nextTimerMode = "focus";
+let focusFinishInProgress = false;
 let currentEnergy = 3;
 let currentEnergyDate = formatDateForInput(now);
 let energySaveVersion = 0;
@@ -108,7 +117,6 @@ async function initializeApp() {
   initializeQuickTaskForm();
   initializeOrganizer();
   initializeDayPlanner();
-  initializeMorningBrief();
   initializeWeeklyReplay();
   initializeExamMode();
   initializeRecoveryMode();
@@ -122,6 +130,8 @@ async function initializeApp() {
   hydrateDailyEnergy();
   applyAccountPreferences();
   renderAll();
+  initializeMorningBrief();
+  void IteraPush.scheduleRhythmReminders?.();
 
   window.setInterval(() => {
     resetEnergyForNewDay();
@@ -609,6 +619,8 @@ function convertTaskToCalendarItem(task) {
     title: task.title,
     type: task.type || "homework",
     subject: task.subject || "",
+    subjectId: task.subject_id || null,
+    noTimer: Boolean(task.noTimer),
 
     date: task.scheduledDate || task.deadline,
     time: task.scheduledTime || task.deadlineTime || "",
@@ -1724,6 +1736,96 @@ function updateFocusButtonSubtitle() {
   ).textContent = `${subject} · ${duration} minute`;
 }
 
+function makeTimerId() {
+  if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, character => {
+    const random = Math.random() * 16 | 0;
+    return (character === "x" ? random : (random & 3 | 8)).toString(16);
+  });
+}
+
+async function persistActiveTimer() {
+  if (!currentUser) return;
+  const state = focusTimerId ? {
+    id: focusTimerId,
+    mode: focusTimerMode,
+    subjectId: focusSubjectId,
+    subjectName: focusSubjectName,
+    resumeSubjectId: focusResumeSubjectId,
+    resumeSubjectName: focusResumeSubjectName,
+    taskId: focusTaskId,
+    taskTitle: focusTaskTitle,
+    initialSeconds: focusInitialSeconds,
+    remainingSeconds: focusSecondsRemaining,
+    startedAt: focusStartedAt?.toISOString() || null,
+    endsAt: focusEndsAt?.toISOString() || null,
+    paused: focusPaused
+  } : null;
+  const { data, error } = await supabaseClient.auth.updateUser({ data: { itera_active_timer: state } });
+  if (!error && data?.user) currentUser = data.user;
+}
+
+async function syncTimerReminder() {
+  if (!focusTimerId || !focusEndsAt || focusPaused) return;
+  await globalThis.IteraPush?.cancelTimerReminders(focusTimerId);
+  const endClock = focusEndsAt.toLocaleTimeString("ro-RO", { hour: "2-digit", minute: "2-digit" });
+  const isBreak = focusTimerMode === "break";
+  void globalThis.IteraPush?.showTimerStatus({
+    title: isBreak ? "Pauză în desfășurare" : `Focus · ${focusSubjectName}`,
+    body: `${isBreak ? "Revii" : "Sesiunea se încheie"} la ${endClock}. Itera păstrează timpul exact.`
+  });
+  void globalThis.IteraPush?.queueReminder({
+    title: isBreak ? "Pauza s-a terminat" : "Sesiunea s-a încheiat",
+    body: isBreak ? "E timpul să revii. Alegem împreună următorul pas." : "Continui studiul sau iei o pauză?",
+    scheduledFor: focusEndsAt,
+    targetUrl: "./index.html#/",
+    tag: "itera-active-timer",
+    notificationType: isBreak ? "break-finished" : "focus-finished",
+    sourceId: focusTimerId,
+    dedupeKey: `${isBreak ? "break" : "focus"}-finished-${focusTimerId}`
+  });
+}
+
+function runFocusClock() {
+  clearInterval(focusTimerInterval);
+  const tick = () => {
+    if (focusPaused || !focusEndsAt || focusFinishInProgress) return;
+    focusSecondsRemaining = Math.max(0, Math.ceil((focusEndsAt.getTime() - Date.now()) / 1000));
+    updateFocusTimerDisplay();
+    if (focusSecondsRemaining <= 0) finishFocusSession({ reason: "elapsed" });
+  };
+  tick();
+  focusTimerInterval = setInterval(tick, 500);
+}
+
+function startActiveTimer({ mode = "focus", seconds, subjectName, subjectId = null, task = null }) {
+  clearInterval(focusTimerInterval);
+  focusTimerMode = mode;
+  focusInitialSeconds = Math.max(1, Number(seconds) || 1);
+  focusSecondsRemaining = focusInitialSeconds;
+  focusPaused = false;
+  focusStartedAt = new Date();
+  focusEndsAt = new Date(Date.now() + focusInitialSeconds * 1000);
+  focusTimerId = makeTimerId();
+  focusSubjectId = subjectId;
+  focusSubjectName = subjectName || (mode === "break" ? "Pauză" : "Focus");
+  if (mode === "focus") {
+    focusResumeSubjectId = focusSubjectId;
+    focusResumeSubjectName = focusSubjectName;
+  }
+  focusTaskId = task?.id || null;
+  focusTaskTitle = task?.title || null;
+  focusTaskSnapshot = task ? { ...task } : null;
+  focusSessionSaved = mode === "break";
+  focusFinishInProgress = false;
+  document.getElementById("floatingTimerType").textContent = mode === "break" ? "Pauză" : "Sesiune focus";
+  showFloatingTimer(focusSubjectName, mode === "break" ? "Respiră, bea apă și revino." : (focusTaskTitle || "Studiu individual"));
+  updateFocusTimerDisplay();
+  runFocusClock();
+  void persistActiveTimer();
+  void syncTimerReminder();
+}
+
 function startFocusSession() {
   const subject = document.getElementById(
     "focusSubject"
@@ -1733,36 +1835,16 @@ function startFocusSession() {
     document.getElementById("focusDuration").value
   );
 
-  clearInterval(focusTimerInterval);
-
-  focusInitialSeconds = duration * 60;
-  focusSecondsRemaining = focusInitialSeconds;
-  focusPaused = false;
-  focusStartedAt = new Date();
-  focusSubjectId = subjects.find((item) => item.name === subject)?.id || null;
   const matchingTask = recommendedTask?.subject === subject ? recommendedTask : null;
-  focusTaskId = matchingTask?.id || null;
-  focusTaskTitle = matchingTask?.title || null;
-  focusSessionSaved = false;
-
-  updateFocusTimerDisplay();
-  showFloatingTimer(subject, matchingTask?.title || "Studiu individual");
+  startActiveTimer({
+    mode: "focus",
+    seconds: duration * 60,
+    subjectName: subject,
+    subjectId: subjects.find((item) => item.name === subject)?.id || null,
+    task: matchingTask
+  });
   void playFocusCue("start");
   if (activeSoundscape !== "none") void setFocusSoundscape(activeSoundscape);
-
-  focusTimerInterval = setInterval(() => {
-    if (focusPaused) {
-      return;
-    }
-
-    focusSecondsRemaining -= 1;
-
-    updateFocusTimerDisplay();
-
-    if (focusSecondsRemaining <= 0) {
-      finishFocusSession({ reason: "elapsed" });
-    }
-  }, 1000);
 }
 
 function startRecommendedFocusSession() {
@@ -1791,6 +1873,7 @@ function startRecommendedFocusSession() {
 
 function toggleFocusPause() {
   focusPaused = !focusPaused;
+  focusEndsAt = focusPaused ? null : new Date(Date.now() + focusSecondsRemaining * 1000);
   void playFocusCue(focusPaused ? "pause" : "resume");
 
   document.getElementById(
@@ -1816,11 +1899,17 @@ function toggleFocusPause() {
     );
   }
   emitFocusTimerState();
+  if (focusPaused) void globalThis.IteraPush?.cancelTimerReminders(focusTimerId);
+  else void syncTimerReminder();
+  void persistActiveTimer();
 }
 
 function resetFocusSession() {
   focusSecondsRemaining = focusInitialSeconds;
   focusPaused = true;
+  focusEndsAt = null;
+  void globalThis.IteraPush?.cancelTimerReminders(focusTimerId);
+  void persistActiveTimer();
 
   document.getElementById(
     "pauseFocusButton"
@@ -1939,37 +2028,98 @@ async function saveCurrentFocusSession() {
 }
 
 async function finishFocusSession({ reason = "manual" } = {}) {
+  if (focusFinishInProgress) return;
+  focusFinishInProgress = true;
   clearInterval(focusTimerInterval);
   focusPaused = true;
+  focusEndsAt = null;
+  void globalThis.IteraPush?.cancelTimerReminders(focusTimerId);
   stopFocusSoundscape();
-  void playFocusCue(reason === "elapsed" ? "complete" : "stop");
+  void playFocusCue(reason === "elapsed" ? (focusTimerMode === "break" ? "breakComplete" : "complete") : "stop");
+
+  if (focusTimerMode === "break") {
+    focusFinishInProgress = false;
+    focusTimerId = null;
+    await persistActiveTimer();
+    if (reason === "elapsed") openFocusNextStep({ afterBreak: true });
+    else closeFocusFlow();
+    return;
+  }
 
   if (focusTaskId) {
     document.getElementById("taskCompletionTitle").textContent =
       `„${focusTaskTitle}” — spune-ne dacă ai terminat.`;
     document.getElementById("taskResumeOptions").hidden = true;
     openModal("taskCompletionModal");
+    focusFinishInProgress = false;
     return;
   }
 
   const studiedMinutes = await saveCurrentFocusSession();
-  if (!studiedMinutes) return;
+  if (!studiedMinutes) {
+    focusFinishInProgress = false;
+    return;
+  }
 
   const floatingTimer = document.getElementById("floatingTimer");
   floatingTimer.classList.remove("visible");
   floatingTimer.setAttribute("aria-hidden", "true");
   stopFocusSoundscape();
 
-  showToast(
-    `Sesiunea de ${studiedMinutes} min a fost salvată.`,
-    "✿"
-  );
+  showToast(`Sesiunea de ${studiedMinutes} min a fost salvată.`, "✓");
   emitFocusTimerState();
   await loadHomeData();
   renderAll();
   window.dispatchEvent(new CustomEvent("itera:study-session-saved", {
     detail: { subjectId: focusSubjectId, minutes: studiedMinutes }
   }));
+  focusTimerId = null;
+  await persistActiveTimer();
+  focusFinishInProgress = false;
+  if (reason === "elapsed") openFocusNextStep();
+  else closeFocusFlow();
+}
+
+function openFocusNextStep({ afterBreak = false } = {}) {
+  nextTimerMode = "focus";
+  document.querySelectorAll("[data-next-timer-mode]").forEach(button => {
+    button.classList.toggle("active", button.dataset.nextTimerMode === "focus");
+  });
+  document.getElementById("focusNextStepKicker").textContent = afterBreak ? "Pauză încheiată" : "Sesiune încheiată";
+  document.getElementById("focusNextStepTitle").textContent = afterBreak ? "Ești gata să revii?" : "Cum vrei să continui?";
+  document.getElementById("focusNextStepDescription").textContent = afterBreak
+    ? "Alege cât timp vrei pentru următoarea sesiune."
+    : "Continuă cât mai ai energie sau ia o pauză care chiar te ajută.";
+  document.getElementById("focusNextDuration").value = afterBreak ? "25" : "45";
+  openModal("focusNextStepModal");
+}
+
+function closeFocusFlow() {
+  closeModal("focusNextStepModal");
+  const timer = document.getElementById("floatingTimer");
+  timer.classList.remove("visible");
+  timer.setAttribute("aria-hidden", "true");
+  const previousTimerId = focusTimerId;
+  focusTimerId = null;
+  focusEndsAt = null;
+  focusTimerMode = "focus";
+  void globalThis.IteraPush?.cancelTimerReminders(previousTimerId);
+  void persistActiveTimer();
+  emitFocusTimerState();
+}
+
+function startBreakTimer(minutes) {
+  const resumeSubjectId = focusResumeSubjectId || focusSubjectId;
+  const resumeSubjectName = focusResumeSubjectName || focusSubjectName;
+  startActiveTimer({
+    mode: "break",
+    seconds: Math.max(1, Number(minutes) || 5) * 60,
+    subjectName: "Pauză"
+  });
+  focusResumeSubjectId = resumeSubjectId;
+  focusResumeSubjectName = resumeSubjectName;
+  void persistActiveTimer();
+  void playFocusCue("breakStart");
 }
 
 function hydrateDailyEnergy() {
@@ -2459,7 +2609,9 @@ function openDayPlanner() {
 
 function initializeDayPlanner() {
   document.getElementById("planDayButton")?.addEventListener("click", openDayPlanner);
-  document.getElementById("briefPlanDayButton")?.addEventListener("click", () => {
+  document.getElementById("briefPlanDayButton")?.addEventListener("click", async (event) => {
+    const saved = await saveMorningTaskList(event.currentTarget);
+    if (!saved) return;
     markMorningBriefSeen();
     closeModal("morningBriefModal");
     if (getRecoveryCandidates().length >= 3) {
@@ -2491,6 +2643,71 @@ function initializeDayPlanner() {
   });
 }
 
+function parseMorningTaskLine(line) {
+  const trimmed = String(line || "").trim();
+  if (!trimmed) return null;
+  const match = trimmed.match(/^(?:([01]?\d|2[0-3])[:.]([0-5]\d)\s*(?:[-–—]\s*)?)?(.+)$/);
+  if (!match) return null;
+  const title = String(match[3] || "").trim();
+  if (!title) return null;
+  const plain = normalizeSearchText(title);
+  const subjectAliases = {
+    matematica: ["mate", "matematica"],
+    informatica: ["info", "informatica"],
+    "limba romana": ["romana", "limba romana"],
+    engleza: ["engleza", "english"],
+    franceza: ["franceza", "france"],
+    fizica: ["fizica"],
+    chimie: ["chimie"],
+    biologie: ["bio", "biologie"],
+    istorie: ["istorie"],
+    geografie: ["geografie", "geo"]
+  };
+  const subject = subjects.find(item => {
+    const normalizedName = normalizeSearchText(item.name);
+    const aliases = subjectAliases[normalizedName] || [normalizedName, normalizedName.slice(0, 4)];
+    return aliases.some(alias => alias.length >= 3 && new RegExp(`(^|\\s)${alias.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}(?=\\s|$)`).test(plain));
+  });
+  const inferredLifeType = inferLifeTaskType(title);
+  const personal = !subject;
+  return {
+    user_id: currentUser.id,
+    subject_id: subject?.id || null,
+    title,
+    task_type: subject ? "homework" : (inferredLifeType || "personal"),
+    deadline_date: formatDateForInput(new Date()),
+    deadline_time: match[1] ? `${String(match[1]).padStart(2, "0")}:${match[2]}` : null,
+    priority: "medium",
+    estimated_minutes: subject ? 45 : 30,
+    notes: personal ? `[itera:task-only] [itera:no-timer]${inferredLifeType ? ` [itera:category=${inferredLifeType}]` : ""}` : null
+  };
+}
+
+async function saveMorningTaskList(button) {
+  const textarea = document.getElementById("morningTaskCapture");
+  const status = document.getElementById("morningTaskStatus");
+  const payloads = String(textarea?.value || "").split(/\r?\n/).map(parseMorningTaskLine).filter(Boolean);
+  if (!payloads.length) return true;
+  button.disabled = true;
+  button.textContent = "Adaug…";
+  const { data, error } = await supabaseClient.from("tasks").insert(payloads).select("*");
+  button.disabled = false;
+  button.textContent = "Adaugă și planifică";
+  if (error) {
+    status.textContent = "Lista nu a putut fi salvată. Încearcă din nou.";
+    return false;
+  }
+  tasks = [...(data || []).map(normalizeHomeTask), ...tasks];
+  textarea.value = "";
+  status.textContent = `${payloads.length} ${payloads.length === 1 ? "task adăugat" : "task-uri adăugate"}.`;
+  renderAll();
+  await rebuildSmartTaskPlan();
+  await loadHomeData({ force: true });
+  renderAll();
+  window.dispatchEvent(new CustomEvent("itera:task-updated"));
+  return true;
+}
+
 async function markMorningBriefSeen() {
   if (!currentUser) return;
   const today = formatDateForInput(new Date());
@@ -2504,6 +2721,7 @@ async function markMorningBriefSeen() {
 
 function initializeMorningBrief() {
   const today = formatDateForInput(new Date());
+  if (new Date().getHours() >= 12) return;
   if (currentUser?.user_metadata?.itera_brief_seen_date === today) return;
 
   const todayTasks = tasks.filter(
@@ -2554,7 +2772,9 @@ function initializeMorningBrief() {
   document
     .querySelectorAll('[data-close-modal="morningBriefModal"]')
     .forEach((button) => button.addEventListener("click", markMorningBriefSeen, { once: true }));
-  window.setTimeout(() => openModal("morningBriefModal"), 1150);
+  window.setTimeout(() => {
+    if (!document.querySelector(".modal-overlay.visible")) openModal("morningBriefModal");
+  }, 1150);
 }
 
 function getTomorrowDate(offset = 1) {
@@ -3297,11 +3517,12 @@ function renderGoalCountdowns() {
 
   if (!goals.length) {
     list.innerHTML = `
-      <div class="countdown-empty">
+      <button class="countdown-empty" type="button" data-home-open-source="calendar">
         <strong>Adaugă primul obiectiv important.</strong>
         <span>Examenele și deadline-urile vor avea aici propriul countdown.</span>
-      </div>
+      </button>
     `;
+    bindHomeInteractiveItems(list);
     return;
   }
 
@@ -3318,13 +3539,14 @@ function renderGoalCountdowns() {
             ? `${days} zile`
             : "Încheiat";
     return `
-      <div class="goal-countdown-row">
+      <button class="goal-countdown-row" type="button" data-home-open-id="${goal.id || ""}" data-home-open-source="${goal.source || "event"}" data-home-open-date="${goal.date || ""}">
         <span class="goal-countdown-dot" aria-hidden="true"></span>
         <strong>${escapeHtml(goal.title)}</strong>
         <span class="${isComplete ? "completed" : ""}">${status}</span>
-      </div>
+      </button>
     `;
   }).join("");
+  bindHomeInteractiveItems(list);
 }
 
 function renderAchievement() {
@@ -3525,6 +3747,29 @@ function initializeFloatingTimer() {
       scheduleTaskContinuation(Number(button.dataset.resumeMinutes));
     });
   });
+  document.querySelectorAll("[data-next-timer-mode]").forEach(button => {
+    button.addEventListener("click", () => {
+      nextTimerMode = button.dataset.nextTimerMode;
+      document.querySelectorAll("[data-next-timer-mode]").forEach(item => item.classList.toggle("active", item === button));
+      const duration = document.getElementById("focusNextDuration");
+      duration.value = nextTimerMode === "break" ? "10" : "45";
+    });
+  });
+  document.getElementById("startNextTimer")?.addEventListener("click", () => {
+    const minutes = Number(document.getElementById("focusNextDuration").value) || 10;
+    closeModal("focusNextStepModal");
+    if (nextTimerMode === "break") {
+      startBreakTimer(minutes);
+      return;
+    }
+    const subject = subjects.find(item => String(item.id) === String(focusResumeSubjectId || focusSubjectId)) || {
+      id: focusResumeSubjectId || focusSubjectId,
+      name: focusResumeSubjectName || focusSubjectName || "Studiu"
+    };
+    if (subject.id) startSubjectFocus(subject, minutes);
+    else startActiveTimer({ mode: "focus", seconds: minutes * 60, subjectName: focusSubjectName || "Studiu" });
+  });
+  document.getElementById("finishFocusFlow")?.addEventListener("click", closeFocusFlow);
   activeSoundscape = currentUser?.user_metadata?.itera_soundscape || "none";
   syncSoundscapeButtons();
   document.querySelectorAll("[data-soundscape]").forEach((button) => {
@@ -3557,6 +3802,37 @@ function initializeFloatingTimer() {
     }
     timer.classList.remove("dragging");
   });
+  restoreActiveTimer();
+}
+
+function restoreActiveTimer() {
+  const state = currentUser?.user_metadata?.itera_active_timer;
+  if (!state?.id) return;
+  focusTimerId = state.id;
+  focusTimerMode = state.mode === "break" ? "break" : "focus";
+  focusInitialSeconds = Math.max(1, Number(state.initialSeconds) || 1);
+  focusPaused = Boolean(state.paused);
+  focusStartedAt = state.startedAt ? new Date(state.startedAt) : new Date();
+  focusEndsAt = state.endsAt ? new Date(state.endsAt) : null;
+  focusSecondsRemaining = focusPaused
+    ? Math.max(0, Number(state.remainingSeconds) || 0)
+    : Math.max(0, Math.ceil(((focusEndsAt?.getTime() || Date.now()) - Date.now()) / 1000));
+  focusSubjectId = state.subjectId || null;
+  focusSubjectName = state.subjectName || (focusTimerMode === "break" ? "Pauză" : "Focus");
+  focusResumeSubjectId = state.resumeSubjectId || focusSubjectId;
+  focusResumeSubjectName = state.resumeSubjectName || focusSubjectName;
+  focusTaskId = state.taskId || null;
+  focusTaskTitle = state.taskTitle || null;
+  focusTaskSnapshot = focusTaskId ? { id: focusTaskId, title: focusTaskTitle, subject_id: focusSubjectId, estimated_minutes: Math.ceil(focusInitialSeconds / 60) } : null;
+  focusSessionSaved = focusTimerMode === "break";
+  document.getElementById("floatingTimerType").textContent = focusTimerMode === "break" ? "Pauză" : "Sesiune focus";
+  showFloatingTimer(focusSubjectName, focusTimerMode === "break" ? "Respiră, bea apă și revino." : (focusTaskTitle || "Studiu individual"));
+  updateFocusTimerDisplay();
+  if (focusSecondsRemaining <= 0) {
+    window.setTimeout(() => finishFocusSession({ reason: "elapsed" }), 500);
+  } else {
+    runFocusClock();
+  }
 }
 
 function getSmartResumeSuggestion() {
@@ -3646,10 +3922,12 @@ async function playFocusCue(kind) {
     const now = context.currentTime;
     const cueMap = {
       start: [523.25, 659.25],
-      resume: [440, 554.37],
-      pause: [440],
+      resume: [493.88, 659.25],
+      pause: [493.88, 392],
       stop: [440, 349.23],
-      complete: [523.25, 659.25, 783.99]
+      breakStart: [440, 392],
+      breakComplete: [523.25, 698.46],
+      complete: [523.25, 659.25, 783.99, 1046.5]
     };
     const frequencies = cueMap[kind] || cueMap.start;
     const step = kind === "complete" ? 0.16 : 0.12;
@@ -3662,10 +3940,10 @@ async function playFocusCue(kind) {
       const startAt = now + index * step;
       const oscillator = context.createOscillator();
       const noteGain = context.createGain();
-      oscillator.type = "sine";
+      oscillator.type = kind === "complete" ? "triangle" : "sine";
       oscillator.frequency.setValueAtTime(frequency, startAt);
       noteGain.gain.setValueAtTime(0.0001, startAt);
-      noteGain.gain.exponentialRampToValueAtTime(0.045, startAt + 0.025);
+      noteGain.gain.exponentialRampToValueAtTime(kind === "complete" ? 0.032 : 0.04, startAt + 0.025);
       noteGain.gain.exponentialRampToValueAtTime(0.0001, startAt + noteLength);
       oscillator.connect(noteGain).connect(cueGain);
       oscillator.start(startAt);
@@ -3789,53 +4067,31 @@ function showFloatingTimer(subject, taskTitle) {
 }
 
 function startTaskFocus(task, subject) {
-  clearInterval(focusTimerInterval);
-  focusInitialSeconds = Math.max(1, Number(task.estimated_minutes || 30)) * 60;
-  focusSecondsRemaining = focusInitialSeconds;
-  focusPaused = false;
-  focusStartedAt = new Date();
-  focusSubjectId = task.subject_id || subject?.id || null;
-  focusTaskId = task.id;
-  focusTaskTitle = task.title;
-  focusSessionSaved = false;
-  updateFocusTimerDisplay();
-  showFloatingTimer(subject?.name || taskTypeLabel(task.task_type || task.type), task.title);
+  startActiveTimer({
+    mode: "focus",
+    seconds: Math.max(1, Number(task.estimated_minutes || 30)) * 60,
+    subjectName: subject?.name || taskTypeLabel(task.task_type || task.type),
+    subjectId: task.subject_id || subject?.id || null,
+    task
+  });
   void playFocusCue("start");
   if (activeSoundscape !== "none") void setFocusSoundscape(activeSoundscape);
-
-  focusTimerInterval = setInterval(() => {
-    if (focusPaused) return;
-    focusSecondsRemaining -= 1;
-    updateFocusTimerDisplay();
-    if (focusSecondsRemaining <= 0) finishFocusSession({ reason: "elapsed" });
-  }, 1000);
 }
 
 function startSubjectFocus(subject, durationMinutes = 45) {
   if (!subject?.id) return;
-  if (getFocusTimerState().active) {
+  if (getFocusTimerState().active && !focusPaused) {
     showToast("Ai deja o sesiune în desfășurare. Finalizeaz-o înainte să începi alta.", "!");
     return;
   }
-  clearInterval(focusTimerInterval);
-  focusInitialSeconds = Math.max(5, Number(durationMinutes) || 45) * 60;
-  focusSecondsRemaining = focusInitialSeconds;
-  focusPaused = false;
-  focusStartedAt = new Date();
-  focusSubjectId = subject.id;
-  focusTaskId = null;
-  focusTaskTitle = null;
-  focusSessionSaved = false;
-  updateFocusTimerDisplay();
-  showFloatingTimer(subject.name || "Studiu", "Studiu individual");
+  startActiveTimer({
+    mode: "focus",
+    seconds: Math.max(5, Number(durationMinutes) || 45) * 60,
+    subjectName: subject.name || "Studiu",
+    subjectId: subject.id
+  });
   void playFocusCue("start");
   if (activeSoundscape !== "none") void setFocusSoundscape(activeSoundscape);
-  focusTimerInterval = setInterval(() => {
-    if (focusPaused) return;
-    focusSecondsRemaining -= 1;
-    updateFocusTimerDisplay();
-    if (focusSecondsRemaining <= 0) finishFocusSession({ reason: "elapsed" });
-  }, 1000);
 }
 
 async function completeFocusedTask() {
@@ -3863,6 +4119,7 @@ async function completeFocusedTask() {
     detail: { subjectId: focusSubjectId, minutes: studiedMinutes }
   }));
   showToast("Task finalizat și timpul salvat.", "✓");
+  openFocusNextStep();
 }
 
 async function scheduleTaskContinuation(minutes) {
@@ -3918,6 +4175,11 @@ function closeTaskSession() {
   focusTaskId = null;
   focusTaskTitle = null;
   stopFocusSoundscape();
+  const previousTimerId = focusTimerId;
+  focusTimerId = null;
+  focusEndsAt = null;
+  void globalThis.IteraPush?.cancelTimerReminders(previousTimerId);
+  void persistActiveTimer();
   emitFocusTimerState();
 }
 
@@ -4138,26 +4400,30 @@ function renderTodayTimeline() {
   const todaySchedule = scheduleItems
     .filter((item) => Number(item.day_of_week) === new Date().getDay())
     .map((item) => ({
+      id: item.id,
       title: item.title,
       subject: subjectName(item.subject_id),
       time: String(item.start_time || "").slice(0, 5),
       endTime: String(item.end_time || "").slice(0, 5),
-      type: item.item_type || "school"
+      type: item.item_type || "school",
+      source: "schedule"
     }));
 
   const timelineItems = [
     ...todaySchedule,
     ...events
       .filter((event) => event.date === todayString && event.time)
-      .map((event) => ({ ...event, endTime: "" })),
+      .map((event) => ({ ...event, endTime: "", source: "event" })),
     ...tasks
       .filter((task) => getTaskPlanDate(task) === todayString && getTaskPlanTime(task) && !task.completed)
       .map((task) => ({
+        id: task.id,
         title: task.title,
         subject: task.subject,
         time: getTaskPlanTime(task),
         endTime: "",
-        type: task.type || "homework"
+        type: task.type || "homework",
+        source: "task"
       }))
   ];
 
@@ -4220,7 +4486,7 @@ function renderTodayTimeline() {
     .slice(0, 12)
     .map((event) => {
       return `
-        <div class="timeline-item ${event.isCurrent ? "current-time" : ""}">
+        <button type="button" class="timeline-item ${event.isCurrent ? "current-time" : ""} ${event.source ? "is-actionable" : ""}" ${event.source ? `data-home-open-id="${event.id || ""}" data-home-open-source="${event.source}" data-home-open-date="${todayString}"` : "disabled"}>
           <span class="timeline-time">
             ${escapeHtml(event.time)}
           </span>
@@ -4240,10 +4506,12 @@ function renderTodayTimeline() {
               ${event.endTime ? ` · până la ${escapeHtml(event.endTime)}` : ""}
             </span>
           </div>
-        </div>
+          ${event.source ? '<span class="home-row-arrow" aria-hidden="true">›</span>' : ""}
+        </button>
       `;
     })
     .join("");
+  bindHomeInteractiveItems(timeline);
 }
 
 function renderTodayTasks() {
@@ -4370,7 +4638,7 @@ data-item-source="${event.source || "event"}"
             ${event.completed ? "✓" : ""}
           </button>
 
-          <div class="task-content">
+          <button type="button" class="task-content" data-home-open-id="${event.id}" data-home-open-source="${event.source || "event"}" data-home-open-date="${event.date || ""}" aria-label="Deschide ${escapeHtml(event.title)}">
             <strong>${escapeHtml(event.title)}</strong>
 
             <span>
@@ -4380,11 +4648,14 @@ data-item-source="${event.source || "event"}"
               }
               · ${formatReadableDate(event.date)}
             </span>
-          </div>
+          </button>
 
           <span class="task-time">
             ${formatMinutes(event.duration)}
           </span>
+          ${event.source === "task" && !event.noTimer && event.type !== "goal" && Number(event.duration) > 0
+            ? `<button type="button" class="home-task-start" data-home-start-task="${event.id}" aria-label="Pornește ${escapeHtml(event.title)}"><span aria-hidden="true">▶</span><b>Start</b></button>`
+            : '<span class="home-row-arrow" aria-hidden="true">›</span>'}
         </div>
       `;
     })
@@ -4400,6 +4671,42 @@ data-item-source="${event.source || "event"}"
 );
       });
     });
+  bindHomeInteractiveItems(container);
+  container.querySelectorAll("[data-home-start-task]").forEach(button => {
+    button.addEventListener("click", () => {
+      const task = tasks.find(item => String(item.id) === String(button.dataset.homeStartTask));
+      const subject = subjects.find(item => String(item.id) === String(task?.subject_id));
+      if (task) startTaskFocus(task, subject);
+    });
+  });
+}
+
+function openHomeItem(id, source, date = "") {
+  if (source === "task") {
+    openPage("tasks");
+    globalThis.IteraTasksView?.openTask(id);
+    return;
+  }
+  if (source === "event") {
+    openPage("calendar");
+    globalThis.IteraCalendarView?.openEvent(id, date);
+    return;
+  }
+  if (source === "schedule") {
+    openPage("schedule");
+    return;
+  }
+  if (source === "calendar") openPage("calendar");
+}
+
+function bindHomeInteractiveItems(container) {
+  container?.querySelectorAll("[data-home-open-source]").forEach(button => {
+    button.addEventListener("click", () => openHomeItem(
+      button.dataset.homeOpenId,
+      button.dataset.homeOpenSource,
+      button.dataset.homeOpenDate
+    ));
+  });
 }
 
 async function toggleItemCompletion(
@@ -4407,6 +4714,8 @@ async function toggleItemCompletion(
   itemSource
 ) {
   if (itemSource === "task") {
+    const previousTask = tasks.find((task) => task.id === itemId);
+    const previousSnapshot = previousTask ? { ...previousTask } : null;
     tasks = tasks.map((task) => {
       if (task.id !== itemId) {
         return task;
@@ -4427,6 +4736,7 @@ async function toggleItemCompletion(
         updatedAt: new Date().toISOString()
       };
     });
+    renderAll();
 
     const task = tasks.find((item) => item.id === itemId);
     const { error } = await supabaseClient
@@ -4442,7 +4752,10 @@ async function toggleItemCompletion(
       .eq("user_id", currentUser.id);
 
     if (error) {
-      await loadHomeData();
+      if (previousSnapshot) {
+        tasks = tasks.map(item => item.id === itemId ? previousSnapshot : item);
+        renderAll();
+      }
       showToast("Task-ul nu a putut fi actualizat.", "!");
       return;
     }
@@ -4454,6 +4767,9 @@ async function toggleItemCompletion(
       await rebuildSmartTaskPlan();
       await loadHomeData();
     }
+    window.dispatchEvent(new CustomEvent("itera:task-updated", {
+      detail: { id: itemId, completed: task.completed }
+    }));
   } else {
     showToast(
       "Evenimentele nu folosesc starea de task finalizat.",
@@ -4461,8 +4777,6 @@ async function toggleItemCompletion(
     );
     return;
   }
-
-  renderAll();
 
   showToast(
     "Task-ul a fost actualizat.",
@@ -4489,13 +4803,13 @@ function renderUpcomingEvents() {
 
   if (upcomingEvents.length === 0) {
     upcomingList.innerHTML = `
-      <div class="empty-state">
+      <button type="button" class="empty-state home-empty-action" data-home-open-source="calendar">
         <span>✦</span>
         <strong>Niciun deadline apropiat.</strong>
-        <p>Poți planifica următorul pas în calendar.</p>
-      </div>
+        <p>Deschide calendarul pentru a planifica următorul pas.</p>
+      </button>
     `;
-
+    bindHomeInteractiveItems(upcomingList);
     return;
   }
 
@@ -4512,7 +4826,7 @@ function renderUpcomingEvents() {
           : "";
 
       return `
-        <div class="upcoming-item ${urgencyClass}">
+        <button type="button" class="upcoming-item ${urgencyClass}" data-home-open-id="${event.id || ""}" data-home-open-source="${event.source || "event"}" data-home-open-date="${event.date || ""}">
           <div class="upcoming-date">
             ${date.getDate()}
           </div>
@@ -4529,10 +4843,12 @@ function renderUpcomingEvents() {
           <span class="event-tag ${event.type}">
             ${getTypeLabel(event.type)}
           </span>
-        </div>
+          <span class="home-row-arrow" aria-hidden="true">›</span>
+        </button>
       `;
     })
     .join("");
+  bindHomeInteractiveItems(upcomingList);
 }
 
 function getTypeLabel(type) {

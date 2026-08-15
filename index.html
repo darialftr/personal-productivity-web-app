@@ -274,41 +274,45 @@
               Vezi replay-ul săptămânii
             </button>
 
-            <div class="summary-stat">
+            <button class="summary-stat" type="button" data-open-page="schedule" aria-label="Deschide orarul de astăzi">
               <div class="summary-stat-icon blush">☼</div>
 
               <div>
                 <span>Ore la școală</span>
                 <strong id="schoolClassesCount">4 materii</strong>
               </div>
-            </div>
+              <span class="summary-stat-arrow" aria-hidden="true">›</span>
+            </button>
 
-            <div class="summary-stat">
+            <button class="summary-stat" type="button" data-open-page="tasks" aria-label="Deschide taskurile rămase">
               <div class="summary-stat-icon lilac">✓</div>
 
               <div>
                 <span>Task-uri rămase</span>
                 <strong id="remainingTasksCount">3 task-uri</strong>
               </div>
-            </div>
+              <span class="summary-stat-arrow" aria-hidden="true">›</span>
+            </button>
 
-            <div class="summary-stat">
+            <button class="summary-stat" type="button" data-open-page="tasks" aria-label="Deschide planul de lucru">
               <div class="summary-stat-icon peach">◷</div>
 
               <div>
                 <span>Timp estimat</span>
                 <strong id="estimatedWorkTime">1h 50m</strong>
               </div>
-            </div>
+              <span class="summary-stat-arrow" aria-hidden="true">›</span>
+            </button>
 
-            <div class="summary-stat studied-summary-stat">
+            <button class="summary-stat studied-summary-stat" type="button" data-open-page="subjects" aria-label="Deschide timpul studiat pe materii">
               <div class="summary-stat-icon blush" aria-hidden="true">↗</div>
 
               <div>
                 <span>Studiat astăzi</span>
                 <strong id="studiedTodayTime">0m</strong>
               </div>
-            </div>
+              <span class="summary-stat-arrow" aria-hidden="true">›</span>
+            </button>
 
           </article>
 
@@ -719,6 +723,34 @@
     </div>
   </div>
 
+  <!-- NEXT FOCUS STEP -->
+  <div class="modal-overlay" id="focusNextStepModal" aria-hidden="true">
+    <div class="modal-card focus-next-step-card">
+      <p class="card-kicker" id="focusNextStepKicker">Sesiune încheiată</p>
+      <h2 id="focusNextStepTitle">Cum vrei să continui?</h2>
+      <p id="focusNextStepDescription">Poți continua cât simți că mai ai energie sau poți lua o pauză adevărată.</p>
+      <div class="focus-next-choice" role="group" aria-label="Pasul următor">
+        <button type="button" class="active" data-next-timer-mode="focus">Continuă studiul</button>
+        <button type="button" data-next-timer-mode="break">Ia o pauză</button>
+      </div>
+      <label class="focus-next-duration">Durată
+        <select id="focusNextDuration">
+          <option value="5">5 minute</option>
+          <option value="10">10 minute</option>
+          <option value="15">15 minute</option>
+          <option value="25">25 minute</option>
+          <option value="30">30 minute</option>
+          <option value="45" selected>45 minute</option>
+          <option value="60">60 minute</option>
+        </select>
+      </label>
+      <div class="form-actions">
+        <button type="button" class="secondary-button" id="finishFocusFlow">Gata pentru acum</button>
+        <button type="button" class="primary-button" id="startNextTimer">Pornește</button>
+      </div>
+    </div>
+  </div>
+
   <!-- CONTEXTUAL ENERGY CHECK-IN -->
   <div class="modal-overlay energy-prompt-modal" id="energyPromptModal" aria-hidden="true">
     <div class="modal-card energy-prompt-card">
@@ -825,9 +857,15 @@
       <h2 id="morningBriefTitle">Bună dimineața.</h2>
       <p id="morningBriefSummary">Îți pregătim ziua.</p>
       <div class="morning-brief-metrics" id="morningBriefMetrics"></div>
+      <div class="morning-task-capture">
+        <label for="morningTaskCapture">Ce ai de făcut azi?</label>
+        <textarea id="morningTaskCapture" rows="4" placeholder="09:00 Tema la matematică&#10;Sun-o pe bunica&#10;18:30 Sport"></textarea>
+        <small>Scrie câte un lucru pe rând. Ora este opțională.</small>
+        <p class="morning-task-status" id="morningTaskStatus" aria-live="polite"></p>
+      </div>
       <div class="form-actions">
         <button class="secondary-button" id="dismissMorningBrief" data-close-modal="morningBriefModal">Nu acum</button>
-        <button class="primary-button" id="briefPlanDayButton">Planifică ziua</button>
+        <button class="primary-button" id="briefPlanDayButton">Adaugă și planifică</button>
       </div>
     </div>
   </div>
