@@ -710,3 +710,97 @@ html[data-mode="dark"] .today-summary-card .summary-stat {
     min-height: 52px;
   }
 }
+
+/* Viewport-first home: the useful action should fit before the first scroll. */
+@media (min-width:1121px) {
+  .sidebar { width:252px; }
+  .main-content { margin-left:252px; }
+  .nav-item { min-height:50px; font-size:.9rem; }
+  .nav-icon { width:31px; height:31px; }
+  #homePage .now-recommendation { min-height:78px; margin-bottom:10px; padding-block:11px; }
+  #homePage .hero-grid { gap:12px; }
+  #homePage .focus-card,
+  #homePage .today-summary-card { min-height:338px; }
+  #homePage .focus-card { padding:22px 26px; }
+  #homePage .focus-card h2 { max-width:560px; font-size:clamp(2.25rem,3vw,3.15rem); }
+  #homePage .energy-checkin { margin-block:12px 10px; }
+  #homePage .focus-settings { grid-template-columns:minmax(0,1.25fr) minmax(150px,.75fr); }
+  #homePage .today-summary-card { padding:16px 18px; }
+  #homePage .today-summary-card .card-heading-row { margin-bottom:8px; }
+  #homePage .today-summary-card .weekly-replay-trigger { min-height:32px; margin-bottom:3px; }
+  #homePage .today-summary-card .summary-stat { min-height:47px; }
+}
+
+@media (min-width:1121px) and (max-height:900px) {
+  .main-content { padding-top:12px; }
+  .topbar { min-height:58px; margin-bottom:10px; }
+  .topbar h1 { font-size:clamp(1.85rem,2.25vw,2.55rem); }
+  #homePage .now-recommendation { min-height:68px; margin-bottom:9px; border-radius:21px; }
+  #homePage .now-recommendation-icon { width:38px; height:38px; }
+  #homePage .now-recommendation h2 { font-size:clamp(1.18rem,1.55vw,1.6rem); }
+  #homePage .focus-card,
+  #homePage .today-summary-card { min-height:315px; }
+  #homePage .focus-card { padding-block:19px; }
+  #homePage .focus-card h2 { margin-block:4px 6px; font-size:clamp(2.1rem,2.7vw,2.85rem); }
+  #homePage .focus-description { font-size:.78rem; }
+  #homePage .energy-checkin { margin-block:10px 8px; }
+  #homePage .energy-options button { width:32px; min-width:32px; height:32px; }
+  #homePage .home-progress-ring { width:72px; height:72px; }
+  #homePage .focus-settings select { min-height:42px; }
+  #homePage .start-focus-button { min-height:49px; margin-top:8px; }
+  #homePage .today-summary-card .summary-stat { min-height:44px; }
+}
+
+@media (min-width:761px) and (max-width:1120px) {
+  #homePage .focus-card { min-height:390px; }
+  #homePage .today-summary-card {
+    display:grid;
+    grid-template-columns:repeat(4,minmax(0,1fr));
+    gap:8px;
+    min-height:0;
+    padding:15px;
+  }
+  #homePage .today-summary-card .card-heading-row { grid-column:1/-1; margin-bottom:0; }
+  #homePage .today-summary-card .weekly-replay-trigger { display:none; }
+  #homePage .today-summary-card .summary-stat {
+    min-width:0;
+    min-height:76px;
+    padding:9px;
+    border:1px solid var(--app-line);
+    border-radius:17px;
+  }
+  #homePage .today-summary-card .summary-stat-icon { flex:0 0 30px; width:30px; height:30px; }
+  #homePage .today-summary-card .summary-stat > div:nth-child(2) { min-width:0; }
+  #homePage .today-summary-card .summary-stat span,
+  #homePage .today-summary-card .summary-stat strong {
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+  }
+  #homePage .today-summary-card .summary-stat-arrow { display:none; }
+}
+
+@media (max-width:760px) {
+  #homePage .now-recommendation { min-height:0; margin-bottom:11px; }
+  #homePage .now-recommendation h2 { font-size:clamp(1.28rem,6vw,1.65rem); }
+  #homePage .focus-card { padding-block:16px; }
+  #homePage .focus-card h2 { margin-block:5px 7px; }
+  #homePage .focus-description { font-size:.8rem; }
+  #homePage .energy-checkin { margin-block:11px 9px; }
+  #homePage .focus-settings { gap:7px; }
+  #homePage .start-focus-button { margin-top:8px; }
+}
+
+@media (max-width:760px) and (max-height:760px) {
+  .main-content { padding-top:8px; }
+  .topbar { margin-bottom:9px; }
+  .topbar .eyebrow,
+  #homePage .focus-description,
+  #homePage .energy-checkin small { display:none; }
+  #homePage .now-recommendation { padding-block:11px; }
+  #homePage .now-recommendation p:last-child { display:none; }
+  #homePage .focus-card h2 { max-width:215px; font-size:clamp(1.9rem,9vw,2.35rem); }
+  #homePage .energy-options button { height:38px; }
+  #homePage .focus-settings select { min-height:40px; }
+  #homePage .start-focus-button { min-height:48px; }
+}
