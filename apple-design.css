@@ -804,3 +804,32 @@ html[data-mode="dark"] .today-summary-card .summary-stat {
   #homePage .focus-settings select { min-height:40px; }
   #homePage .start-focus-button { min-height:48px; }
 }
+
+/* Native button borders must not leak into task copy or subject rows. */
+.task-content,
+.subject-spa-row {
+  appearance:none;
+  -webkit-appearance:none;
+  margin:0;
+  border:0;
+  color:var(--text);
+  background:transparent;
+  font:inherit;
+  text-align:left;
+}
+
+.task-content { width:100%; }
+
+.subject-spa-row {
+  width:100%;
+  border-bottom:1px solid var(--app-line);
+}
+
+.subject-spa-row:last-child { border-bottom:0; }
+
+.task-content:focus-visible,
+.subject-spa-row:focus-visible {
+  outline:3px solid color-mix(in srgb,var(--primary) 24%,transparent);
+  outline-offset:3px;
+  border-radius:10px;
+}
