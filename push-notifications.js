@@ -271,6 +271,8 @@
 
   async function scheduleRhythmReminders() {
     if (!("Notification" in global) || Notification.permission !== "granted") return [];
+    const { data: { session } } = await supabaseClient.auth.getSession();
+    if (!session) return [];
     try {
       const readyRegistration = registration || await navigator.serviceWorker.ready;
       currentSubscription ||= await readyRegistration.pushManager?.getSubscription();
@@ -299,7 +301,7 @@
           targetUrl: "./index.html#/",
           tag: `morning-${dateKey}`,
           notificationType: "morning-rhythm",
-          dedupeKey: `morning-rhythm-${dateKey}`
+          dedupeKey: `morning-${session.user.id}-${dateKey}`
         }));
       }
       [
@@ -317,7 +319,7 @@
           targetUrl: "./index.html#/",
           tag: `bedtime-${dateKey}`,
           notificationType: "bedtime-rhythm",
-          dedupeKey: `bedtime-rhythm-${dateKey}-${index}`
+          dedupeKey: `bedtime-${index}-${session.user.id}-${dateKey}`
         }));
       });
     }
