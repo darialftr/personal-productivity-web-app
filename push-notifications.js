@@ -4,6 +4,7 @@
   let registration = null;
   let deferredInstallPrompt = null;
   let currentSubscription = null;
+  let lastActivitySyncAt = 0;
   const personalTaskOnlyMarker = "[itera:task-only]";
   const fixedPersonalTypes = ["personal", "selfcare", "home", "health", "errand"];
   const isPersonalEventLike = task =>
@@ -68,6 +69,16 @@
       console.error("Itera service worker:", error);
       updateUi("error");
     }
+
+    const syncActiveDevice = () => {
+      if (document.visibilityState !== "visible" || !currentSubscription) return;
+      if (Date.now() - lastActivitySyncAt < 30000) return;
+      lastActivitySyncAt = Date.now();
+      void persistSubscription(currentSubscription).catch(() => {});
+    };
+    global.addEventListener("focus", syncActiveDevice);
+    document.addEventListener("visibilitychange", syncActiveDevice);
+    global.setInterval(syncActiveDevice, 60000);
   }
 
   async function enablePush() {
@@ -127,6 +138,7 @@
       last_seen_at: new Date().toISOString()
     }, { onConflict: "endpoint" });
     if (error) throw error;
+    lastActivitySyncAt = Date.now();
   }
 
   async function sendTestNotification() {

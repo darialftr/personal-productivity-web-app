@@ -105,6 +105,16 @@ Deno.serve(async (request) => {
         }
       }
 
+      if (notification.notification_type === "task-nudge" && notification.source_id &&
+        await userOpenedIteraAfterTaskStart(notification.source_id, notification.user_id)) {
+        await admin.from("notification_queue").update({
+          status: "cancelled",
+          last_error: "User opened Itera after the task start reminder.",
+          updated_at: new Date().toISOString()
+        }).eq("id", notification.id);
+        continue;
+      }
+
       const delayMs = Date.now() - new Date(notification.scheduled_for).getTime();
       if (notification.notification_type === "task-start" && delayMs > 2 * 60 * 1000) {
         await admin.from("notification_queue").update({
@@ -390,6 +400,30 @@ async function isTaskStillOpen(taskId: string, userId: string) {
     .maybeSingle();
   if (error) throw error;
   return Boolean(data && !data.completed);
+}
+
+async function userOpenedIteraAfterTaskStart(taskId: string, userId: string) {
+  const { data: startReminder, error: reminderError } = await admin
+    .from("notification_queue")
+    .select("scheduled_for")
+    .eq("user_id", userId)
+    .eq("source_id", taskId)
+    .eq("notification_type", "task-start")
+    .order("scheduled_for", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (reminderError || !startReminder?.scheduled_for) return false;
+
+  const { data: activeDevice, error: subscriptionError } = await admin
+    .from("push_subscriptions")
+    .select("id")
+    .eq("user_id", userId)
+    .eq("enabled", true)
+    .gte("last_seen_at", startReminder.scheduled_for)
+    .limit(1)
+    .maybeSingle();
+  if (subscriptionError) throw subscriptionError;
+  return Boolean(activeDevice);
 }
 
 function safeTimezone(value: string | undefined) {
