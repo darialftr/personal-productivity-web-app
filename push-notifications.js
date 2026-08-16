@@ -217,7 +217,7 @@
       .update({ status: "cancelled", updated_at: new Date().toISOString() })
       .eq("user_id", session.user.id)
       .eq("source_id", taskId)
-      .in("notification_type", ["task-reminder", "task-start", "task-deadline", "task-continuation"])
+      .in("notification_type", ["task-reminder", "task-start", "task-deadline", "task-continuation", "task-nudge"])
       .in("status", ["pending", "failed"]);
     try {
       const registration = await navigator.serviceWorker?.ready;

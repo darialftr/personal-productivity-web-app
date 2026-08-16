@@ -38,6 +38,7 @@ type RhythmNotification = {
   target_url: string;
   tag: string;
   notification_type: string;
+  source_id?: string;
   dedupe_key: string;
   scheduled_for: string;
   status: "pending";
@@ -87,6 +88,18 @@ Deno.serve(async (request) => {
     let failed = 0;
 
     for (const notification of queue || []) {
+      if (notification.source_id && ["task-start", "task-reminder", "task-continuation", "task-nudge"].includes(notification.notification_type)) {
+        const taskIsOpen = await isTaskStillOpen(notification.source_id, notification.user_id);
+        if (!taskIsOpen) {
+          await admin.from("notification_queue").update({
+            status: "cancelled",
+            last_error: "Task already completed or removed.",
+            updated_at: new Date().toISOString()
+          }).eq("id", notification.id);
+          continue;
+        }
+      }
+
       const delayMs = Date.now() - new Date(notification.scheduled_for).getTime();
       if (notification.notification_type === "task-start" && delayMs > 2 * 60 * 1000) {
         await admin.from("notification_queue").update({
@@ -108,7 +121,8 @@ Deno.serve(async (request) => {
         url: notification.target_url,
         tag: notification.tag,
         notificationType: notification.notification_type,
-        notificationId: notification.id
+        notificationId: notification.id,
+        renotify: notification.notification_type === "task-nudge"
       });
 
       const status = result.sent > 0 ? "sent" : "failed";
@@ -168,9 +182,9 @@ async function enqueueServerRhythmReminders() {
     const now = new Date();
     const gracePeriodMs = 20 * 60 * 1000;
     const morningMessages = [
-      "Bună dimineața. Azi nu trebuie să faci totul dintr-odată.",
-      "Un început calm, apoi primul pas. Itera este cu tine.",
-      "Ai o zi nouă în față. Alege ce contează și începem ușor."
+      "Bună dimineața. Hai, sus. Uită-te la plan și începe cu primul lucru.",
+      "Nu așteptăm să apară cheful. Alegem primul task și îi dăm drumul.",
+      "Ziua nu se organizează singură. Pune lista în ordine și începe primul pas."
     ];
     const rows: RhythmNotification[] = [];
 
@@ -230,6 +244,8 @@ async function enqueueServerRhythmReminders() {
       }
     });
 
+    rows.push(...await buildTaskNudges(userIds, timezoneByUser, now, gracePeriodMs));
+
     if (!rows.length) return 0;
     const { error } = await admin
       .from("notification_queue")
@@ -240,6 +256,96 @@ async function enqueueServerRhythmReminders() {
     console.error("Could not enqueue rhythm reminders", error);
     return 0;
   }
+}
+
+async function buildTaskNudges(
+  userIds: string[],
+  timezoneByUser: Map<string, string>,
+  now: Date,
+  gracePeriodMs: number
+): Promise<RhythmNotification[]> {
+  const { data: taskRows, error } = await admin
+    .from("tasks")
+    .select("id,user_id,title,deadline_date,deadline_time,task_type,notes")
+    .in("user_id", userIds)
+    .eq("completed", false)
+    .not("deadline_date", "is", null)
+    .limit(500);
+  if (error) throw error;
+
+  const messages = [
+    {
+      title: "Hai. Începem acum.",
+      body: (taskTitle: string) => `Pune mâna și începe „${taskTitle}”. Doar primele 10 minute.`
+    },
+    {
+      title: "Încă este acolo.",
+      body: (taskTitle: string) => `„${taskTitle}” nu se rezolvă singur. Deschide-l și fă primul pas.`
+    },
+    {
+      title: "Gata cu amânarea.",
+      body: (taskTitle: string) => `Acum este momentul pentru „${taskTitle}”. După ce termini, te poți relaxa fără stres.`
+    },
+    {
+      title: "Ultimul imbold de la Itera",
+      body: (taskTitle: string) => `Hai să închidem „${taskTitle}” astăzi. Începe acum, chiar dacă nu ai chef.`
+    }
+  ];
+  const fixedPersonalTypes = new Set(["personal", "selfcare", "home", "health", "errand"]);
+  const rows: RhythmNotification[] = [];
+
+  for (const task of taskRows || []) {
+    const notes = String(task.notes || "");
+    if (fixedPersonalTypes.has(task.task_type) && !notes.includes("[itera:task-only]")) continue;
+
+    const timezone = safeTimezone(timezoneByUser.get(task.user_id));
+    const local = zonedParts(now, timezone);
+    const todayKey = `${local.year}-${String(local.month).padStart(2, "0")}-${String(local.day).padStart(2, "0")}`;
+    if (task.deadline_date > todayKey) continue;
+
+    let scheduledMoments: Date[] = [];
+    if (task.deadline_date < todayKey) {
+      scheduledMoments = ["09:30", "12:30", "16:30", "20:00"]
+        .map((time) => zonedDateToUtc(todayKey, time, timezone));
+    } else if (task.deadline_time) {
+      const start = zonedDateToUtc(todayKey, String(task.deadline_time).slice(0, 5), timezone);
+      scheduledMoments = [10, 35, 75]
+        .map((minutes) => new Date(start.getTime() + minutes * 60000));
+    } else {
+      scheduledMoments = ["10:00", "14:30", "18:30"]
+        .map((time) => zonedDateToUtc(todayKey, time, timezone));
+    }
+
+    scheduledMoments.forEach((scheduledFor, index) => {
+      if (scheduledFor.getTime() < now.getTime() - gracePeriodMs) return;
+      const message = messages[Math.min(index, messages.length - 1)];
+      rows.push({
+        user_id: task.user_id,
+        title: message.title,
+        body: message.body(task.title),
+        target_url: "./index.html#/tasks",
+        tag: `task-nudge-${task.id}`,
+        notification_type: "task-nudge",
+        source_id: task.id,
+        dedupe_key: `task-nudge-${task.id}-${todayKey}-${index}`,
+        scheduled_for: scheduledFor.toISOString(),
+        status: "pending"
+      });
+    });
+  }
+
+  return rows;
+}
+
+async function isTaskStillOpen(taskId: string, userId: string) {
+  const { data, error } = await admin
+    .from("tasks")
+    .select("completed")
+    .eq("id", taskId)
+    .eq("user_id", userId)
+    .maybeSingle();
+  if (error) throw error;
+  return Boolean(data && !data.completed);
 }
 
 function safeTimezone(value: string | undefined) {
@@ -295,7 +401,9 @@ async function sendToSubscriptions(
 ) {
   let sent = 0;
   let failed = 0;
-  const ttl = payload.notificationType === "task-start" ? 120 : 3600;
+  const ttl = payload.notificationType === "task-start"
+    ? 120
+    : payload.notificationType === "task-nudge" ? 600 : 3600;
 
   await Promise.all(subscriptions.map(async (subscription) => {
     try {
