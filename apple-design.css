@@ -450,3 +450,263 @@ html[data-mode="dark"] .start-icon { background:rgba(24,18,22,.12); }
   [data-app-view].active-page,.modal-overlay.visible .modal-card,dialog[open] { animation:none !important; }
   :is(button,a,.nav-item,.tasks-spa-item,.subjects-spa-card) { transition-duration:.01ms !important; }
 }
+
+/* Density refinement: more useful content per viewport, without losing touch comfort. */
+@media (min-width:1121px) {
+  .sidebar {
+    width: 246px;
+    padding: 18px 17px 16px;
+  }
+
+  .brand {
+    padding-bottom: 14px;
+  }
+
+  .desktop-navigation {
+    gap: 4px;
+  }
+
+  .nav-item {
+    min-height: 47px;
+    padding-inline: 13px;
+    font-size: .86rem;
+  }
+
+  .nav-icon {
+    width: 29px;
+    height: 29px;
+    font-size: 1rem;
+  }
+
+  .main-content {
+    max-width: 1760px;
+    margin-left: 246px;
+    padding: 18px clamp(22px, 2.35vw, 40px) 48px;
+  }
+
+  .topbar {
+    max-width: 1460px;
+    margin-bottom: 17px;
+    padding-top: 2px;
+  }
+
+  .topbar h1 {
+    font-size: clamp(2rem, 2.65vw, 3rem);
+  }
+
+  .page-section {
+    max-width: 1460px;
+  }
+
+  .now-recommendation {
+    min-height: 96px;
+    margin-bottom: 12px;
+    padding: 15px 18px;
+    border-radius: 24px;
+  }
+
+  .now-recommendation-icon {
+    width: 42px;
+    height: 42px;
+    border-radius: 14px;
+  }
+
+  .now-recommendation h2 {
+    font-size: clamp(1.35rem, 1.8vw, 1.85rem);
+  }
+
+  .hero-grid {
+    grid-template-columns: minmax(0, 1.28fr) minmax(310px, .72fr);
+    gap: 13px;
+  }
+
+  .focus-card {
+    min-height: 390px;
+    padding: clamp(23px, 2.35vw, 34px);
+  }
+
+  .focus-card h2 {
+    max-width: 650px;
+    margin: 7px 0 8px;
+    font-size: clamp(2.45rem, 3.65vw, 3.8rem);
+    line-height: .94;
+  }
+
+  .focus-description {
+    margin-bottom: 0;
+    font-size: .83rem;
+  }
+
+  .energy-checkin {
+    margin-block: 16px 13px;
+  }
+
+  .energy-options button {
+    width: 35px;
+    min-width: 35px;
+    height: 35px;
+    border-radius: 12px;
+  }
+
+  .home-progress-ring {
+    top: 23px;
+    right: 24px;
+    width: 82px;
+    height: 82px;
+  }
+
+  .focus-settings {
+    max-width: 580px;
+    gap: 9px;
+  }
+
+  .focus-settings select {
+    min-height: 46px;
+  }
+
+  .start-focus-button {
+    width: min(100%, 580px);
+    min-height: 54px;
+    margin-top: 10px;
+    border-radius: 17px;
+  }
+
+  .start-icon {
+    width: 34px;
+    height: 34px;
+    border-radius: 11px;
+  }
+
+  .today-summary-card {
+    min-height: 390px;
+  }
+
+  .today-summary-card,
+  .home-next-card,
+  .tasks-card,
+  .upcoming-card,
+  .personal-home-card,
+  .goal-countdown-card,
+  .organizer-card {
+    padding: 18px;
+  }
+
+  .card-heading-row {
+    margin-bottom: 13px;
+  }
+
+  .card-heading-row h2 {
+    font-size: clamp(1.55rem, 2vw, 2rem);
+  }
+
+  .date-pill {
+    width: 45px;
+    height: 45px;
+    border-radius: 14px;
+  }
+
+  .weekly-replay-trigger {
+    min-height: 36px;
+    margin-bottom: 8px;
+  }
+
+  .summary-stat {
+    min-height: 55px;
+    padding: 7px 6px;
+  }
+
+  .summary-stat-icon {
+    width: 34px;
+    height: 34px;
+    border-radius: 11px;
+  }
+
+  .home-next-card {
+    min-height: 220px;
+  }
+}
+
+/* Remove the heavy legacy outlines from summary rows. */
+.today-summary-card .summary-stat {
+  border: 0;
+  border-bottom: 1px solid var(--app-line);
+  border-radius: 12px;
+  background: transparent;
+  box-shadow: none;
+}
+
+.today-summary-card .summary-stat:last-of-type {
+  border-bottom-color: transparent;
+}
+
+html[data-mode="dark"] .today-summary-card .summary-stat {
+  border-bottom-color: var(--app-line);
+  background: transparent;
+}
+
+@media (min-width:761px) and (max-width:1120px) {
+  .topbar h1 {
+    font-size: clamp(2rem, 4.2vw, 2.75rem);
+  }
+
+  .now-recommendation {
+    min-height: 100px;
+    padding-block: 16px;
+  }
+
+  .focus-card {
+    min-height: 410px;
+  }
+
+  .focus-card h2 {
+    font-size: clamp(2.3rem, 4.7vw, 3.25rem);
+  }
+
+  .today-summary-card {
+    min-height: 410px;
+  }
+
+  .summary-stat {
+    min-height: 56px;
+  }
+}
+
+@media (max-width:760px) {
+  .topbar {
+    margin-bottom: 15px;
+  }
+
+  .topbar h1 {
+    font-size: clamp(1.95rem, 9vw, 2.65rem);
+  }
+
+  .now-recommendation {
+    padding: 14px 15px;
+  }
+
+  .focus-card h2 {
+    max-width: 230px;
+    font-size: clamp(2.05rem, 9.5vw, 2.75rem);
+  }
+
+  .home-progress-ring {
+    width: 64px;
+    height: 64px;
+  }
+
+  .energy-checkin {
+    margin-block: 14px 12px;
+  }
+
+  .focus-settings select {
+    min-height: 44px;
+  }
+
+  .start-focus-button {
+    min-height: 52px;
+  }
+
+  .today-summary-card .summary-stat {
+    min-height: 52px;
+  }
+}
