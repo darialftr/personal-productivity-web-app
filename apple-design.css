@@ -827,6 +827,37 @@ html[data-mode="dark"] .today-summary-card .summary-stat {
 
 .subject-spa-row:last-child { border-bottom:0; }
 
+html[data-mode="dark"] .task-item {
+  color:var(--text);
+  border-color:var(--app-line);
+  background:color-mix(in srgb,var(--surface) 88%,var(--surface-soft));
+}
+
+html[data-mode="dark"] .task-item:hover {
+  background:color-mix(in srgb,var(--surface-soft) 82%,var(--surface));
+}
+
+html[data-mode="dark"] .task-content,
+html[data-mode="dark"] .task-content strong { color:var(--text); }
+
+html[data-mode="dark"] .task-content span { color:var(--muted); }
+
+html[data-mode="dark"] .task-checkbox {
+  border-color:color-mix(in srgb,var(--primary-light) 70%,white 12%);
+  background:color-mix(in srgb,var(--surface-soft) 88%,transparent);
+}
+
+html[data-mode="dark"] .task-time {
+  color:color-mix(in srgb,var(--primary) 58%,white);
+  background:color-mix(in srgb,var(--primary) 17%,var(--surface-soft));
+}
+
+html[data-mode="dark"] .subjects-spa-icon {
+  color:#20252a;
+  background:color-mix(in srgb,var(--subject) 34%,#f4f6f8);
+  box-shadow:inset 0 0 0 1px rgba(255,255,255,.28);
+}
+
 .task-content:focus-visible,
 .subject-spa-row:focus-visible {
   outline:3px solid color-mix(in srgb,var(--primary) 24%,transparent);

@@ -1,11 +1,11 @@
 "use strict";
 
-const CACHE_NAME = "itera-shell-v82";
+const CACHE_NAME = "itera-shell-v83";
 const APP_SHELL = [
   "./",
   "./index.html",
   "./styles.css",
-  "./apple-design.css?v=4",
+  "./apple-design.css?v=5",
   "./app.js",
   "./app-shell.js",
   "./schedule-view.js",
