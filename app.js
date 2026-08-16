@@ -4359,22 +4359,16 @@ function renderHomeSummary() {
   const studiedTodayElement = document.getElementById("studiedTodayTime");
   if (studiedTodayElement) studiedTodayElement.textContent = formatMinutes(studiedToday);
 
-  const currentDate = new Date();
-  const mondayOffset = (currentDate.getDay() + 6) % 7;
-  const weekStart = new Date(currentDate);
-  weekStart.setHours(0, 0, 0, 0);
-  weekStart.setDate(currentDate.getDate() - mondayOffset);
-  const weekEnd = new Date(weekStart);
-  weekEnd.setDate(weekStart.getDate() + 6);
-
-  const weeklyTasks = tasks.filter((task) => {
-    if (!task.deadline) return false;
-    const deadline = parseLocalDate(task.deadline);
-    return deadline >= weekStart && deadline <= weekEnd;
+  const dailyTasks = tasks.filter((task) => {
+    if (!isActionableTask(task) || task.type === "goal") return false;
+    const planDate = getTaskPlanDate(task);
+    const completedToday = task.completed && task.completed_at &&
+      formatDateForInput(new Date(task.completed_at)) === todayString;
+    return completedToday || (planDate && planDate <= todayString && !task.completed);
   });
-  const completedCount = weeklyTasks.filter((task) => task.completed).length;
-  const progress = weeklyTasks.length
-    ? Math.round((completedCount / weeklyTasks.length) * 100)
+  const completedCount = dailyTasks.filter((task) => task.completed).length;
+  const progress = dailyTasks.length
+    ? Math.round((completedCount / dailyTasks.length) * 100)
     : 0;
 
   document.getElementById("homeProgressValue").textContent = `${progress}%`;
@@ -4728,6 +4722,10 @@ async function toggleItemCompletion(
         ...task,
 
         completed: newCompletedState,
+
+        completed_at: newCompletedState
+          ? new Date().toISOString()
+          : null,
 
         progress: newCompletedState
           ? 100
