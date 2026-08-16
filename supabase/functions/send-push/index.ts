@@ -44,6 +44,11 @@ type RhythmNotification = {
   status: "pending";
 };
 
+type TaskPlanEntry = {
+  date?: string;
+  time?: string;
+};
+
 Deno.serve(async (request) => {
   if (request.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -179,10 +184,16 @@ async function enqueueServerRhythmReminders() {
       .in("user_id", userIds);
     const preferences = (preferenceResult.data || []) as NotificationPreferenceRow[];
     const timezoneByUser = new Map((preferences || []).map((row) => [row.user_id, row.timezone || "Europe/Bucharest"]));
+    const planByUser = new Map<string, Record<string, TaskPlanEntry>>();
+    await Promise.all(userIds.map(async (userId) => {
+      const { data } = await admin.auth.admin.getUserById(userId);
+      const storedPlan = data?.user?.user_metadata?.itera_task_plan;
+      planByUser.set(userId, storedPlan && typeof storedPlan === "object" ? storedPlan : {});
+    }));
     const now = new Date();
     const gracePeriodMs = 20 * 60 * 1000;
     const morningMessages = [
-      "Bună dimineața. Hai, sus. Uită-te la plan și începe cu primul lucru.",
+      "Bună dimineața. Planul zilei te așteaptă. Alegem primul pas și începem.",
       "Nu așteptăm să apară cheful. Alegem primul task și îi dăm drumul.",
       "Ziua nu se organizează singură. Pune lista în ordine și începe primul pas."
     ];
@@ -244,7 +255,7 @@ async function enqueueServerRhythmReminders() {
       }
     });
 
-    rows.push(...await buildTaskNudges(userIds, timezoneByUser, now, gracePeriodMs));
+    rows.push(...await buildTaskNudges(userIds, timezoneByUser, planByUser, now, gracePeriodMs));
 
     if (!rows.length) return 0;
     const { error } = await admin
@@ -261,12 +272,13 @@ async function enqueueServerRhythmReminders() {
 async function buildTaskNudges(
   userIds: string[],
   timezoneByUser: Map<string, string>,
+  planByUser: Map<string, Record<string, TaskPlanEntry>>,
   now: Date,
   gracePeriodMs: number
 ): Promise<RhythmNotification[]> {
   const { data: taskRows, error } = await admin
     .from("tasks")
-    .select("id,user_id,title,deadline_date,deadline_time,task_type,notes")
+    .select("id,user_id,title,deadline_date,deadline_time,task_type,notes,priority,created_at")
     .in("user_id", userIds)
     .eq("completed", false)
     .not("deadline_date", "is", null)
@@ -275,66 +287,98 @@ async function buildTaskNudges(
 
   const messages = [
     {
-      title: "Hai. Începem acum.",
-      body: (taskTitle: string) => `Pune mâna și începe „${taskTitle}”. Doar primele 10 minute.`
+      title: "E momentul să începi.",
+      body: (taskTitle: string) => `Deschide „${taskTitle}” și ocupă-te doar de primele 10 minute.`
     },
     {
-      title: "Încă este acolo.",
-      body: (taskTitle: string) => `„${taskTitle}” nu se rezolvă singur. Deschide-l și fă primul pas.`
+      title: "Nu mai mutăm momentul.",
+      body: (taskTitle: string) => `„${taskTitle}” este încă în plan. Începe acum, apoi Itera îți păstrează pauza.`
     },
     {
-      title: "Gata cu amânarea.",
-      body: (taskTitle: string) => `Acum este momentul pentru „${taskTitle}”. După ce termini, te poți relaxa fără stres.`
-    },
-    {
-      title: "Ultimul imbold de la Itera",
-      body: (taskTitle: string) => `Hai să închidem „${taskTitle}” astăzi. Începe acum, chiar dacă nu ai chef.`
+      title: "Taskul încă te așteaptă.",
+      body: (taskTitle: string) => `Hai să închidem „${taskTitle}”. După aceea, restul zilei va fi mai ușor.`
     }
   ];
   const fixedPersonalTypes = new Set(["personal", "selfcare", "home", "health", "errand"]);
   const rows: RhythmNotification[] = [];
 
-  for (const task of taskRows || []) {
-    const notes = String(task.notes || "");
-    if (fixedPersonalTypes.has(task.task_type) && !notes.includes("[itera:task-only]")) continue;
-
-    const timezone = safeTimezone(timezoneByUser.get(task.user_id));
+  for (const userId of userIds) {
+    const timezone = safeTimezone(timezoneByUser.get(userId));
     const local = zonedParts(now, timezone);
     const todayKey = `${local.year}-${String(local.month).padStart(2, "0")}-${String(local.day).padStart(2, "0")}`;
-    if (task.deadline_date > todayKey) continue;
+    const storedPlan = planByUser.get(userId) || {};
+    const priorityOrder: Record<string, number> = { high: 0, medium: 1, low: 2 };
+    const candidates = (taskRows || []).filter((task) => {
+      if (task.user_id !== userId) return false;
+      const notes = String(task.notes || "");
+      if (fixedPersonalTypes.has(task.task_type) && !notes.includes("[itera:task-only]")) return false;
+      const entry = storedPlan[String(task.id)];
+      return String(entry?.date || task.deadline_date) <= todayKey;
+    }).sort((first, second) => {
+      const firstPlan = storedPlan[String(first.id)];
+      const secondPlan = storedPlan[String(second.id)];
+      return String(firstPlan?.date || first.deadline_date).localeCompare(String(secondPlan?.date || second.deadline_date)) ||
+        String(firstPlan?.time || "99:99").localeCompare(String(secondPlan?.time || "99:99")) ||
+        (priorityOrder[first.priority] ?? 1) - (priorityOrder[second.priority] ?? 1) ||
+        String(first.created_at || "").localeCompare(String(second.created_at || ""));
+    });
 
-    let scheduledMoments: Date[] = [];
-    if (task.deadline_date < todayKey) {
-      scheduledMoments = ["09:30", "12:30", "16:30", "20:00"]
-        .map((time) => zonedDateToUtc(todayKey, time, timezone));
-    } else if (task.deadline_time) {
-      const start = zonedDateToUtc(todayKey, String(task.deadline_time).slice(0, 5), timezone);
-      scheduledMoments = [10, 35, 75]
-        .map((minutes) => new Date(start.getTime() + minutes * 60000));
-    } else {
-      scheduledMoments = ["10:00", "14:30", "18:30"]
-        .map((time) => zonedDateToUtc(todayKey, time, timezone));
-    }
+    const planned = candidates.filter((task) => {
+      const entry = storedPlan[String(task.id)];
+      return entry?.date === todayKey && Boolean(entry.time);
+    });
+    const plannedIds = new Set(planned.map((task) => String(task.id)));
+    const fallback = candidates.filter((task) => !plannedIds.has(String(task.id)));
 
-    scheduledMoments.forEach((scheduledFor, index) => {
-      if (scheduledFor.getTime() < now.getTime() - gracePeriodMs) return;
-      const message = messages[Math.min(index, messages.length - 1)];
-      rows.push({
-        user_id: task.user_id,
-        title: message.title,
-        body: message.body(task.title),
-        target_url: "./index.html#/tasks",
-        tag: `task-nudge-${task.id}`,
-        notification_type: "task-nudge",
-        source_id: task.id,
-        dedupe_key: `task-nudge-${task.id}-${todayKey}-${index}`,
-        scheduled_for: scheduledFor.toISOString(),
-        status: "pending"
+    planned.forEach((task) => {
+      const entry = storedPlan[String(task.id)];
+      const start = zonedDateToUtc(todayKey, String(entry.time).slice(0, 5), timezone);
+      addTaskMoment(task, new Date(start.getTime() - 60000), -1, todayKey, String(entry.time).slice(0, 5), now, gracePeriodMs, rows, messages);
+      [10, 35].forEach((minutes, index) => {
+        addTaskMoment(task, new Date(start.getTime() + minutes * 60000), index, todayKey, String(entry.time).slice(0, 5), now, gracePeriodMs, rows, messages);
       });
+    });
+
+    const fallbackTimes = ["09:30", "12:30", "16:30", "20:00"];
+    fallback.slice(0, fallbackTimes.length).forEach((task, index) => {
+      const start = zonedDateToUtc(todayKey, fallbackTimes[index], timezone);
+      addTaskMoment(task, new Date(start.getTime() - 60000), -1, todayKey, fallbackTimes[index], now, gracePeriodMs, rows, messages);
+      addTaskMoment(task, new Date(start.getTime() + 20 * 60000), 1, todayKey, fallbackTimes[index], now, gracePeriodMs, rows, messages);
     });
   }
 
   return rows;
+}
+
+function addTaskMoment(
+  task: { id: string; user_id: string; title: string },
+  scheduledFor: Date,
+  messageIndex: number,
+  todayKey: string,
+  startTime: string,
+  now: Date,
+  gracePeriodMs: number,
+  rows: RhythmNotification[],
+  messages: Array<{ title: string; body: (taskTitle: string) => string }>
+) {
+  if (scheduledFor.getTime() < now.getTime() - gracePeriodMs) return;
+  const startReminder = messageIndex < 0;
+  const message = messages[Math.max(0, Math.min(messageIndex, messages.length - 1))];
+  const momentKey = scheduledFor.toISOString().slice(11, 16).replace(":", "");
+  rows.push({
+    user_id: task.user_id,
+    title: startReminder ? "Începe într-un minut" : message.title,
+    body: startReminder ? `Următorul pas este „${task.title}”.` : message.body(task.title),
+    target_url: "./index.html#/tasks",
+    tag: startReminder ? `task-${task.id}` : `task-nudge-${task.id}`,
+    notification_type: startReminder ? "task-start" : "task-nudge",
+    source_id: task.id,
+    dedupe_key: startReminder
+      ? `task-start-${task.id}-${todayKey}-${startTime}`
+      : `task-nudge-${task.id}-${todayKey}-${momentKey}`,
+    scheduled_for: scheduledFor.toISOString(),
+    status: "pending"
+  });
 }
 
 async function isTaskStillOpen(taskId: string, userId: string) {

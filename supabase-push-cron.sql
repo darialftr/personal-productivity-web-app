@@ -29,12 +29,6 @@ end;
 $$;
 
 select cron.schedule(
-  'itera-enqueue-reminders',
-  '* * * * *',
-  $$ select public.enqueue_due_task_notifications(); $$
-);
-
-select cron.schedule(
   'itera-send-push',
   '* * * * *',
   $$
