@@ -379,7 +379,7 @@ function addTaskMoment(
     user_id: task.user_id,
     title: startReminder ? "Începe într-un minut" : message.title,
     body: startReminder ? `Următorul pas este „${task.title}”.` : message.body(task.title),
-    target_url: "./index.html#/tasks",
+    target_url: `./index.html#/tasks?task=${encodeURIComponent(task.id)}&focus=1`,
     tag: startReminder ? `task-${task.id}` : `task-nudge-${task.id}`,
     notification_type: startReminder ? "task-start" : "task-nudge",
     source_id: task.id,

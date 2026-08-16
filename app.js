@@ -262,8 +262,13 @@ function initializeShellViews() {
   IteraShell.registerView("tasks", {
     elementId: "tasksPage",
     route: "/tasks",
-    onEnter() {
+    onEnter(context) {
       IteraTasksView.mount();
+      if (context.params.task) {
+        IteraTasksView.openTask(context.params.task, {
+          startFocus: context.params.focus === "1"
+        });
+      }
     },
     onLeave() {
       IteraTasksView.unmount();
@@ -3878,7 +3883,7 @@ async function scheduleSmartTaskContinuation(date, time) {
     title: "Continui într-un minut",
     body: `${title} · ${time}`,
     scheduledFor,
-    targetUrl: "./index.html#/tasks",
+    targetUrl: `./index.html#/tasks?task=${encodeURIComponent(taskId)}&focus=1`,
     tag: `smart-resume-${taskId}`,
     notificationType: "task-start",
     sourceId: taskId,
@@ -4149,7 +4154,7 @@ async function scheduleTaskContinuation(minutes) {
       title: "Continuă sesiunea de focus",
       body: `E timpul să continui „${reminderTitle}”.`,
       scheduledFor,
-      targetUrl: "./index.html#/tasks",
+      targetUrl: `./index.html#/tasks?task=${encodeURIComponent(taskSnapshot.id)}&focus=1`,
       tag: `task-continuation-${taskSnapshot.id}`,
       notificationType: "task-continuation",
       sourceId: taskSnapshot.id,

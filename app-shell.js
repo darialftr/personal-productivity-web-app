@@ -60,10 +60,12 @@
 
   function viewForRoute(route) {
     const normalized = normalizeRoute(route);
+    const query = String(route || "").split("?")[1] || "";
+    const queryParams = Object.fromEntries(new URLSearchParams(query));
     const exact = routes.get(normalized);
 
     if (exact) {
-      return { name: exact, params: {} };
+      return { name: exact, params: queryParams };
     }
 
     for (const [pattern, name] of routes) {
@@ -79,12 +81,13 @@
       if (match) {
         return {
           name,
-          params: Object.fromEntries(
-            keys.map((key, index) => [
+          params: {
+            ...queryParams,
+            ...Object.fromEntries(keys.map((key, index) => [
               key,
               decodeURIComponent(match[index + 1])
-            ])
-          )
+            ]))
+          }
         };
       }
     }

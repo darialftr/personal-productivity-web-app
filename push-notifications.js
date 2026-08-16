@@ -376,7 +376,7 @@
         scheduledFor: reminder.scheduledFor.getTime() > now
           ? reminder.scheduledFor
           : new Date(now + 3000),
-        targetUrl: "./index.html#/tasks",
+        targetUrl: `./index.html#/tasks?task=${encodeURIComponent(task.id)}&focus=1`,
         tag: `task-${task.id}`,
         notificationType: reminder.minutesBefore === 1 ? "task-start" : "task-reminder",
         sourceId: task.id,

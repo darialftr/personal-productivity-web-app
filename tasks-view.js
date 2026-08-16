@@ -2,7 +2,7 @@
 
 (function (global) {
   let root, user, subjects = [], tasks = [], scheduleItems = [], calendarEvents = [];
-  let filter = "all", search = "", mounted = false, pendingTaskId = null;
+  let filter = "all", search = "", mounted = false, pendingTaskId = null, pendingTaskFocus = false;
   const lifeTaskTypes = ["personal", "selfcare", "home", "health", "errand", "goal"];
   const isLifeTask = type => lifeTaskTypes.includes(type);
   const isFixedPersonalTask = type => ["personal", "selfcare", "home", "health", "errand"].includes(type);
@@ -74,8 +74,10 @@
     render();
     if (pendingTaskId) {
       const task = tasks.find(item => String(item.id) === String(pendingTaskId));
+      const startFocus = pendingTaskFocus;
       pendingTaskId = null;
-      if (task) openDialog(task);
+      pendingTaskFocus = false;
+      if (task) revealTask(task, startFocus);
     }
   }
 
@@ -228,13 +230,30 @@
 
   function closeDialog() { root.querySelector("dialog").close(); }
 
-  function openTask(id) {
+  function openTask(id, { startFocus = false } = {}) {
     pendingTaskId = id;
+    pendingTaskFocus = Boolean(startFocus);
     if (!mounted || !root || !root.querySelector("dialog")) return;
     const task = tasks.find(item => String(item.id) === String(id));
     if (!task) return;
     pendingTaskId = null;
-    openDialog(task);
+    pendingTaskFocus = false;
+    if (startFocus) revealTask(task, true);
+    else openDialog(task);
+  }
+
+  function revealTask(task, startFocus = false) {
+    filter = "all";
+    search = "";
+    render();
+    const row = root.querySelector(`[data-task-row="${CSS.escape(String(task.id))}"]`);
+    row?.classList.add("notification-target");
+    row?.scrollIntoView({ behavior: "smooth", block: "center" });
+    global.setTimeout(() => row?.classList.remove("notification-target"), 2200);
+    if (startFocus && !task.completed && !isPersonalEventLike(task) && !isChecklistTask(task)) {
+      const subject = subjects.find(item => item.id === task.subject_id);
+      global.IteraFocus?.startTask(task, subject);
+    }
   }
 
   function syncTaskFormType(type) {
