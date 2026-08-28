@@ -1,100 +1,57 @@
 "use strict";
 
-/* Canvas notebook: one page in memory, compact vector strokes in local storage.
- * It intentionally never writes during pointer movement. */
+/* Deliberately canvas-first: one active page, rAF drawing and debounced compact data saves. */
 (function (global) {
   let root, canvas, ctx, subject, user, notebook, activePage = 0, tool = "pen", color = "#4d4260", width = 3;
-  let drawing = null, redo = [], saveTimer = null, frame = 0, mounted = false;
+  let drawing = null, redo = [], saveTimer = 0, frame = 0, mounted = false, zoom = 1, pan = { x: 0, y: 0 };
+  const pointers = new Map(), images = new Map();
   const key = () => `itera:notebook:${user?.id || "guest"}:${subject?.id || "subject"}`;
   const templates = { lined: "Liniat", grid: "Pătrățele", blank: "Simplu" };
+  const fresh = () => ({ version: 2, pages: [{ template: "lined", strokes: [], elements: [] }], updatedAt: Date.now() });
+  const page = () => notebook.pages[activePage];
 
-  function freshNotebook() { return { version: 1, pages: [{ template: "lined", strokes: [] }], updatedAt: Date.now() }; }
-  function load() {
-    try { const saved = JSON.parse(localStorage.getItem(key()) || "null"); return saved?.pages?.length ? saved : freshNotebook(); }
-    catch (_) { return freshNotebook(); }
-  }
-  function persistSoon() {
-    clearTimeout(saveTimer);
-    saveTimer = global.setTimeout(() => {
-      notebook.updatedAt = Date.now();
-      try { localStorage.setItem(key(), JSON.stringify(notebook)); updateSaveStatus("Salvat pe dispozitiv"); }
-      catch (_) { updateSaveStatus("Spațiul local este plin"); }
-    }, 650);
-  }
-  function updateSaveStatus(text) { root?.querySelector("[data-notebook-status]")?.replaceChildren(text); }
+  function load() { try { const saved = JSON.parse(localStorage.getItem(key()) || "null"); return saved?.pages?.length ? saved : fresh(); } catch (_) { return fresh(); } }
+  function saveSoon() { clearTimeout(saveTimer); updateStatus("Se salvează…"); saveTimer = global.setTimeout(() => { notebook.updatedAt = Date.now(); try { localStorage.setItem(key(), JSON.stringify(notebook)); updateStatus("Salvat pe dispozitiv"); } catch (_) { updateStatus("Spațiul local este plin"); } }, 700); }
+  function updateStatus(text) { root?.querySelector("[data-notebook-status]")?.replaceChildren(text); }
 
   async function mount(subjectId) {
-    root = document.getElementById("notebookViewRoot");
-    if (!root) return;
-    mounted = true;
+    root = document.getElementById("notebookViewRoot"); if (!root) return; mounted = true;
     root.innerHTML = '<div class="subjects-spa-state">Se deschide caietul…</div>';
-    const sessionResult = await supabaseClient.auth.getSession();
-    user = sessionResult.data?.session?.user;
+    const { data: { session } } = await supabaseClient.auth.getSession(); user = session?.user;
     if (!user || !mounted) return;
     const { data } = await supabaseClient.from("subjects").select("id,name,color").eq("id", subjectId).eq("user_id", user.id).maybeSingle();
     if (!data || !mounted) { root.innerHTML = '<div class="subjects-spa-state">Caietul nu a fost găsit.</div>'; return; }
-    subject = data; notebook = load(); activePage = 0; redo = [];
-    render();
+    subject = data; notebook = load(); notebook.pages.forEach(item => { item.strokes ||= []; item.elements ||= []; }); activePage = 0; redo = []; zoom = 1; pan = { x: 0, y: 0 }; render();
   }
-  function unmount() { clearTimeout(saveTimer); if (notebook) { try { localStorage.setItem(key(), JSON.stringify(notebook)); } catch (_) {} } mounted = false; root = canvas = ctx = null; drawing = null; }
-
+  function unmount() { clearTimeout(saveTimer); if (notebook) try { localStorage.setItem(key(), JSON.stringify(notebook)); } catch (_) {} mounted = false; root = canvas = ctx = drawing = null; pointers.clear(); }
   function desk() { return '<svg viewBox="0 0 48 48" aria-hidden="true"><path d="M12 18h24v10H12zM16 28l-3 12m19-12 3 12M12 40h8m8 0h8M19 13h10" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>'; }
+
   function render() {
-    const page = notebook.pages[activePage];
-    root.innerHTML = `<a class="subjects-spa-back" href="#/subjects/${subject.id}">← ${escape(subject.name)}</a>
-      <section class="notebook-shell" style="--subject:${subject.color || "#f3a9c5"}">
-        <header class="notebook-head"><div class="notebook-title-icon">${desk()}</div><div><p class="eyebrow">Caietul tău</p><h2>${escape(subject.name)}</h2></div><small data-notebook-status>Pregătit</small></header>
-        <div class="notebook-toolbar" role="toolbar" aria-label="Instrumente caiet">
-          <button data-tool="pen" class="active" aria-label="Pix">✎</button><button data-tool="highlighter" aria-label="Marker">▰</button><button data-tool="eraser" aria-label="Gumă">⌫</button>
-          <button data-undo aria-label="Anulează">↶</button><button data-redo aria-label="Refă">↷</button>
-          <input data-color type="color" value="${color}" aria-label="Culoare"><input data-width type="range" min="1" max="12" value="${width}" aria-label="Grosime">
-          <select data-template aria-label="Tip pagină">${Object.entries(templates).map(([id, label]) => `<option value="${id}" ${page.template === id ? "selected" : ""}>${label}</option>`).join("")}</select>
-        </div>
-        <div class="notebook-paper-wrap"><canvas class="notebook-paper" aria-label="Scrie cu Apple Pencil sau degetul"></canvas></div>
-        <footer class="notebook-footer"><button data-prev ${activePage === 0 ? "disabled" : ""}>‹ Pagina anterioară</button><span>Pagina ${activePage + 1} din ${notebook.pages.length}</span><button data-next ${activePage === notebook.pages.length - 1 ? "disabled" : ""}>Pagina următoare ›</button><button class="primary-small-button" data-add-page>+ Pagină</button></footer>
-      </section>`;
+    const current = page();
+    root.innerHTML = `<a class="subjects-spa-back" href="#/subjects/${subject.id}">← ${escape(subject.name)}</a><section class="notebook-shell" style="--subject:${subject.color || "#f3a9c5"}">
+      <header class="notebook-head"><div class="notebook-title-icon">${desk()}</div><div><p class="eyebrow">Caietul tău</p><h2>${escape(subject.name)}</h2></div><small data-notebook-status>Pregătit</small></header>
+      <div class="notebook-toolbar" role="toolbar" aria-label="Instrumente caiet"><button data-tool="pen" class="active" aria-label="Pix">✎</button><button data-tool="highlighter" aria-label="Marker">▰</button><button data-tool="eraser" aria-label="Gumă">⌫</button><button data-tool="text" aria-label="Text">T</button><button data-add-image aria-label="Adaugă poză">▧</button><button data-undo aria-label="Anulează">↶</button><button data-redo aria-label="Refă">↷</button><button data-zoom-out aria-label="Micșorează">−</button><span class="notebook-zoom" data-zoom>100%</span><button data-zoom-in aria-label="Mărește">+</button><input data-color type="color" value="${color}" aria-label="Culoare"><input data-width type="range" min="1" max="12" value="${width}" aria-label="Grosime"><select data-template aria-label="Tip pagină">${Object.entries(templates).map(([id, label]) => `<option value="${id}" ${current.template === id ? "selected" : ""}>${label}</option>`).join("")}</select><input data-image-input type="file" accept="image/*" hidden></div>
+      <p class="notebook-gesture-hint">Scrie cu Apple Pencil. Folosește două degete pentru zoom și deplasare.</p><div class="notebook-paper-wrap"><canvas class="notebook-paper" aria-label="Caiet pentru scris cu Apple Pencil"></canvas></div>
+      <footer class="notebook-footer"><button data-prev ${activePage === 0 ? "disabled" : ""}>‹ Pagina anterioară</button><span>Pagina ${activePage + 1} din ${notebook.pages.length}</span><button data-next ${activePage === notebook.pages.length - 1 ? "disabled" : ""}>Pagina următoare ›</button><button class="primary-small-button" data-add-page>+ Pagină</button></footer></section>`;
     canvas = root.querySelector("canvas"); ctx = canvas.getContext("2d", { desynchronized: true }); resize(); bind();
   }
-  function resize() {
-    const rect = canvas.getBoundingClientRect(), ratio = Math.min(global.devicePixelRatio || 1, 2);
-    canvas.width = Math.max(1, Math.round(rect.width * ratio)); canvas.height = Math.max(1, Math.round(rect.height * ratio));
-    ctx.setTransform(ratio, 0, 0, ratio, 0, 0); redraw();
-  }
-  function page() { return notebook.pages[activePage]; }
-  function background() {
-    const rect = canvas.getBoundingClientRect(); ctx.clearRect(0, 0, rect.width, rect.height); ctx.fillStyle = "#fffdf9"; ctx.fillRect(0, 0, rect.width, rect.height);
-    ctx.strokeStyle = "rgba(142, 169, 207, .28)"; ctx.lineWidth = 1;
-    if (page().template === "lined") for (let y = 42; y < rect.height; y += 28) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(rect.width, y); ctx.stroke(); }
-    if (page().template === "grid") for (let x = 20; x < rect.width; x += 20) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, rect.height); ctx.stroke(); };
-    if (page().template === "grid") for (let y = 20; y < rect.height; y += 20) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(rect.width, y); ctx.stroke(); }
-    ctx.strokeStyle = "rgba(224, 109, 136, .26)"; ctx.beginPath(); ctx.moveTo(44, 0); ctx.lineTo(44, rect.height); ctx.stroke();
-  }
-  function drawStroke(stroke) {
-    if (!stroke.points?.length) return; const rect = canvas.getBoundingClientRect();
-    ctx.save(); ctx.globalAlpha = stroke.tool === "highlighter" ? .24 : 1; ctx.globalCompositeOperation = stroke.tool === "eraser" ? "destination-out" : "source-over";
-    ctx.strokeStyle = stroke.color; ctx.lineWidth = stroke.width; ctx.lineCap = ctx.lineJoin = "round"; ctx.beginPath();
-    stroke.points.forEach((point, index) => { const x = point[0] * rect.width, y = point[1] * rect.height; index ? ctx.lineTo(x, y) : ctx.moveTo(x, y); }); ctx.stroke(); ctx.restore();
-  }
-  function redraw() { if (!ctx || !canvas) return; background(); page().strokes.forEach(drawStroke); }
+  function resize() { if (!canvas) return; const ratio = Math.min(global.devicePixelRatio || 1, 2), w = canvas.clientWidth, h = canvas.clientHeight; canvas.width = Math.max(1, Math.round(w * ratio)); canvas.height = Math.max(1, Math.round(h * ratio)); ctx.setTransform(ratio, 0, 0, ratio, 0, 0); redraw(); }
+  function paintPaper() { const w = canvas.clientWidth, h = canvas.clientHeight; ctx.clearRect(0, 0, w, h); ctx.fillStyle = "#fffdf9"; ctx.fillRect(0, 0, w, h); ctx.strokeStyle = "rgba(142,169,207,.28)"; ctx.lineWidth = 1; if (page().template === "lined") for (let y = 42; y < h; y += 28) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke(); } if (page().template === "grid") { for (let x = 20; x < w; x += 20) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke(); } for (let y = 20; y < h; y += 20) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke(); } } ctx.strokeStyle = "rgba(224,109,136,.26)"; ctx.beginPath(); ctx.moveTo(44, 0); ctx.lineTo(44, h); ctx.stroke(); }
+  function drawStroke(stroke) { if (!stroke.points?.length) return; const w = canvas.clientWidth, h = canvas.clientHeight; ctx.save(); ctx.globalAlpha = stroke.tool === "highlighter" ? .24 : 1; ctx.strokeStyle = stroke.color; ctx.lineWidth = stroke.width; ctx.lineCap = ctx.lineJoin = "round"; ctx.beginPath(); stroke.points.forEach((p, i) => i ? ctx.lineTo(p[0] * w, p[1] * h) : ctx.moveTo(p[0] * w, p[1] * h)); ctx.stroke(); ctx.restore(); }
+  function drawElement(element) { const w = canvas.clientWidth, h = canvas.clientHeight; if (element.type === "text") { ctx.save(); ctx.fillStyle = element.color || color; ctx.font = `${element.size || 21}px Manrope, sans-serif`; ctx.fillText(element.text, element.x * w, element.y * h); ctx.restore(); return; } if (element.type === "image") { let image = images.get(element.src); if (!image) { image = new Image(); image.onload = queueRedraw; image.src = element.src; images.set(element.src, image); } if (image.complete) ctx.drawImage(image, element.x * w, element.y * h, element.w * w, element.h * h); } }
+  function redraw() { if (!ctx || !canvas) return; paintPaper(); page().strokes.forEach(drawStroke); page().elements.forEach(drawElement); }
   function queueRedraw() { if (frame) return; frame = requestAnimationFrame(() => { frame = 0; redraw(); }); }
+  function setZoom(next) { zoom = Math.max(1, Math.min(3.2, next)); canvas.style.transform = `translate(${pan.x}px,${pan.y}px) scale(${zoom})`; root.querySelector("[data-zoom]").textContent = `${Math.round(zoom * 100)}%`; }
   function point(event) { const rect = canvas.getBoundingClientRect(); return [Number(((event.clientX - rect.left) / rect.width).toFixed(4)), Number(((event.clientY - rect.top) / rect.height).toFixed(4))]; }
-  function begin(event) {
-    if (event.pointerType === "mouse" && event.button !== 0) return; event.preventDefault(); canvas.setPointerCapture(event.pointerId); redo = [];
-    drawing = { tool, color, width: tool === "highlighter" ? width * 3 : width, points: [point(event)] }; page().strokes.push(drawing); queueRedraw();
-  }
-  function move(event) { if (!drawing || !canvas.hasPointerCapture(event.pointerId)) return; event.preventDefault(); const next = point(event), last = drawing.points.at(-1); if (Math.abs(next[0] - last[0]) + Math.abs(next[1] - last[1]) < .002) return; drawing.points.push(next); queueRedraw(); }
-  function finish(event) { if (!drawing) return; if (drawing.points.length === 1) drawing.points.push([drawing.points[0][0] + .001, drawing.points[0][1] + .001]); drawing = null; persistSoon(); }
-  function bind() {
-    root.querySelectorAll("[data-tool]").forEach(button => button.addEventListener("click", () => { tool = button.dataset.tool; root.querySelectorAll("[data-tool]").forEach(item => item.classList.toggle("active", item === button)); }));
-    root.querySelector("[data-color]").addEventListener("input", e => { color = e.target.value; }); root.querySelector("[data-width]").addEventListener("input", e => { width = Number(e.target.value); });
-    root.querySelector("[data-template]").addEventListener("change", e => { page().template = e.target.value; persistSoon(); redraw(); });
-    root.querySelector("[data-undo]").addEventListener("click", () => { const item = page().strokes.pop(); if (item) { redo.push(item); persistSoon(); redraw(); } });
-    root.querySelector("[data-redo]").addEventListener("click", () => { const item = redo.pop(); if (item) { page().strokes.push(item); persistSoon(); redraw(); } });
-    root.querySelector("[data-prev]").addEventListener("click", () => { activePage--; render(); }); root.querySelector("[data-next]").addEventListener("click", () => { activePage++; render(); });
-    root.querySelector("[data-add-page]").addEventListener("click", () => { notebook.pages.push({ template: page().template, strokes: [] }); activePage = notebook.pages.length - 1; persistSoon(); render(); });
-    canvas.addEventListener("pointerdown", begin, { passive: false }); canvas.addEventListener("pointermove", move, { passive: false }); canvas.addEventListener("pointerup", finish); canvas.addEventListener("pointercancel", finish);
-    global.addEventListener("resize", resize, { once: true });
-  }
-  function escape(value) { return String(value || "").replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;"); }
+  function begin(event) { if (event.pointerType === "mouse" && event.button !== 0) return; event.preventDefault(); canvas.setPointerCapture(event.pointerId); pointers.set(event.pointerId, { x: event.clientX, y: event.clientY }); if (pointers.size === 2) { if (drawing) page().strokes.pop(); drawing = null; const [a,b] = [...pointers.values()]; canvas.dataset.gestureDistance = String(Math.hypot(a.x-b.x,a.y-b.y)); canvas.dataset.gestureZoom = String(zoom); canvas.dataset.gestureCenter = `${(a.x+b.x)/2},${(a.y+b.y)/2}`; canvas.dataset.gesturePan = `${pan.x},${pan.y}`; return; } if (pointers.size > 1) return; if (tool === "text") return addText(event); if (tool === "eraser") return eraseAt(point(event)); redo = []; drawing = { tool, color, width: tool === "highlighter" ? width * 3 : width, points: [point(event)] }; page().strokes.push(drawing); queueRedraw(); }
+  function move(event) { if (!pointers.has(event.pointerId)) return; event.preventDefault(); pointers.set(event.pointerId, { x: event.clientX, y: event.clientY }); if (pointers.size >= 2) { const [a,b] = [...pointers.values()], distance = Math.hypot(a.x-b.x,a.y-b.y), base = Number(canvas.dataset.gestureDistance || distance), [centerX,centerY] = String(canvas.dataset.gestureCenter || "0,0").split(",").map(Number), [panX,panY] = String(canvas.dataset.gesturePan || "0,0").split(",").map(Number); pan = { x: panX + ((a.x+b.x)/2-centerX), y: panY + ((a.y+b.y)/2-centerY) }; setZoom(Number(canvas.dataset.gestureZoom || zoom) * distance / base); return; } if (tool === "eraser") return eraseAt(point(event)); if (!drawing || !canvas.hasPointerCapture(event.pointerId)) return; const next = point(event), last = drawing.points.at(-1); if (Math.abs(next[0]-last[0])+Math.abs(next[1]-last[1]) < .0015) return; drawing.points.push(next); queueRedraw(); }
+  function finish(event) { pointers.delete(event.pointerId); if (!drawing) return; if (drawing.points.length === 1) drawing.points.push([drawing.points[0][0]+.001,drawing.points[0][1]+.001]); drawing = null; saveSoon(); }
+  function eraseAt(at) { const radius = Math.max(.012, width / Math.max(canvas.clientWidth, canvas.clientHeight) * 3); const removed = page().strokes.filter(stroke => stroke.points.some(p => Math.hypot(p[0]-at[0], p[1]-at[1]) < radius)); if (!removed.length) return; page().strokes = page().strokes.filter(stroke => !removed.includes(stroke)); redo.push(...removed); queueRedraw(); saveSoon(); }
+  function addText(event) { const at = point(event), input = document.createElement("input"); input.className = "notebook-text-editor"; input.placeholder = "Scrie aici"; input.style.left = `${event.clientX}px`; input.style.top = `${event.clientY}px`; document.body.append(input); input.focus(); const commit = () => { const text = input.value.trim(); input.remove(); if (text) { page().elements.push({ type:"text", text, x:at[0], y:at[1], color, size:Math.max(16, width * 5) }); saveSoon(); redraw(); } }; input.addEventListener("keydown", e => { if (e.key === "Enter") commit(); if (e.key === "Escape") input.remove(); }); input.addEventListener("blur", commit, { once:true }); }
+  async function addImage(file) { if (!file) return; updateStatus("Pregătesc poza…"); const source = await fileToDataUrl(file); const image = await loadImage(source); const max = 1600, ratio = Math.min(1, max / Math.max(image.width, image.height)); const off = document.createElement("canvas"); off.width = Math.max(1, Math.round(image.width * ratio)); off.height = Math.max(1, Math.round(image.height * ratio)); off.getContext("2d").drawImage(image,0,0,off.width,off.height); const src = off.toDataURL("image/jpeg", .8); const aspect = off.height / off.width; page().elements.push({ type:"image", src, x:.12, y:.14, w:.76, h:Math.min(.7,.76 * aspect) }); saveSoon(); redraw(); }
+  function fileToDataUrl(file) { return new Promise((resolve,reject) => { const reader = new FileReader(); reader.onload = () => resolve(reader.result); reader.onerror = reject; reader.readAsDataURL(file); }); }
+  function loadImage(src) { return new Promise((resolve,reject) => { const image = new Image(); image.onload = () => resolve(image); image.onerror = reject; image.src = src; }); }
+  function bind() { root.querySelectorAll("[data-tool]").forEach(button => button.addEventListener("click", () => { tool = button.dataset.tool; root.querySelectorAll("[data-tool]").forEach(item => item.classList.toggle("active", item === button)); })); root.querySelector("[data-color]").addEventListener("input", e => color = e.target.value); root.querySelector("[data-width]").addEventListener("input", e => width = Number(e.target.value)); root.querySelector("[data-template]").addEventListener("change", e => { page().template = e.target.value; saveSoon(); redraw(); }); root.querySelector("[data-undo]").addEventListener("click", () => { const item = page().strokes.pop() || page().elements.pop(); if (item) { redo.push(item); saveSoon(); redraw(); } }); root.querySelector("[data-redo]").addEventListener("click", () => { const item = redo.pop(); if (item) { (item.type ? page().elements : page().strokes).push(item); saveSoon(); redraw(); } }); root.querySelector("[data-zoom-in]").addEventListener("click", () => setZoom(zoom+.2)); root.querySelector("[data-zoom-out]").addEventListener("click", () => setZoom(zoom-.2)); root.querySelector("[data-add-image]").addEventListener("click", () => root.querySelector("[data-image-input]").click()); root.querySelector("[data-image-input]").addEventListener("change", e => { void addImage(e.target.files?.[0]); e.target.value = ""; }); root.querySelector("[data-prev]").addEventListener("click", () => { activePage--; zoom=1;pan={x:0,y:0};render(); }); root.querySelector("[data-next]").addEventListener("click", () => { activePage++; zoom=1;pan={x:0,y:0};render(); }); root.querySelector("[data-add-page]").addEventListener("click", () => { notebook.pages.push({template:page().template,strokes:[],elements:[]}); activePage=notebook.pages.length-1; zoom=1;pan={x:0,y:0};saveSoon();render(); }); canvas.addEventListener("pointerdown",begin,{passive:false}); canvas.addEventListener("pointermove",move,{passive:false}); canvas.addEventListener("pointerup",finish); canvas.addEventListener("pointercancel",finish); global.addEventListener("resize",resize,{once:true}); }
+  function escape(value) { return String(value || "").replaceAll("&","&amp;").replaceAll("<","&lt;").replaceAll(">","&gt;").replaceAll('"',"&quot;"); }
   global.IteraNotebookView = Object.freeze({ mount, unmount });
 })(window);

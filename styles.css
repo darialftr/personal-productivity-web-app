@@ -7075,6 +7075,14 @@ a {
   box-shadow: 0 8px 30px rgba(35, 25, 30, 0.18);
 }
 
+.pdf-annotation-canvas { position:absolute; z-index:4; top:22px; left:50%; transform:translateX(-50%); background:transparent !important; box-shadow:none !important; touch-action:none; }
+.pdf-annotation-canvas[hidden],.pdf-ink-tools[hidden] { display:none; }
+.pdf-study-actions { align-items:center; }
+.pdf-study-actions [data-pdf-ink-toggle].active,.pdf-ink-tools [data-pdf-ink-tool].active { color:#fff; background:var(--primary); border-color:var(--primary); }
+.pdf-ink-tools { display:inline-flex; align-items:center; gap:5px; padding:3px; border-radius:11px; background:var(--primary-soft); }
+.pdf-ink-tools button { min-height:31px; padding:0 8px; border:1px solid var(--border); border-radius:8px; color:var(--text); background:var(--surface); font:inherit; font-size:.72rem; }
+.pdf-ink-tools input { width:32px; height:31px; padding:2px; border:0; background:transparent; }
+
 .pdf-viewer-shell > .subjects-spa-error {
   margin: 0;
   padding: 6px 14px;

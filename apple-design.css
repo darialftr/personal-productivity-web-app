@@ -145,7 +145,10 @@ html[data-mode="dark"] .nav-item.active { color: color-mix(in srgb, var(--primar
 .notebook-toolbar input[type="range"] { width:92px; accent-color:var(--primary); }
 .notebook-toolbar select { min-height:42px; padding:0 10px; border:1px solid var(--app-line); border-radius:12px; color:var(--text); background:var(--surface); }
 .notebook-paper-wrap { height:min(70vh,720px); min-height:440px; padding:12px; overflow:hidden; border:1px solid var(--app-line); border-top:0; background:color-mix(in srgb,var(--subject) 5%,var(--background)); }
-.notebook-paper { display:block; width:100%; height:100%; border-radius:5px; box-shadow:0 10px 25px rgba(65,47,56,.12); touch-action:none; }
+.notebook-paper { display:block; width:100%; height:100%; border-radius:5px; box-shadow:0 10px 25px rgba(65,47,56,.12); touch-action:none; transform-origin:top left; will-change:transform; }
+.notebook-gesture-hint { margin:7px 0; color:var(--muted); font-size:.72rem; }
+.notebook-zoom { min-width:45px; color:var(--muted); font-size:.75rem; font-weight:700; text-align:center; }
+.notebook-text-editor { position:fixed; z-index:1200; min-width:160px; padding:8px 10px; border:2px solid var(--primary); border-radius:10px; color:#2b2230; background:#fffdf9; box-shadow:0 12px 28px rgba(40,25,35,.2); font:500 16px Manrope,sans-serif; transform:translate(5px,5px); }
 .notebook-footer { display:flex; align-items:center; justify-content:flex-end; gap:10px; padding:12px; border:1px solid var(--app-line); border-top:0; border-radius:0 0 18px 18px; background:var(--app-raised); }
 .notebook-footer span { margin-right:auto; color:var(--muted); font-size:.78rem; }
 .notebook-footer button:not(.primary-small-button) { min-height:38px; padding:0 10px; border:0; border-radius:10px; color:var(--text); background:transparent; cursor:pointer; }

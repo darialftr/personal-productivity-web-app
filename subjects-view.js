@@ -23,6 +23,11 @@
   let focusTimerListener = null;
   let pdfNoteDirty = false;
   let pdfLibraryPromise = null;
+  let pdfInkEnabled = false;
+  let pdfInkTool = "pen";
+  let pdfInkStroke = null;
+  let pdfInkSaveTimer = null;
+  let pdfInkFrame = null;
 
   function loadPdfLibrary() {
     if (global.pdfjsLib) return Promise.resolve(global.pdfjsLib);
@@ -273,12 +278,15 @@
           <div class="pdf-study-actions">
             <button type="button" data-pdf-bookmark>◇ Marchează pagina</button>
             <button type="button" data-pdf-note-toggle>✎ Notiță</button>
+            <button type="button" data-pdf-ink-toggle>✎ Scrie pe PDF</button>
+            <span class="pdf-ink-tools" data-pdf-ink-tools hidden><button type="button" data-pdf-ink-tool="pen" class="active">Pix</button><button type="button" data-pdf-ink-tool="eraser">Gumă</button><input type="color" data-pdf-ink-color value="#4d4260" aria-label="Culoare pix"></span>
             <button type="button" data-pdf-task>+ Repetă pagina</button>
           </div>
           <div class="pdf-study-layout">
             <div class="pdf-canvas-wrap">
               <button type="button" class="pdf-edge-nav pdf-edge-prev" data-pdf-edge-prev aria-label="Pagina anterioară">‹</button>
               <canvas data-pdf-canvas></canvas>
+              <canvas class="pdf-annotation-canvas" data-pdf-annotation-canvas hidden aria-label="Adnotări pe PDF"></canvas>
               <div class="pdf-loading-state" data-pdf-loading hidden><span></span><strong>Deschid documentul…</strong></div>
               <button type="button" class="pdf-edge-nav pdf-edge-next" data-pdf-edge-next aria-label="Pagina următoare">›</button>
             </div>
@@ -568,6 +576,12 @@
     viewer.querySelector("[data-pdf-bookmark]").addEventListener("click", togglePdfBookmark);
     viewer.querySelector("[data-pdf-note-save]").addEventListener("click", savePdfNote);
     viewer.querySelector("[data-pdf-note]").addEventListener("input", () => { pdfNoteDirty = true; });
+    viewer.querySelector("[data-pdf-ink-toggle]").addEventListener("click", () => togglePdfInk());
+    viewer.querySelectorAll("[data-pdf-ink-tool]").forEach(button => button.addEventListener("click", () => {
+      pdfInkTool = button.dataset.pdfInkTool;
+      viewer.querySelectorAll("[data-pdf-ink-tool]").forEach(item => item.classList.toggle("active", item === button));
+    }));
+    setupPdfInkCanvas(viewer.querySelector("[data-pdf-annotation-canvas]"));
     viewer.querySelector("[data-pdf-task]").addEventListener("click", createPdfReviewTask);
     viewer.querySelector("[data-pdf-focus-pill]").addEventListener("click", () => {
       global.IteraFocus?.togglePause();
@@ -715,6 +729,7 @@
       pdfRenderTask = renderTask;
       await renderTask.promise;
       if (expectedLoadToken !== pdfLoadToken || documentSnapshot !== pdfDocument) return;
+      resizePdfInkCanvas();
       viewer.querySelector("[data-pdf-page]").value = pageNumber;
       viewer.querySelector("[data-pdf-zoom]").textContent = `${Math.round(pdfScale * 100)}%`;
       viewer.querySelector("[data-pdf-note-page]").textContent = String(pageNumber);
@@ -735,6 +750,92 @@
       pdfRendering = false;
       if (pdfRenderTask === currentRenderTask) pdfRenderTask = null;
     }
+  }
+
+  function pdfInkKey() {
+    return `itera:pdf-ink:${user?.id || "guest"}:${currentPdfPath || "document"}:${pdfPage}`;
+  }
+
+  function getPdfInkStrokes() {
+    try { return JSON.parse(localStorage.getItem(pdfInkKey()) || "[]"); } catch (_) { return []; }
+  }
+
+  function savePdfInkSoon() {
+    clearTimeout(pdfInkSaveTimer);
+    pdfInkSaveTimer = setTimeout(() => {
+      const canvas = root?.querySelector("[data-pdf-annotation-canvas]");
+      if (!canvas) return;
+      try { localStorage.setItem(pdfInkKey(), JSON.stringify(canvas._iteraStrokes || [])); }
+      catch (_) { global.showToast?.("Nu mai este spațiu local pentru adnotări.", "!"); }
+    }, 700);
+  }
+
+  function resizePdfInkCanvas() {
+    const viewer = root?.querySelector(".subject-pdf-viewer");
+    const source = viewer?.querySelector("[data-pdf-canvas]");
+    const canvas = viewer?.querySelector("[data-pdf-annotation-canvas]");
+    if (!source || !canvas) return;
+    const ratio = Math.min(global.devicePixelRatio || 1, 2);
+    canvas.width = source.width;
+    canvas.height = source.height;
+    canvas.style.width = `${source.clientWidth}px`;
+    canvas.style.height = `${source.clientHeight}px`;
+    canvas._iteraRatio = ratio;
+    canvas._iteraStrokes = getPdfInkStrokes();
+    renderPdfInk(canvas);
+  }
+
+  function renderPdfInk(canvas) {
+    const context = canvas.getContext("2d");
+    context.clearRect(0, 0, canvas.width, canvas.height);
+    (canvas._iteraStrokes || []).forEach(stroke => {
+      if (!stroke.points?.length) return;
+      context.save(); context.strokeStyle = stroke.color; context.lineWidth = stroke.width; context.lineCap = context.lineJoin = "round"; context.beginPath();
+      stroke.points.forEach((point, index) => index ? context.lineTo(point[0] * canvas.width, point[1] * canvas.height) : context.moveTo(point[0] * canvas.width, point[1] * canvas.height));
+      context.stroke(); context.restore();
+    });
+  }
+
+  function togglePdfInk() {
+    const viewer = root?.querySelector(".subject-pdf-viewer");
+    const canvas = viewer?.querySelector("[data-pdf-annotation-canvas]");
+    if (!viewer || !canvas) return;
+    pdfInkEnabled = !pdfInkEnabled;
+    canvas.hidden = !pdfInkEnabled;
+    viewer.querySelector("[data-pdf-ink-tools]").hidden = !pdfInkEnabled;
+    const toggle = viewer.querySelector("[data-pdf-ink-toggle]");
+    toggle.classList.toggle("active", pdfInkEnabled);
+    toggle.textContent = pdfInkEnabled ? "✓ Scrii pe PDF" : "✎ Scrie pe PDF";
+    if (pdfInkEnabled) resizePdfInkCanvas();
+  }
+
+  function setupPdfInkCanvas(canvas) {
+    if (!canvas || canvas.dataset.bound) return;
+    canvas.dataset.bound = "true";
+    const point = event => { const rect = canvas.getBoundingClientRect(); return [(event.clientX - rect.left) / rect.width, (event.clientY - rect.top) / rect.height]; };
+    const erase = at => {
+      const radius = .025;
+      const strokes = canvas._iteraStrokes || [];
+      const next = strokes.filter(stroke => !stroke.points.some(value => Math.hypot(value[0] - at[0], value[1] - at[1]) < radius));
+      if (next.length !== strokes.length) { canvas._iteraStrokes = next; renderPdfInk(canvas); savePdfInkSoon(); }
+    };
+    canvas.addEventListener("pointerdown", event => {
+      if (!pdfInkEnabled || (event.pointerType === "mouse" && event.button !== 0)) return;
+      event.preventDefault(); canvas.setPointerCapture(event.pointerId);
+      if (pdfInkTool === "eraser") { erase(point(event)); return; }
+      const color = root?.querySelector("[data-pdf-ink-color]")?.value || "#4d4260";
+      pdfInkStroke = { color, width: 4 * (canvas.width / Math.max(canvas.clientWidth, 1)), points: [point(event)] };
+      canvas._iteraStrokes ||= []; canvas._iteraStrokes.push(pdfInkStroke);
+    }, { passive: false });
+    canvas.addEventListener("pointermove", event => {
+      if (!pdfInkEnabled || !canvas.hasPointerCapture(event.pointerId)) return;
+      event.preventDefault(); if (pdfInkTool === "eraser") return erase(point(event));
+      if (!pdfInkStroke) return; const next = point(event), last = pdfInkStroke.points.at(-1);
+      if (Math.abs(next[0] - last[0]) + Math.abs(next[1] - last[1]) < .0015) return;
+      pdfInkStroke.points.push(next); if (!pdfInkFrame) pdfInkFrame = requestAnimationFrame(() => { pdfInkFrame = null; renderPdfInk(canvas); });
+    }, { passive: false });
+    const finish = event => { if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId); if (pdfInkStroke) { pdfInkStroke = null; savePdfInkSoon(); } };
+    canvas.addEventListener("pointerup", finish); canvas.addEventListener("pointercancel", finish);
   }
 
   async function closePdfViewer(viewer) {
