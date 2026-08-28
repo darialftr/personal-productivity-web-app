@@ -10,7 +10,10 @@ const ITERA_URL = "https://darialftr.github.io/personal-productivity-web-app/";
 async function requestJson(url, method = "GET", body = null, token = null) {
   const request = new Request(url);
   request.method = method;
-  request.headers = { apikey: PUBLISHABLE_KEY, Authorization: `Bearer ${token || PUBLISHABLE_KEY}` };
+  request.headers = { apikey: PUBLISHABLE_KEY };
+  // Publishable keys are opaque values, not user JWTs. Only data requests
+  // receive a Bearer access token after the person has signed in.
+  if (token) request.headers.Authorization = `Bearer ${token}`;
   if (body) { request.headers["Content-Type"] = "application/json"; request.body = JSON.stringify(body); }
   return request.loadJSON();
 }
