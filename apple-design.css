@@ -28,7 +28,8 @@ html[data-mode="dark"] {
   --app-shadow-soft: 0 10px 34px rgba(0, 0, 0, .2);
 }
 
-html, body { min-height: 100%; background: var(--app-canvas); }
+html, body { min-height: 100%; max-width:100%; overflow-x:hidden; background: var(--app-canvas); }
+body { overscroll-behavior-x:none; }
 
 body {
   background:
@@ -95,6 +96,7 @@ button, a, [role="button"] { touch-action: manipulation; }
 }
 html[data-mode="dark"] .nav-item.active { color: color-mix(in srgb, var(--primary) 70%, white); box-shadow: inset 0 1px 0 rgba(255,255,255,.05); }
 .nav-icon { display: grid; width: 25px; height: 25px; place-items: center; border-radius: 9px; font-size: .92rem; }
+.subject-nav-icon svg { width:22px; height:22px; }
 .nav-item.active .nav-icon { background: color-mix(in srgb, var(--primary) 15%, transparent); }
 
 .sidebar-bottom { padding-top: 15px; }
@@ -107,6 +109,50 @@ html[data-mode="dark"] .nav-item.active { color: color-mix(in srgb, var(--primar
   box-shadow: var(--app-shadow-soft);
 }
 .mini-profile .avatar { width: 36px; height: 36px; border-radius: 12px; }
+
+/* The profile control sits above the sidebar's decorative layers on touch devices. */
+.sidebar-bottom, .mini-profile { position: relative; z-index: 30; pointer-events: auto; }
+#openAccountSettingsButton { position: relative; z-index: 31; min-width: 44px; min-height: 44px; touch-action: manipulation; }
+
+.school-widgets { display:grid; grid-template-columns:1.25fr 1fr 1fr; gap:18px; margin:22px 0; }
+.school-widget { min-height:164px; padding:20px; cursor:pointer; }
+.assignments-widget { cursor:default; }
+.school-widget .card-heading-row { margin-bottom:12px; }
+.school-widget h2 { margin:3px 0 6px; font-family:"DM Serif Display",serif; font-size:1.35rem; }
+.school-widget-summary { margin:0 0 10px; color:var(--muted); font-size:.8rem; font-weight:700; }
+.school-widget-list { display:grid; gap:7px; }
+.school-widget-list button { display:flex; align-items:center; gap:8px; min-width:0; padding:4px 0; border:0; color:var(--text); background:transparent; text-align:left; font:inherit; cursor:pointer; }
+.school-widget-list i { width:9px; height:9px; flex:0 0 auto; border-radius:50%; background:var(--subject); }
+.school-widget-list span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-size:.82rem; }
+.school-widget-empty,.school-widget-break-copy { margin:13px 0 0; color:var(--muted); font-size:.83rem; line-height:1.45; }
+.school-widget-class { display:flex; align-items:center; gap:10px; }
+.school-widget-class>span { display:grid; width:42px; height:42px; place-items:center; border-radius:13px; background:color-mix(in srgb,currentColor 13%,transparent); }
+.school-widget-class svg { width:30px; height:30px; }
+.school-widget-class p { margin:0; color:var(--muted); font-size:.8rem; }
+.school-widget-countdown { display:block; margin-top:16px; color:var(--primary-dark); font-size:.82rem; }
+
+.notebook-shell { max-width:980px; margin:0 auto; }
+.notebook-head { display:flex; align-items:center; gap:12px; margin:0 0 14px; }
+.notebook-head h2 { margin:0; font-family:"DM Serif Display",serif; }
+.notebook-head p { margin:0; }
+.notebook-head small { margin-left:auto; color:var(--muted); font-size:.72rem; }
+.notebook-title-icon { display:grid; width:48px; height:48px; place-items:center; border-radius:15px; color:var(--subject); background:color-mix(in srgb,var(--subject) 14%,transparent); }
+.notebook-title-icon svg { width:34px; height:34px; }
+.notebook-toolbar { display:flex; align-items:center; flex-wrap:wrap; gap:8px; padding:10px; border:1px solid var(--app-line); border-radius:18px 18px 0 0; background:var(--app-raised); }
+.notebook-toolbar button { width:42px; height:42px; border:1px solid var(--app-line); border-radius:12px; color:var(--text); background:transparent; cursor:pointer; font-size:1rem; }
+.notebook-toolbar button.active { color:#fff; background:var(--primary); border-color:var(--primary); }
+.notebook-toolbar input[type="color"] { width:42px; height:42px; padding:4px; border:1px solid var(--app-line); border-radius:12px; background:transparent; }
+.notebook-toolbar input[type="range"] { width:92px; accent-color:var(--primary); }
+.notebook-toolbar select { min-height:42px; padding:0 10px; border:1px solid var(--app-line); border-radius:12px; color:var(--text); background:var(--surface); }
+.notebook-paper-wrap { height:min(70vh,720px); min-height:440px; padding:12px; overflow:hidden; border:1px solid var(--app-line); border-top:0; background:color-mix(in srgb,var(--subject) 5%,var(--background)); }
+.notebook-paper { display:block; width:100%; height:100%; border-radius:5px; box-shadow:0 10px 25px rgba(65,47,56,.12); touch-action:none; }
+.notebook-footer { display:flex; align-items:center; justify-content:flex-end; gap:10px; padding:12px; border:1px solid var(--app-line); border-top:0; border-radius:0 0 18px 18px; background:var(--app-raised); }
+.notebook-footer span { margin-right:auto; color:var(--muted); font-size:.78rem; }
+.notebook-footer button:not(.primary-small-button) { min-height:38px; padding:0 10px; border:0; border-radius:10px; color:var(--text); background:transparent; cursor:pointer; }
+.subjects-spa-icon svg { width:30px; height:30px; }
+
+@media (max-width: 900px) { .school-widgets { grid-template-columns:1fr 1fr; } .assignments-widget { grid-column:1/-1; } }
+@media (max-width: 620px) { .school-widgets { grid-template-columns:1fr; gap:12px; } .assignments-widget { grid-column:auto; } .school-widget { min-height:0; } .notebook-paper-wrap { min-height:360px; height:58vh; padding:7px; } .notebook-toolbar { gap:6px; } .notebook-toolbar select { max-width:120px; } .notebook-footer { flex-wrap:wrap; } .notebook-footer span { width:100%; order:-1; } }
 
 .main-content {
   width: auto;
@@ -344,11 +390,12 @@ html[data-mode="dark"] .start-icon { background:rgba(24,18,22,.12); }
 @media (min-width:761px) and (max-width:1120px) {
   .sidebar { width:84px; padding-inline:11px; }
   .brand { justify-content:center; padding-inline:0; }
-  .brand>div:last-child,.nav-item>span:last-child,.mini-profile-text,.mini-profile .icon-button { display:none; }
+  .brand>div:last-child,.nav-item>span:last-child,.mini-profile-text { display:none; }
   .desktop-navigation { align-items:center; }
   .nav-item { width:54px; min-height:50px; justify-content:center; padding:0; border-radius:17px; }
   .nav-icon { width:30px; height:30px; font-size:1.02rem; }
   .mini-profile { justify-content:center; padding:8px; }
+  #openAccountSettingsButton { display:grid; place-items:center; position:absolute; right:-7px; bottom:-7px; width:44px; height:44px; border:2px solid var(--surface); border-radius:15px; background:var(--primary-soft); box-shadow:var(--app-shadow-soft); }
   .main-content { margin-left:84px; padding-inline:22px; }
   .hero-grid { grid-template-columns:minmax(0,1.08fr) minmax(285px,.92fr); }
   .focus-card { padding:26px; }

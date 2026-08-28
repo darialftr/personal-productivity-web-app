@@ -97,6 +97,7 @@ async function initializeApp() {
   const initialSession = await globalThis.IteraAuthSessionPromise;
   if (!initialSession) return;
   currentUser = initialSession.user;
+  globalThis.IteraCurrentUserId = currentUser.id;
   hydrateDailyEnergy();
   applyAccountPreferences();
   initializeShellViews();
@@ -137,6 +138,7 @@ async function initializeApp() {
     resetEnergyForNewDay();
     updateCurrentDate();
     renderTodayTimeline();
+    renderSchoolWidgets();
     renderNowRecommendation();
     maybePromptEnergy();
   }, 60000);
@@ -296,6 +298,14 @@ function initializeShellViews() {
     onLeave() {
       IteraSubjectsView.unmount();
     }
+  });
+
+  IteraShell.registerView("notebook", {
+    elementId: "notebookPage",
+    route: "/subjects/:id/notebook",
+    navigationName: "subjects",
+    onEnter(context) { IteraNotebookView.mount(context.params.id); },
+    onLeave() { IteraNotebookView.unmount(); }
   });
 
   IteraShell.registerView("grades", {
@@ -4293,6 +4303,7 @@ function renderAll() {
   updateCurrentDate();
   renderHomeSummary();
   renderTodayTimeline();
+  renderSchoolWidgets();
   renderTodayTasks();
   renderPersonalHub();
   renderUpcomingEvents();
@@ -4303,6 +4314,36 @@ function renderAll() {
   renderRecoveryCard();
   renderNotifications();
   updateAppBadge();
+}
+
+function schoolDeskIcon() {
+  return '<svg viewBox="0 0 48 48" aria-hidden="true"><path d="M9 18h30l-3 13H12L9 18Z" fill="currentColor" opacity=".22"/><path d="M12 18h24v10H12zM16 28l-3 12M32 28l3 12M12 40h8M28 40h8M19 13h10" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+}
+
+function renderSchoolWidgets() {
+  const assignments = document.getElementById("schoolAssignmentsWidget");
+  const nowWidget = document.getElementById("schoolNowWidget");
+  const nextWidget = document.getElementById("schoolNextWidget");
+  if (!assignments || !nowWidget || !nextWidget || !globalThis.IteraTimetable) return;
+  const today = formatDateForInput(new Date());
+  const relevant = tasks.filter(task => !task.completed && task.deadline === today && ["homework", "test", "project", "study"].includes(task.type || task.task_type));
+  const tests = relevant.filter(task => (task.type || task.task_type) === "test").length;
+  assignments.innerHTML = relevant.length ? `<p class="school-widget-summary">${relevant.length - tests} teme · ${tests} teste</p><div class="school-widget-list">${relevant.slice(0, 3).map(task => `<button data-school-task="${task.id}"><i style="--subject:${subjects.find(subject => subject.id === task.subject_id)?.color || "#f3a9c5"}"></i><span>${escapeHtml(task.title)}</span></button>`).join("")}</div>` : '<div class="school-widget-empty">Nimic de predat azi. Ai puțin spațiu pentru tine.</div>';
+  assignments.querySelectorAll("[data-school-task]").forEach(button => button.addEventListener("click", () => {
+    globalThis.location.hash = `#/tasks?task=${encodeURIComponent(button.dataset.schoolTask)}`;
+  }));
+  const status = globalThis.IteraTimetable.status(scheduleItems, subjects);
+  if (status.state === "class") {
+    const current = status.current;
+    nowWidget.innerHTML = `<p class="card-kicker">Acum</p><div class="school-widget-class"><span style="color:${current.subject?.color || "#d97895"}">${schoolDeskIcon()}</span><div><h2>${escapeHtml(current.subject?.name || current.title)}</h2><p>Se termină la ${String(current.end_time).slice(0, 5)}</p></div></div><strong class="school-widget-countdown">${status.minutesRemaining} min rămase</strong>`;
+  } else if (status.state === "break") {
+    nowWidget.innerHTML = `<p class="card-kicker">${status.isLongBreak ? "Pauză lungă" : "Pauză"}</p><h2>${globalThis.IteraTimetable.toTime(status.breakStart)}–${globalThis.IteraTimetable.toTime(status.breakEnd)}</h2><p class="school-widget-break-copy">Respiră puțin. Următoarea oră începe curând.</p><strong class="school-widget-countdown">${status.minutesRemaining} min rămase</strong>`;
+  } else {
+    nowWidget.innerHTML = `<p class="card-kicker">Program</p><h2>${status.next ? "Înainte de prima oră" : "Școala s-a încheiat"}</h2><p class="school-widget-break-copy">${status.next ? "Pregătește-te în ritmul tău." : "Ai terminat pentru azi."}</p>`;
+  }
+  const next = status.next;
+  nextWidget.innerHTML = next ? `<p class="card-kicker">Următoarea oră</p><div class="school-widget-class"><span style="color:${next.subject?.color || "#d97895"}">${schoolDeskIcon()}</span><div><h2>${escapeHtml(next.subject?.name || next.title)}</h2><p>Începe la ${String(next.start_time).slice(0, 5)}${next.location ? ` · ${escapeHtml(next.location)}` : ""}</p></div></div>` : '<p class="card-kicker">Program</p><h2>Gata pentru azi</h2><p class="school-widget-break-copy">Nu mai ai ore în orar.</p>';
+  [nowWidget, nextWidget].forEach(widget => widget.addEventListener("click", () => openPage("schedule")));
 }
 
 function getTodayEvents() {
@@ -4587,6 +4628,9 @@ function initializeLaunchActions() {
       startRecommendedFocusSession();
     } else if (action === "plan") {
       openDayPlanner();
+    } else if (action === "morning") {
+      openModal("morningBriefModal");
+      document.getElementById("morningTaskCapture")?.focus();
     }
 
     params.delete("action");

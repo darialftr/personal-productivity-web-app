@@ -12,6 +12,10 @@
   const PDF_PROGRESS_METADATA_KEY = "itera_pdf_progress";
   const PDF_ANNOTATIONS_METADATA_KEY = "itera_pdf_annotations";
   let currentPdfSubjectId = null;
+
+  function schoolDeskIcon() {
+    return '<svg viewBox="0 0 48 48" focusable="false"><path d="M9 18h30l-3 13H12L9 18Z" fill="currentColor" opacity=".22"/><path d="M12 18h24v10H12z" fill="none" stroke="currentColor" stroke-width="3" stroke-linejoin="round"/><path d="M16 28l-3 12M32 28l3 12M12 40h8M28 40h8M19 13h10" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round"/></svg>';
+  }
   let currentPdfTitle = "Document";
   let pdfProgressSaveTimer = null;
   let pendingPdfProgress = null;
@@ -90,7 +94,7 @@
 
   function subjectCard(subject) {
     return `<a class="subjects-spa-card" href="#/subjects/${subject.id}" data-subject-order="${subject.id}" data-order-key="${subject.id}" style="--subject:${subject.color || "#f3a9c5"}">
-      <span class="subjects-spa-icon">${escapeHtml(subject.icon || subject.name.charAt(0))}</span>
+      <span class="subjects-spa-icon" aria-hidden="true">${schoolDeskIcon()}</span>
       <div><p class="eyebrow">Materie</p><h3>${escapeHtml(subject.name)}</h3>
       <small>${escapeHtml(subject.teacher_name || "Fără profesor")}${subject.room ? ` · ${escapeHtml(subject.room)}` : ""}</small></div>
       <span class="subjects-spa-arrow">›</span><span class="reorder-grip" data-reorder-handle aria-label="Mută materia">⋮⋮</span></a>`;
@@ -176,7 +180,7 @@
         <div><p class="eyebrow">Materia ta</p><h2>${escapeHtml(subject.name)}</h2>
         ${subject.teacher_name ? `<p>${escapeHtml(subject.teacher_name)}${subject.room ? ` · ${escapeHtml(subject.room)}` : ""}</p>` : '<button class="subject-inline-edit" data-edit-subject>+ Adaugă profesorul și sala</button>'}</div>
         <div class="subject-hero-actions"><button class="subject-edit-button" data-edit-subject>Editează materia</button>
-        <button class="primary-small-button" data-study-timer>▶ Start focus</button></div>
+        <button class="secondary-button" data-open-notebook>✎ Caiet</button><button class="primary-small-button" data-study-timer>▶ Start focus</button></div>
       </section>
       <dialog class="subject-focus-dialog" data-subject-focus-dialog>
         <form data-subject-focus-form>
@@ -301,6 +305,9 @@
       });
     };
     root.querySelector("[data-study-timer]").addEventListener("click", () => focusDialog.showModal());
+    root.querySelector("[data-open-notebook]").addEventListener("click", () => {
+      global.location.hash = `#/subjects/${encodeURIComponent(id)}/notebook`;
+    });
     root.querySelector("[data-close-subject-focus]").addEventListener("click", () => focusDialog.close());
     focusDialog.addEventListener("click", event => {
       if (event.target === focusDialog) focusDialog.close();

@@ -294,9 +294,9 @@
     }
     const jobs = [];
     const positiveStarts = [
-      "Bună dimineața. Azi nu trebuie să faci totul dintr-odată.",
-      "Un început calm, apoi primul pas. Itera este cu tine.",
-      "Ai o zi nouă în față. Alege ce contează și începem ușor."
+      "Bună dimineața 🌷 Ce ai nevoie să termini astăzi?",
+      "Bună dimineața 🌷 Notează repede ce contează pentru azi.",
+      "Bună dimineața 🌷 Începem cu lista mică de azi?"
     ];
     for (let offset = 0; offset < 2; offset += 1) {
       const day = new Date();
@@ -304,13 +304,13 @@
       const dateKey = new Date(day.getTime() - day.getTimezoneOffset() * 60000).toISOString().slice(0, 10);
       const weekend = [0, 6].includes(day.getDay());
       const morning = new Date(day);
-      morning.setHours(weekend ? 9 : 7, weekend ? 0 : 15, 0, 0);
-      if (morning.getTime() > Date.now()) {
+      morning.setHours(7, 30, 0, 0);
+      if (!weekend && morning.getTime() > Date.now()) {
         jobs.push(queueReminder({
-          title: "O zi bună începe blând",
+          title: "Good morning 🌷",
           body: positiveStarts[offset % positiveStarts.length],
           scheduledFor: morning,
-          targetUrl: "./index.html#/",
+          targetUrl: "./index.html?action=morning#/",
           tag: `morning-${dateKey}`,
           notificationType: "morning-rhythm",
           dedupeKey: `morning-${session.user.id}-${dateKey}`

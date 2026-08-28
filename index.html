@@ -6,7 +6,7 @@
 
   <meta
     name="viewport"
-    content="width=device-width, initial-scale=1.0, viewport-fit=cover"
+    content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
   >
 
   <meta
@@ -98,7 +98,7 @@
   <span>Task-uri</span>
 </a>
         <button class="nav-item" data-page="subjects">
-          <span class="nav-icon">◇</span>
+          <span class="nav-icon subject-nav-icon" aria-hidden="true"><svg viewBox="0 0 48 48"><path d="M12 18h24v10H12zM16 28l-3 12m19-12 3 12M12 40h8m8 0h8M19 13h10" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
           <span>Materii</span>
         </button>
 
@@ -336,6 +336,15 @@
           </article>
         </section>
 
+        <section class="school-widgets" aria-label="Ziua la școală">
+          <article class="soft-card school-widget assignments-widget">
+            <div class="card-heading-row"><div><p class="card-kicker">Astăzi</p><h2>Teme + teste</h2></div><button class="text-button" data-open-page="tasks">Vezi toate</button></div>
+            <div id="schoolAssignmentsWidget"></div>
+          </article>
+          <article class="soft-card school-widget" id="schoolNowWidget"></article>
+          <article class="soft-card school-widget" id="schoolNextWidget"></article>
+        </section>
+
         <section class="content-grid">
           <article class="soft-card tasks-card">
             <div class="card-heading-row">
@@ -499,6 +508,10 @@
       >
         <div id="subjectDetailViewRoot"></div>
       </section>
+
+      <section class="page-section" id="notebookPage" data-app-view="notebook">
+        <div id="notebookViewRoot"></div>
+      </section>
       </div>
 
     </main>
@@ -547,7 +560,7 @@
       </div>
       <nav class="mobile-more-grid">
         <a href="#/schedule" data-mobile-route><span>▦</span><strong>Orar</strong></a>
-        <a href="#/subjects" data-mobile-route><span>◇</span><strong>Materii</strong></a>
+        <a href="#/subjects" data-mobile-route><span class="subject-nav-icon" aria-hidden="true"><svg viewBox="0 0 48 48"><path d="M12 18h24v10H12zM16 28l-3 12m19-12 3 12M12 40h8m8 0h8M19 13h10" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/></svg></span><strong>Materii</strong></a>
         <a href="#/grades" data-mobile-route><span>☆</span><strong>Note</strong></a>
         <a href="#/admission" data-mobile-route><span>⌁</span><strong>Admitere</strong></a>
         <button type="button" id="mobileAccountSettingsButton"><span>&#9881;</span><strong>Setări</strong></button>
@@ -1197,6 +1210,7 @@
 <script defer src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script defer src="supabase-config.js"></script>
 <script defer src="task-planning.js"></script>
+<script defer src="timetable-engine.js"></script>
 <script defer src="push-notifications.js"></script>
 <script defer src="auth-guard.js"></script>
 <script defer src="app-shell.js"></script>
@@ -1204,6 +1218,7 @@
 <script defer src="tasks-view.js"></script>
 <script defer src="calendar-view.js"></script>
 <script defer src="subjects-view.js"></script>
+<script defer src="notebook-view.js"></script>
 <script defer src="progress-view.js"></script>
 <script defer src="app.js"></script>
 </body>

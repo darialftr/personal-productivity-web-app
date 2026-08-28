@@ -237,18 +237,18 @@
   }
 
   function calculateSlots(draft) {
-    const start = minutesFromTime(draft.startTime);
-    return draft.lessons.map((_, index) => {
-      const slotStart = start + index * (Number(draft.lessonMinutes) + Number(draft.breakMinutes));
-      const slotEnd = slotStart + Number(draft.lessonMinutes);
-      return { start: timeFromMinutes(slotStart), end: timeFromMinutes(slotEnd), startMinutes: slotStart, endMinutes: slotEnd };
-    });
+    const settings = global.IteraTimetable?.getSettings(user?.id) || {};
+    return global.IteraTimetable?.buildSlots({
+      startTime: draft.startTime,
+      lessons: draft.lessons,
+      settings: { ...settings, lessonMinutes: Number(draft.lessonMinutes), breakMinutes: Number(draft.breakMinutes) }
+    }) || [];
   }
 
   function builderSummary(draft, slots = calculateSlots(draft)) {
     if (!draft.lessons.length) return '<strong>Începi la ' + escapeHtml(draft.startTime) + '</strong><span>Adaugă materiile ca să estimăm finalul.</span>';
     const finish = slots.at(-1)?.end || draft.startTime;
-    return `<strong>${draft.lessons.length} ${draft.lessons.length === 1 ? "oră" : "ore"} · termini în jur de ${finish}</strong><span>Calculat cu ore de ${draft.lessonMinutes} min și pauze de ${draft.breakMinutes} min.</span>`;
+    return `<strong>${draft.lessons.length} ${draft.lessons.length === 1 ? "oră" : "ore"} · termini în jur de ${finish}</strong><span>Ore de ${draft.lessonMinutes} min, pauze de ${draft.breakMinutes} min și pauzele lungi incluse automat.</span>`;
   }
 
   async function saveBuiltDay(event) {
