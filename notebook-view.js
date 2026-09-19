@@ -20,6 +20,7 @@
     pan = { x: 0, y: 0 },
     saveVersion = 0,
     autoShapes = false,
+    shapeTool = "",
     saving = false,
     saveQueued = false,
     penPointerId = null;
@@ -89,78 +90,124 @@
         item.background ||= "#fffdf9";
         item.orientation ||= "portrait";
       });
-      localStorage.setItem(key(), JSON.stringify(notebook));
       render();
     }
     updateStatus("Sincronizat");
   }
-  /*
-   * Saving is deliberately separated from the drawing/input pipeline.
-   * Nothing here disables the canvas or waits before another Pencil stroke.
-   */
-  function saveSoon() {
+  let saveIdleHandle = 0;
+
+  function cancelScheduledSave() {
     clearTimeout(saveTimer);
+    saveTimer = 0;
+    if (
+      saveIdleHandle &&
+      typeof global.cancelIdleCallback === "function"
+    ) {
+      global.cancelIdleCallback(saveIdleHandle);
+      saveIdleHandle = 0;
+    }
+  }
+
+  function isUserInteracting() {
+    return (
+      pointers.size > 0 ||
+      drawing !== null ||
+      penPointerId !== null
+    );
+  }
+
+  function saveSoon() {
+    cancelScheduledSave();
+    saveQueued = true;
     updateStatus("Se salvează…");
     saveTimer = global.setTimeout(() => {
-      void persist();
-    }, 700);
+      saveTimer = 0;
+      if (isUserInteracting()) {
+        saveSoon();
+        return;
+      }
+      const run = () => {
+        saveIdleHandle = 0;
+        if (isUserInteracting()) {
+          saveSoon();
+          return;
+        }
+        void persist();
+      };
+      if (typeof global.requestIdleCallback === "function") {
+        saveIdleHandle = global.requestIdleCallback(run, { timeout: 5000 });
+      } else {
+        global.setTimeout(run, 0);
+      }
+    }, 900);
   }
+
   async function persist() {
     if (!notebook || !user || !subject) return;
-    /*
-     * If a save is already running, do not block the user.
-     * Just mark another save as needed. The current interaction
-     * remains completely independent from persistence.
-     */
+    if (isUserInteracting()) {
+      saveQueued = true;
+      return;
+    }
     if (saving) {
       saveQueued = true;
       return;
     }
+
     saving = true;
     do {
       saveQueued = false;
+      if (isUserInteracting()) {
+        saveQueued = true;
+        break;
+      }
+
       const version = ++saveVersion;
-      /*
-       * Snapshot the current notebook only for persistence.
-       * Drawing itself never waits for this operation.
-       */
       notebook.updatedAt = Date.now();
+
       let snapshot;
       try {
-        snapshot = JSON.parse(JSON.stringify(notebook));
+        snapshot =
+          typeof structuredClone === "function"
+            ? structuredClone(notebook)
+            : JSON.parse(JSON.stringify(notebook));
       } catch (_) {
         saving = false;
         updateStatus("Eroare la pregătirea salvării");
         return;
       }
-      try {
-        localStorage.setItem(key(), JSON.stringify(snapshot));
-      } catch (_) {
-        updateStatus("Spațiul local este plin");
-        saving = false;
-        return;
+
+      if (isUserInteracting()) {
+        saveQueued = true;
+        break;
       }
-      const { error } = await supabaseClient
-        .from("notebooks")
-        .upsert(
-          {
-            user_id: user.id,
-            subject_id: subject.id,
-            content: snapshot,
-            updated_at: new Date().toISOString(),
-          },
-          {
-            onConflict: "user_id,subject_id",
-          }
-        );
-      /*
-       * Only report this save as the final state if no newer
-       * save was requested while Supabase was processing.
-       */
+
+      let error = null;
+      try {
+        const result = await supabaseClient
+          .from("notebooks")
+          .upsert(
+            {
+              user_id: user.id,
+              subject_id: subject.id,
+              content: snapshot,
+              updated_at: new Date().toISOString(),
+            },
+            { onConflict: "user_id,subject_id" }
+          );
+        error = result.error || null;
+      } catch (_) {
+        error = new Error("Supabase save failed");
+      }
+
+      if (version !== saveVersion) {
+        saveQueued = true;
+      }
+
       if (
         mounted &&
         version === saveVersion &&
-        !saveQueued
+        !saveQueued &&
+        !isUserInteracting()
       ) {
         updateStatus(
           error
@@ -172,15 +219,23 @@
       saveQueued &&
       notebook &&
       user &&
-      subject
+      subject &&
+      !isUserInteracting()
     );
+
     saving = false;
+
+    if (saveQueued && mounted && !isUserInteracting()) {
+      saveSoon();
+    }
   }
+
   function updateStatus(text) {
     root
       ?.querySelector("[data-notebook-status]")
       ?.replaceChildren(text);
   }
+
   async function mount(subjectId) {
     root = document.getElementById("notebookViewRoot");
     if (!root) return;
@@ -218,21 +273,17 @@
     render();
     void loadCloud();
   }
+
   function unmount() {
-    clearTimeout(saveTimer);
+    cancelScheduledSave();
     if (notebook) {
-      try {
-        localStorage.setItem(
-          key(),
-          JSON.stringify(notebook)
-        );
-      } catch (_) {}
       void persist();
     }
     mounted = false;
     root = canvas = ctx = drawing = null;
     pointers.clear();
   }
+
   function desk() {
     return `
       <svg
@@ -250,6 +301,7 @@
       </svg>
     `;
   }
+
   /*
    * Toolbar icons.
    * The visual UI uses icons only, while aria-label/title preserves
@@ -341,6 +393,7 @@
       </svg>
     `,
   };
+
   function render() {
     const current = page();
     root.innerHTML = `
@@ -366,6 +419,7 @@
             Pregătit
           </small>
         </header>
+
         <div
           class="notebook-toolbar"
           role="toolbar"
@@ -379,6 +433,7 @@
           >
             ${icons.gel}
           </button>
+
           <button
             data-tool="ballpoint"
             title="Pix"
@@ -386,6 +441,7 @@
           >
             ${icons.ballpoint}
           </button>
+
           <button
             data-tool="pencil"
             title="Creion"
@@ -393,6 +449,7 @@
           >
             ${icons.pencil}
           </button>
+
           <button
             data-tool="highlighter"
             title="Marker"
@@ -400,6 +457,7 @@
           >
             ${icons.highlighter}
           </button>
+
           <button
             data-tool="eraser"
             title="Radieră"
@@ -407,6 +465,7 @@
           >
             ${icons.eraser}
           </button>
+
           <button
             data-tool="text"
             title="Text"
@@ -414,6 +473,7 @@
           >
             ${icons.text}
           </button>
+
           <button
             data-auto-shapes
             aria-pressed="${autoShapes}"
@@ -422,6 +482,7 @@
           >
             ${icons.shapes}
           </button>
+
           <button
             data-add-image
             title="Adaugă imagine"
@@ -429,6 +490,7 @@
           >
             ${icons.image}
           </button>
+
           <button
             data-undo
             title="Anulează"
@@ -436,6 +498,7 @@
           >
             ${icons.undo}
           </button>
+
           <button
             data-redo
             title="Refă"
@@ -443,6 +506,7 @@
           >
             ${icons.redo}
           </button>
+
           <button
             data-zoom-out
             title="Micșorează"
@@ -450,6 +514,7 @@
           >
             ${icons.zoomOut}
           </button>
+
           <span
             class="notebook-zoom"
             data-zoom
@@ -457,6 +522,7 @@
           >
             100%
           </span>
+
           <button
             data-zoom-in
             title="Mărește"
@@ -464,6 +530,7 @@
           >
             ${icons.zoomIn}
           </button>
+
           <input
             data-color
             type="color"
@@ -471,6 +538,7 @@
             aria-label="Culoare"
             title="Culoare"
           >
+
           <span
             class="notebook-swatches"
             aria-label="Paletă culori"
@@ -481,7 +549,10 @@
                   <button
                     type="button"
                     data-swatch="${value}"
-                    style="--swatch:${value}"
+                    style="--swatch:${value};background:${value};"
+                    aria-pressed="${
+                      color.toLowerCase() === value.toLowerCase()
+                    }"
                     aria-label="Culoare ${value}"
                     title="Culoare ${value}"
                   ></button>
@@ -489,6 +560,7 @@
               )
               .join("")}
           </span>
+
           <input
             data-width
             type="range"
@@ -498,6 +570,19 @@
             aria-label="Grosime"
             title="Grosime"
           >
+                    <select
+            data-shape
+            aria-label="Formă"
+            title="Formă"
+          >
+            <option value="">Formă liberă</option>
+            <option value="line">Linie</option>
+            <option value="arrow">Săgeată</option>
+            <option value="rectangle">Dreptunghi</option>
+            <option value="ellipse">Elipsă</option>
+            <option value="triangle">Triunghi</option>
+          </select>
+
           <select
             data-template
             aria-label="Tip pagină"
@@ -516,6 +601,7 @@
               )
               .join("")}
           </select>
+
           <select
             data-orientation
             aria-label="Orientare pagină"
@@ -534,6 +620,7 @@
               A4 peisaj
             </option>
           </select>
+
           <select
             data-background
             aria-label="Culoarea paginii"
@@ -545,6 +632,7 @@
             <option value="#eef7f5">Mentă</option>
             <option value="#fff4e8">Piersică</option>
           </select>
+
           <input
             data-image-input
             type="file"
@@ -552,10 +640,12 @@
             hidden
           >
         </div>
+
         <p class="notebook-gesture-hint">
           Apple Pencil scrie; un deget deplasează pagina,
           două degete fac zoom.
         </p>
+
         <div class="notebook-paper-wrap">
           <canvas
             class="notebook-paper ${
@@ -566,6 +656,7 @@
             aria-label="Caiet pentru scris cu Apple Pencil"
           ></canvas>
         </div>
+
         <footer class="notebook-footer">
           <button
             data-prev
@@ -573,9 +664,11 @@
           >
             ‹ Pagina anterioară
           </button>
+
           <span>
             Pagina ${activePage + 1} din ${notebook.pages.length}
           </span>
+
           <button
             data-next
             ${
@@ -586,6 +679,7 @@
           >
             Pagina următoare ›
           </button>
+
           <button
             class="primary-small-button"
             data-add-page
@@ -595,29 +689,37 @@
         </footer>
       </section>
     `;
+
     canvas = root.querySelector("canvas");
     ctx = canvas.getContext("2d", {
       desynchronized: true,
     });
+
     resize();
     bind();
   }
+
   function resize() {
     if (!canvas) return;
+
     const ratio = Math.min(
       global.devicePixelRatio || 1,
       2
     );
+
     const w = canvas.clientWidth;
     const h = canvas.clientHeight;
+
     canvas.width = Math.max(
       1,
       Math.round(w * ratio)
     );
+
     canvas.height = Math.max(
       1,
       Math.round(h * ratio)
     );
+
     ctx.setTransform(
       ratio,
       0,
@@ -626,18 +728,26 @@
       0,
       0
     );
+
     redraw();
   }
+
   function paintPaper() {
     const w = canvas.clientWidth;
     const h = canvas.clientHeight;
+
     ctx.clearRect(0, 0, w, h);
+
     ctx.fillStyle =
       page().background || "#fffdf9";
+
     ctx.fillRect(0, 0, w, h);
+
     ctx.strokeStyle =
       "rgba(142,169,207,.28)";
+
     ctx.lineWidth = 1;
+
     if (page().template === "lined") {
       for (let y = 42; y < h; y += 28) {
         ctx.beginPath();
@@ -646,6 +756,7 @@
         ctx.stroke();
       }
     }
+
     if (page().template === "grid") {
       for (let x = 20; x < w; x += 20) {
         ctx.beginPath();
@@ -653,6 +764,7 @@
         ctx.lineTo(x, h);
         ctx.stroke();
       }
+
       for (let y = 20; y < h; y += 20) {
         ctx.beginPath();
         ctx.moveTo(0, y);
@@ -660,41 +772,53 @@
         ctx.stroke();
       }
     }
+
     ctx.strokeStyle =
       "rgba(224,109,136,.26)";
+
     ctx.beginPath();
     ctx.moveTo(44, 0);
     ctx.lineTo(44, h);
     ctx.stroke();
   }
+
   function drawStroke(stroke) {
     if (!stroke.points?.length) return;
+
     const w = canvas.clientWidth;
     const h = canvas.clientHeight;
     const points = stroke.points;
+
     ctx.save();
+
     ctx.globalAlpha =
       stroke.tool === "highlighter"
         ? 0.24
         : stroke.tool === "pencil"
         ? 0.72
         : 1;
+
     ctx.strokeStyle = stroke.color;
     ctx.lineCap = ctx.lineJoin = "round";
+
     for (let i = 1; i < points.length; i++) {
       const a = points[i - 1];
       const b = points[i];
       const next = points[i + 1];
+
       ctx.lineWidth =
         stroke.width *
         ((Number(a[2]) || 1) +
           (Number(b[2]) || 1)) /
         2;
+
       ctx.beginPath();
+
       ctx.moveTo(
         a[0] * w,
         a[1] * h
       );
+
       if (next) {
         ctx.quadraticCurveTo(
           b[0] * w,
@@ -708,42 +832,57 @@
           b[1] * h
         );
       }
+
       ctx.stroke();
     }
+
     ctx.restore();
   }
+
   function drawElement(element) {
     const w = canvas.clientWidth;
     const h = canvas.clientHeight;
+
     if (element.type === "text") {
       ctx.save();
+
       ctx.fillStyle =
         element.color || color;
+
       ctx.font = `${
         element.size || 21
       }px Manrope, sans-serif`;
+
       ctx.fillText(
         element.text,
         element.x * w,
         element.y * h
       );
+
       ctx.restore();
       return;
     }
+
     if (element.type === "shape") {
       ctx.save();
+
       ctx.strokeStyle =
         element.color;
+
       ctx.lineWidth =
         element.width;
+
       ctx.lineCap =
         ctx.lineJoin =
           "round";
+
       const x = element.x * w;
       const y = element.y * h;
       const sw = element.w * w;
       const sh = element.h * h;
+
       ctx.beginPath();
+
       if (element.shape === "line") {
         ctx.moveTo(x, y);
         ctx.lineTo(
@@ -754,10 +893,12 @@
         element.shape === "arrow"
       ) {
         ctx.moveTo(x, y);
+
         ctx.lineTo(
           x + sw,
           y + sh
         );
+
         ctx.lineTo(
           x +
             sw -
@@ -766,10 +907,12 @@
             sh -
             Math.sign(sh || 1) * 7
         );
+
         ctx.moveTo(
           x + sw,
           y + sh
         );
+
         ctx.lineTo(
           x +
             sw -
@@ -785,14 +928,17 @@
           x + sw / 2,
           y
         );
+
         ctx.lineTo(
           x + sw,
           y + sh
         );
+
         ctx.lineTo(
           x,
           y + sh
         );
+
         ctx.closePath();
       } else if (
         element.shape === "rectangle"
@@ -814,14 +960,17 @@
           Math.PI * 2
         );
       }
+
       ctx.stroke();
       ctx.restore();
       return;
     }
+
     if (element.type === "image") {
       let image = images.get(
         element.src
       );
+
       if (!image) {
         image = new Image();
         image.onload = queueRedraw;
@@ -831,6 +980,7 @@
           image
         );
       }
+
       if (image.complete) {
         ctx.drawImage(
           image,
@@ -842,19 +992,25 @@
       }
     }
   }
+
   function redraw() {
     if (!ctx || !canvas) return;
+
     paintPaper();
+
     page().strokes.forEach(drawStroke);
     page().elements.forEach(drawElement);
   }
+
   function queueRedraw() {
     if (frame) return;
+
     frame = requestAnimationFrame(() => {
       frame = 0;
       redraw();
     });
   }
+
   function clampPan(next = pan) {
     const maxX = Math.max(
       0,
@@ -863,6 +1019,7 @@
         2 +
         30
     );
+
     const maxY = Math.max(
       0,
       (canvas.clientHeight *
@@ -870,6 +1027,7 @@
         2 +
         30
     );
+
     return {
       x: Math.max(
         -maxX,
@@ -881,22 +1039,28 @@
       ),
     };
   }
+
   function setZoom(next) {
     zoom = Math.max(
       1,
       Math.min(3.2, next)
     );
+
     pan = clampPan();
+
     canvas.style.transform =
       `translate(${pan.x}px,${pan.y}px) scale(${zoom})`;
+
     root.querySelector(
       "[data-zoom]"
     ).textContent =
       `${Math.round(zoom * 100)}%`;
   }
+
   function point(event) {
     const rect =
       canvas.getBoundingClientRect();
+
     const pressure =
       event.pointerType === "pen" &&
       Number.isFinite(event.pressure) &&
@@ -909,6 +1073,7 @@
             )
           )
         : 1;
+
     return [
       Number(
         (
@@ -927,23 +1092,30 @@
       pressure,
     ];
   }
+
   function begin(event) {
+    cancelScheduledSave();
+
     if (
       event.pointerType === "mouse" &&
       event.button !== 0
     ) {
       return;
     }
+
     if (
       penPointerId !== null &&
       event.pointerType === "touch"
     ) {
       return;
     }
+
     event.preventDefault();
+
     canvas.setPointerCapture(
       event.pointerId
     );
+
     pointers.set(
       event.pointerId,
       {
@@ -951,13 +1123,16 @@
         y: event.clientY,
       }
     );
+
     const writing =
       event.pointerType === "pen" ||
       event.pointerType === "mouse";
+
     if (event.pointerType === "pen") {
       penPointerId =
         event.pointerId;
     }
+
     if (
       pointers.size === 2 &&
       penPointerId === null
@@ -965,9 +1140,12 @@
       if (drawing) {
         page().strokes.pop();
       }
+
       drawing = null;
+
       const [a, b] =
         [...pointers.values()];
+
       canvas.dataset.gestureDistance =
         String(
           Math.hypot(
@@ -975,30 +1153,40 @@
             a.y - b.y
           )
         );
+
       canvas.dataset.gestureZoom =
         String(zoom);
+
       canvas.dataset.gestureCenter =
         `${(a.x + b.x) / 2},${
           (a.y + b.y) / 2
         }`;
+
       canvas.dataset.gesturePan =
         `${pan.x},${pan.y}`;
+
       return;
     }
+
     canvas.dataset.gesturePan =
       `${pan.x},${pan.y}`;
+
     canvas.dataset.gestureCenter =
       `${event.clientX},${event.clientY}`;
+
     if (!writing) return;
+
     if (tool === "text") {
       return addText(event);
     }
+
     if (tool === "eraser") {
       return eraseAt(point(event));
     }
+
     redo = [];
-    drawing = {
-      tool,
+
+    drawing = {       tool,
       color,
       width:
         tool === "highlighter"
@@ -1011,13 +1199,16 @@
     );
     queueRedraw();
   }
+
   function move(event) {
     if (
       !pointers.has(event.pointerId)
     ) {
       return;
     }
+
     event.preventDefault();
+
     pointers.set(
       event.pointerId,
       {
@@ -1025,21 +1216,25 @@
         y: event.clientY,
       }
     );
+
     if (
       pointers.size >= 2 &&
       penPointerId === null
     ) {
       const [a, b] =
         [...pointers.values()];
+
       const distance =
         Math.hypot(
           a.x - b.x,
           a.y - b.y
         );
+
       const base = Number(
         canvas.dataset.gestureDistance ||
           distance
       );
+
       const [
         centerX,
         centerY,
@@ -1049,6 +1244,7 @@
       )
         .split(",")
         .map(Number);
+
       const [
         panX,
         panY,
@@ -1058,6 +1254,7 @@
       )
         .split(",")
         .map(Number);
+
       pan = {
         x:
           panX +
@@ -1068,6 +1265,7 @@
           ((a.y + b.y) / 2 -
             centerY),
       };
+
       setZoom(
         Number(
           canvas.dataset.gestureZoom ||
@@ -1076,8 +1274,10 @@
           distance /
           base
       );
+
       return;
     }
+
     if (
       event.pointerType === "touch"
     ) {
@@ -1090,6 +1290,7 @@
       )
         .split(",")
         .map(Number);
+
       const [
         panX,
         panY,
@@ -1099,6 +1300,7 @@
       )
         .split(",")
         .map(Number);
+
       pan = {
         x:
           panX +
@@ -1109,9 +1311,11 @@
           event.clientY -
           startY,
       };
+
       setZoom(zoom);
       return;
     }
+
     if (
       tool === "eraser"
     ) {
@@ -1119,6 +1323,7 @@
         point(event)
       );
     }
+
     if (
       !drawing ||
       !canvas.hasPointerCapture(
@@ -1127,9 +1332,11 @@
     ) {
       return;
     }
+
     const next = point(event);
     const last =
       drawing.points.at(-1);
+
     if (
       Math.abs(
         next[0] - last[0]
@@ -1141,42 +1348,54 @@
     ) {
       return;
     }
+
     drawing.points.push(next);
     queueRedraw();
   }
+
   function recognizeShape(stroke) {
     const points =
       stroke.points || [];
+
     if (
       points.length < 2 ||
       points.length > 36
     ) {
       return null;
     }
+
     const xs =
       points.map((p) => p[0]);
+
     const ys =
       points.map((p) => p[1]);
+
     const minX = Math.min(...xs);
     const maxX = Math.max(...xs);
     const minY = Math.min(...ys);
     const maxY = Math.max(...ys);
+
     const w = maxX - minX;
     const h = maxY - minY;
+
     if (
       Math.max(w, h) < 0.08
     ) {
       return null;
     }
+
     const first =
       points[0];
+
     const last =
       points.at(-1);
+
     const closed =
       Math.hypot(
         first[0] - last[0],
         first[1] - last[1]
       ) < 0.045;
+
     const closeTo =
       (x, y) =>
         points.some(
@@ -1186,12 +1405,14 @@
               p[1] - y
             ) < 0.035
         );
+
     if (closed) {
       const rectangle =
         closeTo(minX, minY) &&
         closeTo(maxX, minY) &&
         closeTo(maxX, maxY) &&
         closeTo(minX, maxY);
+
       const triangle =
         closeTo(
           (minX + maxX) / 2,
@@ -1199,6 +1420,7 @@
         ) &&
         closeTo(minX, maxY) &&
         closeTo(maxX, maxY);
+
       return {
         type: "shape",
         shape: rectangle
@@ -1214,6 +1436,7 @@
         width: stroke.width,
       };
     }
+
     const tipIndex =
       points.reduce(
         (
@@ -1235,8 +1458,10 @@
             : best,
         0
       );
+
     const tip =
       points[tipIndex];
+
     if (
       points.length >= 6 &&
       tipIndex > 0 &&
@@ -1254,12 +1479,16 @@
         width: stroke.width,
       };
     }
+
     const dx =
       last[0] - first[0];
+
     const dy =
       last[1] - first[1];
+
     const length =
       Math.hypot(dx, dy);
+
     const deviation =
       points.reduce(
         (sum, p) =>
@@ -1273,6 +1502,7 @@
             length,
         0
       ) / points.length;
+
     if (
       deviation < 0.012
     ) {
@@ -1287,8 +1517,43 @@
         width: stroke.width,
       };
     }
+
     return null;
   }
+
+  function makeShape(stroke, selectedShape) {
+    const points = stroke.points || [];
+
+    if (points.length < 2) {
+      return null;
+    }
+
+    const xs = points.map((p) => p[0]);
+    const ys = points.map((p) => p[1]);
+
+    const minX = Math.min(...xs);
+    const maxX = Math.max(...xs);
+    const minY = Math.min(...ys);
+    const maxY = Math.max(...ys);
+
+    return {
+      type: "shape",
+      shape: selectedShape,
+      x: minX,
+      y: minY,
+      w: Math.max(
+        0.001,
+        maxX - minX
+      ),
+      h: Math.max(
+        0.001,
+        maxY - minY
+      ),
+      color: stroke.color,
+      width: stroke.width,
+    };
+  }
+
   /*
    * IMPORTANT:
    * pointerup never performs a synchronous full redraw.
@@ -1299,13 +1564,16 @@
     pointers.delete(
       event.pointerId
     );
+
     if (
       event.pointerId ===
       penPointerId
     ) {
       penPointerId = null;
     }
+
     if (!drawing) return;
+
     if (
       drawing.points.length === 1
     ) {
@@ -1318,29 +1586,40 @@
           1,
       ]);
     }
-    const shape =
-      autoShapes
-        ? recognizeShape(drawing)
-        : null;
+
+    const shape = shapeTool
+      ? makeShape(
+          drawing,
+          shapeTool
+        )
+      : autoShapes
+      ? recognizeShape(drawing)
+      : null;
+
     if (shape) {
       page().strokes.pop();
+
       page().elements.push(
         shape
       );
     }
+
     drawing = null;
+
     /*
      * Do NOT use redraw() here.
      * queueRedraw() schedules the work without making
      * pointerup wait for a complete canvas redraw.
      */
     queueRedraw();
+
     /*
      * Persistence is completely separate from Pencil input.
      * It is debounced and never disables the canvas.
      */
     saveSoon();
   }
+
   function eraseAt(at) {
     const radius =
       Math.max(
@@ -1352,6 +1631,7 @@
           )) *
           3
       );
+
     const removed =
       page().strokes.filter(
         (stroke) =>
@@ -1363,8 +1643,10 @@
               ) < radius
           )
       );
+
     if (!removed.length)
       return;
+
     page().strokes =
       page().strokes.filter(
         (stroke) =>
@@ -1372,30 +1654,42 @@
             stroke
           )
       );
+
     redo.push(...removed);
+
     queueRedraw();
     saveSoon();
   }
+
   function addText(event) {
     const at = point(event);
+
     const input =
       document.createElement(
         "input"
       );
+
     input.className =
       "notebook-text-editor";
+
     input.placeholder =
       "Scrie aici";
+
     input.style.left =
       `${event.clientX}px`;
+
     input.style.top =
       `${event.clientY}px`;
+
     document.body.append(input);
     input.focus();
+
     const commit = () => {
       const text =
         input.value.trim();
+
       input.remove();
+
       if (text) {
         page().elements.push({
           type: "text",
@@ -1408,35 +1702,45 @@
             width * 5
           ),
         });
+
         saveSoon();
         queueRedraw();
       }
     };
+
     input.addEventListener(
       "keydown",
       (e) => {
         if (e.key === "Enter")
           commit();
+
         if (e.key === "Escape")
           input.remove();
       }
     );
+
     input.addEventListener(
       "blur",
       commit,
       { once: true }
     );
   }
+
   async function addImage(file) {
     if (!file) return;
+
     updateStatus(
       "Pregătesc poza…"
     );
+
     const source =
       await fileToDataUrl(file);
+
     const image =
       await loadImage(source);
+
     const max = 1600;
+
     const ratio =
       Math.min(
         1,
@@ -1446,10 +1750,12 @@
             image.height
           )
       );
+
     const off =
       document.createElement(
         "canvas"
       );
+
     off.width =
       Math.max(
         1,
@@ -1457,6 +1763,7 @@
           image.width * ratio
         )
       );
+
     off.height =
       Math.max(
         1,
@@ -1464,6 +1771,7 @@
           image.height * ratio
         )
       );
+
     off
       .getContext("2d")
       .drawImage(
@@ -1473,13 +1781,16 @@
         off.width,
         off.height
       );
+
     const src =
       off.toDataURL(
         "image/jpeg",
         0.8
       );
+
     const aspect =
       off.height / off.width;
+
     page().elements.push({
       type: "image",
       src,
@@ -1491,37 +1802,46 @@
         0.76 * aspect
       ),
     });
+
     saveSoon();
     queueRedraw();
   }
+
   function fileToDataUrl(file) {
     return new Promise(
       (resolve, reject) => {
         const reader =
           new FileReader();
-        reader.onload = () =>
-          resolve(
+
+        reader.onload =
+          () => resolve(
             reader.result
           );
-        reader.onerror = reject;
+
+        reader.onerror =
+          reject;
+
         reader.readAsDataURL(
           file
         );
       }
     );
   }
-  function loadImage(src) {
+    function loadImage(src) {
     return new Promise(
       (resolve, reject) => {
         const image =
           new Image();
+
         image.onload = () =>
           resolve(image);
+
         image.onerror = reject;
         image.src = src;
       }
     );
   }
+
   function bind() {
     root
       .querySelectorAll(
@@ -1533,6 +1853,7 @@
           () => {
             tool =
               button.dataset.tool;
+
             root
               .querySelectorAll(
                 "[data-tool]"
@@ -1546,6 +1867,7 @@
           }
         )
       );
+
     root
       .querySelector(
         "[data-auto-shapes]"
@@ -1555,26 +1877,99 @@
         (event) => {
           autoShapes =
             !autoShapes;
+
+          if (autoShapes) {
+            shapeTool = "";
+
+            const shapeSelect =
+              root.querySelector(
+                "[data-shape]"
+              );
+
+            if (shapeSelect) {
+              shapeSelect.value = "";
+            }
+          }
+
           event.currentTarget.classList.toggle(
             "active",
             autoShapes
           );
+
           event.currentTarget.setAttribute(
             "aria-pressed",
             String(autoShapes)
           );
         }
       );
+
+    root
+      .querySelector(
+        "[data-shape]"
+      )
+      .addEventListener(
+        "change",
+        (event) => {
+          shapeTool =
+            event.target.value;
+
+          if (shapeTool) {
+            autoShapes = false;
+
+            const autoButton =
+              root.querySelector(
+                "[data-auto-shapes]"
+              );
+
+            autoButton.classList.remove(
+              "active"
+            );
+
+            autoButton.setAttribute(
+              "aria-pressed",
+              "false"
+            );
+          }
+        }
+      );
+
     root
       .querySelector(
         "[data-color]"
       )
       .addEventListener(
         "input",
-        (e) =>
-          (color =
-            e.target.value)
+        (e) => {
+          color =
+            e.target.value;
+
+          root
+            .querySelectorAll(
+              "[data-swatch]"
+            )
+            .forEach((item) => {
+              const selected =
+                item.dataset.swatch.toLowerCase() ===
+                color.toLowerCase();
+
+              item.classList.toggle(
+                "notebook-swatch-selected",
+                selected
+              );
+
+              item.setAttribute(
+                "aria-pressed",
+                String(selected)
+              );
+
+              item.style.boxShadow =
+                selected
+                  ? "0 0 0 2px var(--surface), 0 0 0 4px currentColor"
+                  : "";
+            });
+        }
       );
+
     root
       .querySelectorAll(
         "[data-swatch]"
@@ -1585,12 +1980,38 @@
           () => {
             color =
               button.dataset.swatch;
+
             root.querySelector(
               "[data-color]"
             ).value = color;
+
+            root
+              .querySelectorAll(
+                "[data-swatch]"
+              )
+              .forEach((item) => {
+                const selected =
+                  item === button;
+
+                item.classList.toggle(
+                  "notebook-swatch-selected",
+                  selected
+                );
+
+                item.setAttribute(
+                  "aria-pressed",
+                  String(selected)
+                );
+
+                item.style.boxShadow =
+                  selected
+                    ? "0 0 0 2px var(--surface), 0 0 0 4px currentColor"
+                    : "";
+              });
           }
         )
       );
+
     root
       .querySelector(
         "[data-width]"
@@ -1603,6 +2024,7 @@
               e.target.value
             ))
       );
+
     root
       .querySelector(
         "[data-template]"
@@ -1612,10 +2034,12 @@
         (e) => {
           page().template =
             e.target.value;
+
           saveSoon();
           queueRedraw();
         }
       );
+
     root
       .querySelector(
         "[data-orientation]"
@@ -1625,21 +2049,25 @@
         (e) => {
           page().orientation =
             e.target.value;
+
           zoom = 1;
+
           pan = {
             x: 0,
             y: 0,
           };
+
           saveSoon();
           render();
         }
       );
-    root
-      .querySelector(
-        "[data-background]"
-      ).value =
+
+    root.querySelector(
+      "[data-background]"
+    ).value =
       page().background ||
       "#fffdf9";
+
     root
       .querySelector(
         "[data-background]"
@@ -1649,10 +2077,12 @@
         (e) => {
           page().background =
             e.target.value;
+
           saveSoon();
           queueRedraw();
         }
       );
+
     root
       .querySelector(
         "[data-undo]"
@@ -1663,6 +2093,7 @@
           const item =
             page().strokes.pop() ||
             page().elements.pop();
+
           if (item) {
             redo.push(item);
             saveSoon();
@@ -1670,6 +2101,7 @@
           }
         }
       );
+
     root
       .querySelector(
         "[data-redo]"
@@ -1679,17 +2111,20 @@
         () => {
           const item =
             redo.pop();
+
           if (item) {
             (
               item.type
                 ? page().elements
                 : page().strokes
             ).push(item);
+
             saveSoon();
             queueRedraw();
           }
         }
       );
+
     root
       .querySelector(
         "[data-zoom-in]"
@@ -1701,6 +2136,7 @@
             zoom + 0.2
           )
       );
+
     root
       .querySelector(
         "[data-zoom-out]"
@@ -1712,6 +2148,7 @@
             zoom - 0.2
           )
       );
+
     root
       .querySelector(
         "[data-add-image]"
@@ -1725,6 +2162,7 @@
             )
             .click()
       );
+
     root
       .querySelector(
         "[data-image-input]"
@@ -1735,9 +2173,11 @@
           void addImage(
             e.target.files?.[0]
           );
+
           e.target.value = "";
         }
       );
+
     root
       .querySelector(
         "[data-prev]"
@@ -1746,14 +2186,18 @@
         "click",
         () => {
           activePage--;
+
           zoom = 1;
+
           pan = {
             x: 0,
             y: 0,
           };
+
           render();
         }
       );
+
     root
       .querySelector(
         "[data-next]"
@@ -1762,14 +2206,18 @@
         "click",
         () => {
           activePage++;
+
           zoom = 1;
+
           pan = {
             x: 0,
             y: 0,
           };
+
           render();
         }
       );
+
     root
       .querySelector(
         "[data-add-page]"
@@ -1780,51 +2228,64 @@
           notebook.pages.push({
             template:
               page().template,
+
             background:
               page().background ||
               "#fffdf9",
+
             orientation:
               page().orientation ||
               "portrait",
+
             strokes: [],
             elements: [],
           });
+
           activePage =
             notebook.pages.length -
             1;
+
           zoom = 1;
+
           pan = {
             x: 0,
             y: 0,
           };
+
           saveSoon();
           render();
         }
       );
+
     canvas.addEventListener(
       "pointerdown",
       begin,
       { passive: false }
     );
+
     canvas.addEventListener(
       "pointermove",
       move,
       { passive: false }
     );
+
     canvas.addEventListener(
       "pointerup",
       finish
     );
+
     canvas.addEventListener(
       "pointercancel",
       finish
     );
+
     global.addEventListener(
       "resize",
       resize,
       { once: true }
     );
   }
+
   function escape(value) {
     return String(value || "")
       .replaceAll(
@@ -1844,6 +2305,7 @@
         "&quot;"
       );
   }
+
   global.IteraNotebookView =
     Object.freeze({
       mount,
