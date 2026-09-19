@@ -162,6 +162,13 @@ window.addEventListener("itera:task-updated", async () => {
   globalThis.IteraTasksView?.refresh?.();
 });
 
+window.addEventListener("itera:planning-input-changed", async () => {
+  await loadHomeData({ force: true });
+  const result = await rebuildSmartTaskPlan();
+  if (result?.changed) await loadHomeData({ force: true });
+  renderAll();
+});
+
 document.addEventListener(
   "visibilitychange",
   () => {
@@ -2559,6 +2566,30 @@ function getAvailableStudyMinutes(dateString = formatDateForInput(new Date())) {
 }
 
 function buildDayPlan() {
+  if (globalThis.IteraPlanning) {
+    const today = formatDateForInput(new Date());
+    const result = globalThis.IteraPlanning.buildPlan({
+      tasks, scheduleItems, calendarEvents: events, user: currentUser,
+      energy: currentEnergy, today
+    });
+    const entries = Object.entries(result.plan)
+      .filter(([, entry]) => entry?.date === today && entry.time)
+      .map(([id, entry]) => ({ task: tasks.find(task => String(task.id) === id), entry }))
+      .filter(({ task }) => task && !task.completed)
+      .sort((first, second) => first.entry.time.localeCompare(second.entry.time))
+      .map(({ task, entry }) => ({
+        task, start: entry.time,
+        end: formatClockMinutes(entry.time.split(":").map(Number).reduce((total, value, index) => total + value * (index ? 1 : 60), 0) + Number(entry.duration || getTaskMinutes(task))),
+        duration: Number(entry.duration || getTaskMinutes(task))
+      }));
+    return {
+      entries,
+      totalTasks: tasks.filter(task => !task.completed && (task.deadline || task.deadline_date) && (task.deadline || task.deadline_date) <= today).length,
+      plannedMinutes: entries.reduce((sum, entry) => sum + entry.duration, 0),
+      unscheduled: result.unscheduled,
+      availableMinutes: getAvailableStudyMinutes(today)
+    };
+  }
   const today = formatDateForInput(new Date());
   const dayTasks = tasks
     .filter((task) => !task.completed && task.deadline && task.deadline <= today)
@@ -4457,6 +4488,12 @@ function formatMinutes(totalMinutes) {
 function renderTodayTimeline() {
   const timeline = document.getElementById("todayTimeline");
   const todayString = formatDateForInput(new Date());
+  const preferences = getAccountPreferences().planning;
+  const toMinutes = value => {
+    const [hours, minutes] = String(value || "00:00").slice(0, 5).split(":").map(Number);
+    return Number.isFinite(hours) && Number.isFinite(minutes) ? hours * 60 + minutes : 0;
+  };
+  const fromMinutes = value => `${String(Math.floor(value / 60)).padStart(2, "0")}:${String(value % 60).padStart(2, "0")}`;
   const todaySchedule = scheduleItems
     .filter((item) => Number(item.day_of_week) === new Date().getDay())
     .map((item) => ({
@@ -4472,8 +4509,8 @@ function renderTodayTimeline() {
   const timelineItems = [
     ...todaySchedule,
     ...events
-      .filter((event) => event.date === todayString && event.time)
-      .map((event) => ({ ...event, endTime: "", source: "event" })),
+      .filter((event) => (event.date || event.event_date) === todayString && (event.time || event.start_time))
+      .map((event) => ({ ...event, time: event.time || event.start_time, endTime: event.endTime || event.end_time || "", source: "event" })),
     ...tasks
       .filter((task) => getTaskPlanDate(task) === todayString && getTaskPlanTime(task) && !task.completed)
       .map((task) => ({
@@ -4481,11 +4518,22 @@ function renderTodayTimeline() {
         title: task.title,
         subject: task.subject,
         time: getTaskPlanTime(task),
-        endTime: "",
+        endTime: fromMinutes(toMinutes(getTaskPlanTime(task)) + Number(globalThis.IteraPlanning?.getTaskPlan(currentUser, task)?.duration || task.estimatedMinutes || task.estimated_minutes || 30)),
         type: task.type || "homework",
         source: "task"
       }))
   ];
+
+  const plannedTasks = timelineItems.filter(item => item.source === "task").sort((a, b) => a.time.localeCompare(b.time));
+  plannedTasks.forEach((task, index) => {
+    const next = plannedTasks[index + 1];
+    if (!next) return;
+    const end = toMinutes(task.endTime), nextStart = toMinutes(next.time);
+    if (nextStart - end >= 10) timelineItems.push({
+      title: "Pauză", subject: "Timp pentru reset", time: task.endTime,
+      endTime: fromMinutes(nextStart), type: "personal"
+    });
+  });
 
   const lastClass = todaySchedule
     .slice()
@@ -4504,11 +4552,11 @@ function renderTodayTimeline() {
     });
   }
 
-  if (timelineItems.length) {
+  if (timelineItems.length && preferences.bedtime) {
     timelineItems.push({
       title: "Somn",
       subject: "Încheierea zilei",
-      time: "22:30",
+      time: preferences.bedtime,
       endTime: "",
       type: "personal"
     });

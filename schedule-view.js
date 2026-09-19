@@ -10,7 +10,7 @@
     personal: "Personal",
     other: "Activitate"
   };
-  let root, user, subjects = [], items = [], mounted = false;
+  let root, user, subjects = [], items = [], tasks = [], mounted = false;
   let activeBuilderDay = 1;
   let dayDrafts = new Map();
 
@@ -24,19 +24,22 @@
     if (!session || !mounted) return;
     user = session.user;
 
-    const [subjectResult, scheduleResult] = await Promise.all([
+    const [subjectResult, scheduleResult, taskResult] = await Promise.all([
       supabaseClient.from("subjects").select("id,name,color")
         .eq("user_id", user.id).eq("is_active", true).order("position"),
       supabaseClient.from("schedule_items").select("*")
-        .eq("user_id", user.id).order("day_of_week").order("start_time")
+        .eq("user_id", user.id).order("day_of_week").order("start_time"),
+      supabaseClient.from("tasks").select("id,title,subject_id,task_type,deadline_date,deadline_time,estimated_minutes,completed")
+        .eq("user_id", user.id).eq("completed", false)
     ]);
 
-    if (subjectResult.error || scheduleResult.error) {
+    if (subjectResult.error || scheduleResult.error || taskResult.error) {
       root.innerHTML = '<div class="schedule-spa-state">Orarul nu a putut fi încărcat.</div>';
       return;
     }
     subjects = subjectResult.data || [];
     items = scheduleResult.data || [];
+    tasks = taskResult.data || [];
     render();
   }
 
@@ -56,6 +59,7 @@
           <button class="primary-small-button" data-build-schedule><span aria-hidden="true">+</span> Orar rapid</button>
         </div>
       </header>
+      ${renderTodayPlan()}
       <div class="schedule-spa-week">${dayOrder.map(renderDay).join("")}</div>
       ${dayBuilderDialog()}
       ${activityDialog()}`;
@@ -75,6 +79,26 @@
     root.querySelectorAll("[data-edit-schedule]").forEach(button =>
       button.addEventListener("click", () => openActivityDialog(items.find(item => item.id === button.dataset.editSchedule)))
     );
+  }
+
+  function renderTodayPlan() {
+    const today = new Date();
+    const date = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
+    const plan = global.IteraPlanning?.getPlan(user) || {};
+    const entries = tasks.map(task => ({ task, entry: plan[String(task.id)] }))
+      .filter(({ entry }) => entry?.date === date && entry.time)
+      .sort((first, second) => first.entry.time.localeCompare(second.entry.time));
+    if (!entries.length) return `<section class="schedule-today-plan"><p class="eyebrow">Azi</p><h3>Nu ai încă task-uri planificate pentru azi.</h3><p>Adaugă task-urile și apasă „Planifică automat” — vor apărea aici cu orele și pauzele reale.</p></section>`;
+    const time = value => { const [hour, minute] = String(value).slice(0, 5).split(":").map(Number); return hour * 60 + minute; };
+    const clock = value => `${String(Math.floor(value / 60)).padStart(2, "0")}:${String(value % 60).padStart(2, "0")}`;
+    const rows = [];
+    entries.forEach(({ task, entry }, index) => {
+      const end = clock(time(entry.time) + Number(entry.duration || task.estimated_minutes || 30));
+      rows.push(`<div class="schedule-spa-item schedule-today-task"><span class="schedule-spa-item-time">${entry.time}</span><span class="schedule-spa-item-copy"><strong>${escapeHtml(task.title)}</strong><small>${escapeHtml(subjects.find(subject => subject.id === task.subject_id)?.name || "Task") } · până la ${end}</small></span></div>`);
+      const next = entries[index + 1]?.entry;
+      if (next && time(next.time) - time(end) >= 10) rows.push(`<div class="schedule-today-break"><span>${end}</span><strong>Pauză</strong><small>până la ${next.time}</small></div>`);
+    });
+    return `<section class="schedule-today-plan"><p class="eyebrow">Programul de azi</p><h3>Ce urmează exact</h3><div class="schedule-today-plan-list">${rows.join("")}</div></section>`;
   }
 
   function preferredBuilderDay() {
@@ -324,6 +348,7 @@
     }
     closeDayBuilder();
     await reload();
+    global.dispatchEvent(new CustomEvent("itera:planning-input-changed"));
     global.showToast?.("Orarul săptămânal este gata.", "✓");
   }
 
@@ -411,6 +436,7 @@
     }
     closeActivityDialog();
     await reload();
+    global.dispatchEvent(new CustomEvent("itera:planning-input-changed"));
   }
 
   async function deleteItem() {
@@ -421,6 +447,7 @@
     if (!error) {
       closeActivityDialog();
       await reload();
+      global.dispatchEvent(new CustomEvent("itera:planning-input-changed"));
     }
   }
 

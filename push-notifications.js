@@ -351,28 +351,27 @@
 
     const isTest = task.task_type === "test";
     const isImportant = task.priority === "high";
-    const reminderOffsets = isTest
-      ? [24 * 60]
+    const eveningBefore = new Date(deadline);
+    eveningBefore.setDate(eveningBefore.getDate() - 1);
+    eveningBefore.setHours(19, 0, 0, 0);
+    const reminders = isTest
+      ? [{ minutesBefore: 24 * 60, scheduledFor: eveningBefore }]
       : isImportant
-        ? [24 * 60, 60, 1]
-        : [1];
+        ? [{ minutesBefore: 24 * 60, scheduledFor: new Date(deadline.getTime() - 24 * 60 * 60000) }, { minutesBefore: 60, scheduledFor: new Date(deadline.getTime() - 60 * 60000) }]
+        : [{ minutesBefore: 1, scheduledFor: new Date(deadline.getTime() - 60000) }];
     const now = Date.now();
 
-    return Promise.all(reminderOffsets
-      .map((minutesBefore) => ({
-        minutesBefore,
-        scheduledFor: new Date(deadline.getTime() - minutesBefore * 60000)
-      }))
+    return Promise.all(reminders
       .filter((reminder) => deadline.getTime() > now && (
         reminder.scheduledFor.getTime() > now || reminder.minutesBefore === 1
       ))
       .map((reminder) => queueReminder({
         title: reminder.minutesBefore === 1
           ? "Începe într-un minut"
-          : isTest ? "Test în curând" : isImportant ? "Task important" : "Reminder task",
+          : isTest ? "Ai test mâine" : isImportant ? "Task important" : "Reminder task",
         body: reminder.minutesBefore === 1
           ? `${task.title} · ${String(task.deadline_time).slice(0, 5)}`
-          : `${task.title} · ${formatReminderDistance(reminder.minutesBefore)}`,
+          : isTest ? `${task.title}${task.deadline_time ? ` · la ${String(task.deadline_time).slice(0, 5)}` : ""}` : `${task.title} · ${formatReminderDistance(reminder.minutesBefore)}`,
         scheduledFor: reminder.scheduledFor.getTime() > now
           ? reminder.scheduledFor
           : new Date(now + 3000),
@@ -400,8 +399,8 @@
     return Promise.all([{ minutesBefore: 24 * 60, scheduledFor: eveningBefore }]
       .filter((reminder) => reminder.scheduledFor.getTime() > now)
       .map((reminder) => queueReminder({
-        title: "Test în curând",
-        body: `${event.title} · ${formatReminderDistance(reminder.minutesBefore)}`,
+        title: "Ai test mâine",
+        body: `${event.title}${event.start_time ? ` · la ${String(event.start_time).slice(0, 5)}` : ""}`,
         scheduledFor: reminder.scheduledFor,
         targetUrl: "./index.html#/calendar",
         tag: `test-${event.id}`,
