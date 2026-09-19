@@ -59,7 +59,7 @@
     const [subjectResult, taskResult, scheduleResult, eventResult] = await Promise.all([
       supabaseClient.from("subjects").select("id,name,color").eq("user_id", user.id).eq("is_active", true).order("position"),
       supabaseClient.from("tasks").select("*").eq("user_id", user.id).order("created_at", { ascending: false }),
-      supabaseClient.from("schedule_items").select("day_of_week,start_time,end_time").eq("user_id", user.id),
+      supabaseClient.from("schedule_items").select("day_of_week,start_time,end_time,subject_id,title").eq("user_id", user.id),
       supabaseClient.from("calendar_events").select("event_date,start_time,end_time").eq("user_id", user.id)
     ]);
     if (!mounted) return;
@@ -135,6 +135,7 @@
           <label><span data-task-date-label>Deadline</span><input name="deadline_date" type="date"></label><label><span>Ora</span><input name="deadline_time" type="time"><small class="tasks-time-hint" data-task-time-hint>Las-o liberă și Itera alege ora după prioritate.</small></label>
           <label data-task-priority-field>Prioritate<select name="priority"><option value="low">Scăzută</option><option value="medium">Medie</option><option value="high">Ridicată</option></select></label>
           <label><span data-task-duration-label>Minute estimate</span><input name="estimated_minutes" type="number" min="0" value="30"></label>
+          <label data-test-grade-field hidden><span>Nota primită</span><input name="test_grade" type="number" min="1" max="10" step="0.01" inputmode="decimal" placeholder="Opțional"></label>
         </div><label>Notițe<textarea name="notes" rows="3"></textarea></label>
         <p class="tasks-spa-error" data-task-error></p>
         <div class="tasks-spa-actions"><button type="button" class="secondary-button tasks-delete-dialog" data-delete-task hidden>Șterge</button>
@@ -153,14 +154,14 @@
     const reorderable = filter === "today" && !task.completed && !personalEvent && Boolean(plan);
     return `<div class="tasks-swipe-row" data-task-row="${task.id}" ${reorderable ? `data-plan-order="${task.id}" data-order-key="${task.id}"` : ""}>
       <button class="tasks-swipe-delete" data-swipe-delete="${task.id}" aria-label="Șterge ${escapeHtml(task.title)}"><span class="tasks-trash-icon" aria-hidden="true"></span></button>
-      <article class="tasks-spa-item ${task.completed ? "completed" : ""} ${isLifeTask(task.task_type) ? "life-task" : ""} ${personalEvent ? "personal-event" : ""}" data-swipe-surface style="--subject:${subject?.color || taskTypeColor(task.task_type)}">
+      <article class="tasks-spa-item ${task.completed ? "completed" : ""} ${isLifeTask(task.task_type) ? "life-task" : ""} ${task.task_type === "test" ? "test-task" : ""} ${personalEvent ? "personal-event" : ""}" data-swipe-surface style="--subject:${subject?.color || taskTypeColor(task.task_type)}">
       ${personalEvent
         ? '<span class="tasks-spa-event-icon" aria-label="Eveniment"></span>'
         : `<button class="tasks-spa-check" data-toggle-task="${task.id}" aria-label="Schimbă starea">${task.completed ? "✓" : ""}</button>`}
       <div><strong>${escapeHtml(task.title)}</strong><small>${escapeHtml(contextLabel)}${planLabel ? ` · ${escapeHtml(planLabel)}` : ""}${dateLabel && (!plan || plan.date !== task.deadline_date) ? ` · ${isLifeTask(task.task_type) ? "ziua aleasă" : "termen"} ${escapeHtml(dateLabel)}` : ""}</small></div>
       ${personalEvent
         ? '<span class="tasks-spa-badge tasks-spa-event-badge">Eveniment</span>'
-        : `<span class="tasks-spa-badge priority-${escapeHtml(task.priority || "medium")}">${task.estimated_minutes || 0}m</span>`}
+        : `<span class="tasks-spa-badge priority-${escapeHtml(task.priority || "medium")}">${task.task_type === "test" ? "TEST" : `${task.estimated_minutes || 0}m`}</span>`}
       ${task.completed || personalEvent || isChecklistTask(task) ? "" : `<button class="tasks-spa-start" data-start-task="${task.id}"><span class="tasks-play-icon" aria-hidden="true"></span> Start</button>`}
       <button class="tasks-spa-edit" data-edit-task="${task.id}">Editează</button>
       ${reorderable ? '<button class="task-plan-grip" data-plan-grip aria-label="Mută taskul în plan">⋮⋮</button>' : ""}</article></div>`;
@@ -265,6 +266,7 @@
     form.querySelector("[data-task-subject-field]").hidden = life;
     form.querySelector("[data-task-priority-field]").hidden = life;
     form.querySelector("[data-task-kind-field]").hidden = !fixedPersonal;
+    form.querySelector("[data-test-grade-field]").hidden = type !== "test";
     if (life) {
       form.elements.subject_id.value = "";
       form.elements.priority.value = "medium";
@@ -303,6 +305,13 @@
       notes: isLifeTask(values.task_type) && keepAsTaskOnly
         ? `${values.notes.trim()} ${personalTaskOnlyMarker} ${noTimerMarker} ${categoryMarker}`.trim()
         : values.notes.trim() || null };
+    // A single lesson for the same subject is trustworthy timetable information;
+    // use it for a test, while leaving ambiguous days for the student to correct.
+    if (values.task_type === "test" && !payload.deadline_time && payload.subject_id && payload.deadline_date) {
+      const day = new Date(`${payload.deadline_date}T12:00:00`).getDay();
+      const matches = scheduleItems.filter(item => Number(item.day_of_week) === day && String(item.subject_id || "") === String(payload.subject_id) && item.start_time);
+      if (matches.length === 1) payload.deadline_time = String(matches[0].start_time).slice(0, 5);
+    }
     if (fixedPersonal && !payload.deadline_date) {
       form.querySelector("[data-task-error]").textContent = "Alege ziua în care vrei să faci activitatea.";
       return;
@@ -326,6 +335,14 @@
       return;
     }
     const normalizedData = normalizeTask(data);
+    const receivedGrade = Number(values.test_grade);
+    if (values.task_type === "test" && Number.isFinite(receivedGrade) && receivedGrade >= 1 && receivedGrade <= 10 && data.subject_id) {
+      const { error: gradeError } = await supabaseClient.from("subject_grades").insert({
+        user_id: user.id, subject_id: data.subject_id, grade: receivedGrade,
+        description: `Test: ${data.title}`, grade_date: data.deadline_date || today()
+      });
+      if (gradeError) global.showToast?.("Testul a fost salvat, dar nota nu a putut fi adăugată.", "!");
+    }
     closeDialog();
     if (id) {
       tasks = tasks.map(task => String(task.id) === String(id) ? normalizedData : task);

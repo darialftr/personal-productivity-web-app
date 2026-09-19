@@ -825,7 +825,13 @@ function getAccountPreferences() {
       : "neutral",
     mode: hasCurrentThemePreferences && ["light", "dark", "system"].includes(metadata.itera_mode)
       ? metadata.itera_mode
-      : "light"
+      : "light",
+    planning: {
+      schoolCutoff: metadata.itera_planning_preferences?.schoolCutoff || "20:30",
+      bedtime: metadata.itera_planning_preferences?.bedtime || "22:30",
+      weekendStart: metadata.itera_planning_preferences?.weekendStart || "09:00",
+      travelBufferMinutes: Number(metadata.itera_planning_preferences?.travelBufferMinutes) || 15
+    }
   };
 }
 
@@ -867,6 +873,10 @@ function initializeAccountSettings() {
     document.getElementById("accountEmail").value = currentUser?.email || "";
     form.elements.theme.value = preferences.theme;
     form.elements.mode.value = preferences.mode;
+    form.elements.schoolWorkCutoff.value = preferences.planning.schoolCutoff;
+    form.elements.bedtime.value = preferences.planning.bedtime;
+    form.elements.weekendStart.value = preferences.planning.weekendStart;
+    form.elements.travelBuffer.value = String(preferences.planning.travelBufferMinutes);
     document.getElementById("accountSettingsError").textContent = "";
     closeModal("mobileMoreModal");
     openModal("accountSettingsModal");
@@ -894,6 +904,12 @@ function initializeAccountSettings() {
     const name = form.elements.displayName.value.trim();
     const theme = form.elements.theme.value || "neutral";
     const mode = form.elements.mode.value || "system";
+    const planning = {
+      schoolCutoff: form.elements.schoolWorkCutoff.value || "20:30",
+      bedtime: form.elements.bedtime.value || "22:30",
+      weekendStart: form.elements.weekendStart.value || "09:00",
+      travelBufferMinutes: Number(form.elements.travelBuffer.value) || 0
+    };
     const errorElement = document.getElementById("accountSettingsError");
     const saveButton = document.getElementById("saveAccountSettingsButton");
 
@@ -911,7 +927,8 @@ function initializeAccountSettings() {
       first_name: name,
       itera_theme: theme,
       itera_mode: mode,
-      itera_theme_version: 2
+      itera_theme_version: 2,
+      itera_planning_preferences: planning
     };
 
     const { data: authData, error: authError } = await supabaseClient.auth.updateUser({
@@ -948,6 +965,9 @@ function initializeAccountSettings() {
     applyAccountPreferences({ theme, mode });
     updateCurrentDate();
     closeModal("accountSettingsModal");
+    await rebuildSmartTaskPlan();
+    await loadHomeData();
+    renderAll();
     showToast("Setările contului au fost salvate.", "✓");
     saveButton.disabled = false;
     saveButton.textContent = "Salvează setările";

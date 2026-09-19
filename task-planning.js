@@ -5,6 +5,7 @@
   const personalTaskOnlyMarker = "[itera:task-only]";
   const personalTypes = ["personal", "selfcare", "home", "health", "errand"];
   const capacityByEnergy = { 1: 45, 2: 90, 3: 150, 4: 210, 5: 270 };
+  const defaultPreferences = Object.freeze({ schoolCutoff: "20:30", bedtime: "22:30", weekendStart: "09:00", travelBufferMinutes: 15 });
 
   const isoDate = (date = new Date()) => {
     const offset = date.getTimezoneOffset() * 60000;
@@ -38,6 +39,11 @@
   const isCareTask = task => (task?.task_type || task?.type) === "selfcare";
   const isPlannable = task => task && !task.completed && task.task_type !== "goal" && task.type !== "goal" &&
     !isPersonalEvent(task) && Boolean(task.deadline_date || task.deadline);
+
+  function preferencesFor(user) {
+    const saved = user?.user_metadata?.itera_planning_preferences || {};
+    return { ...defaultPreferences, ...saved };
+  }
 
   function getPlan(user) {
     const value = user?.user_metadata?.[metadataKey];
@@ -76,15 +82,19 @@
     return cursor + duration <= latestEnd ? cursor : null;
   }
 
-  function fixedIntervals(date, scheduleItems, calendarEvents) {
+  function fixedIntervals(date, scheduleItems, calendarEvents, preferences) {
     const day = parseDate(date).getDay();
     const schedule = scheduleItems.filter(item => Number(item.day_of_week) === day && item.start_time).map(item => {
       const start = minutesFromTime(item.start_time);
       return { start, end: minutesFromTime(item.end_time) ?? start + 60 };
     });
-    const events = calendarEvents.filter(item => (item.event_date || item.date) === date && (item.start_time || item.time)).map(item => {
+    const events = calendarEvents.filter(item => (item.event_date || item.date) === date && (item.start_time || item.time)).flatMap(item => {
       const start = minutesFromTime(item.start_time || item.time);
-      return { start, end: minutesFromTime(item.end_time || item.endTime) ?? start + 60 };
+      const end = minutesFromTime(item.end_time || item.endTime) ?? start + 60;
+      // An explicitly located event is away from the student's normal workspace.
+      // Reserve a small, configurable transition on both sides without moving the event.
+      const buffer = item.location ? Math.max(0, Number(preferences.travelBufferMinutes) || 0) : 0;
+      return [{ start, end }, ...(buffer ? [{ start: Math.max(0, start - buffer), end: start }, { start: end, end: Math.min(1440, end + buffer) }] : [])];
     });
     return mergeIntervals([...schedule, ...events]);
   }
@@ -97,10 +107,10 @@
       });
   }
 
-  function dayStart(date, scheduleItems, personal = false) {
+  function dayStart(date, scheduleItems, preferences, personal = false) {
     const day = parseDate(date).getDay();
     const weekend = day === 0 || day === 6;
-    if (weekend) return personal ? 13 * 60 : 8 * 60 + 30;
+    if (weekend) return personal ? 13 * 60 : (minutesFromTime(preferences.weekendStart) ?? 9 * 60);
     const schoolEnd = scheduleItems.filter(item => Number(item.day_of_week) === day && item.end_time)
       .reduce((latest, item) => Math.max(latest, minutesFromTime(item.end_time) || 0), 0);
     const academicStart = Math.max(15 * 60 + 30, schoolEnd ? schoolEnd + 45 : 0);
@@ -118,13 +128,27 @@
   function buildPlan({ tasks = [], scheduleItems = [], calendarEvents = [], user = null, energy = 3,
     today = isoDate(), now = new Date() }) {
     const previous = getPlan(user);
+    const preferences = preferencesFor(user);
     const openIds = new Set(tasks.filter(task => !task.completed).map(task => String(task.id)));
     const plan = Object.fromEntries(Object.entries(previous).filter(([id]) => openIds.has(id)));
-    const candidates = tasks.filter(isPlannable).sort((first, second) => {
+    const nowMinutes = now.getHours() * 60 + now.getMinutes();
+    const activeIds = new Set();
+    // Do not tear an in-progress session out from under the student during a replan.
+    tasks.filter(isPlannable).forEach(task => {
+      const entry = previous[String(task.id)];
+      if (entry?.date === today) {
+        const start = minutesFromTime(entry.time);
+        if (start !== null && start <= nowMinutes && start + (Number(entry.duration) || taskDuration(task)) > nowMinutes) activeIds.add(String(task.id));
+      }
+    });
+    const candidates = tasks.filter(task => isPlannable(task) && !activeIds.has(String(task.id))).sort((first, second) => {
       const personalOrder = Number(isPersonalTask(first)) - Number(isPersonalTask(second));
       const priority = { high: 0, medium: 1, low: 2 };
-      return personalOrder || String(first.deadline_date || first.deadline).localeCompare(String(second.deadline_date || second.deadline)) ||
-        (priority[first.priority] ?? 1) - (priority[second.priority] ?? 1) ||
+      // Low energy is deliberately selective: importance wins before convenience.
+      const urgencyFirst = Number(energy) <= 2;
+      return personalOrder || (urgencyFirst
+        ? (priority[first.priority] ?? 1) - (priority[second.priority] ?? 1) || String(first.deadline_date || first.deadline).localeCompare(String(second.deadline_date || second.deadline))
+        : String(first.deadline_date || first.deadline).localeCompare(String(second.deadline_date || second.deadline)) || (priority[first.priority] ?? 1) - (priority[second.priority] ?? 1)) ||
         String(first.created_at || "").localeCompare(String(second.created_at || ""));
     });
     candidates.forEach(task => { delete plan[String(task.id)]; });
@@ -135,7 +159,7 @@
         const weekend = [0, 6].includes(parseDate(date).getDay());
         days.set(date, {
           busy: mergeIntervals([
-            ...fixedIntervals(date, scheduleItems, calendarEvents),
+            ...fixedIntervals(date, scheduleItems, calendarEvents, preferences),
             ...personalEventIntervals(date, tasks)
           ]), academicEnd: 0, used: 0,
           capacity: date === today ? capacityByEnergy[Number(energy)] || capacityByEnergy[3] : weekend ? 210 : capacityByEnergy[3]
@@ -143,6 +167,15 @@
       }
       return days.get(date);
     };
+    activeIds.forEach(id => {
+      const entry = previous[id];
+      if (!entry) return;
+      const state = ensureDay(entry.date);
+      const start = minutesFromTime(entry.time);
+      const duration = Number(entry.duration) || taskDuration(tasks.find(task => String(task.id) === id));
+      if (start !== null) state.busy = mergeIntervals([...state.busy, { start, end: start + duration }]);
+      plan[id] = entry;
+    });
     const unscheduled = [];
 
     for (const task of candidates) {
@@ -166,12 +199,15 @@
         const currentMinutes = now.getHours() * 60 + now.getMinutes();
         let earliest = personal && deadline < today && date === today
           ? roundQuarter(currentMinutes + 15)
-          : dayStart(date, scheduleItems, personal);
+          : dayStart(date, scheduleItems, preferences, personal);
         const preferredTime = minutesFromTime(task.deadline_time || task.deadlineTime);
         if (preferredTime !== null) earliest = Math.max(earliest, preferredTime);
         if (date === today) earliest = Math.max(earliest, roundQuarter(currentMinutes + 15));
         if (personal) earliest = Math.max(earliest, state.academicEnd ? state.academicEnd + 15 : 0);
-        const slot = firstFreeSlot(earliest, duration, state.busy, 22 * 60 + 30);
+        const latestEnd = personal
+          ? (minutesFromTime(preferences.bedtime) ?? 22 * 60 + 30)
+          : (minutesFromTime(preferences.schoolCutoff) ?? 20 * 60 + 30);
+        const slot = firstFreeSlot(earliest, duration, state.busy, latestEnd);
         if (slot === null) continue;
         chosen = { date, time: clockFromMinutes(slot), slot, state };
         break;
@@ -208,6 +244,6 @@
     return savePlan(user, plan);
   }
 
-  global.IteraPlanning = Object.freeze({ buildPlan, getPlan, getTaskPlan, isPersonalEvent, isPersonalTask,
+  global.IteraPlanning = Object.freeze({ buildPlan, getPlan, getTaskPlan, isPersonalEvent, isPersonalTask, preferencesFor,
     isPlannable, savePlan, removeTask, isoDate });
 })(window);
