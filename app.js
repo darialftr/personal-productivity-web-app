@@ -157,9 +157,17 @@ window.addEventListener("itera:plan-updated", async () => {
 });
 
 window.addEventListener("itera:task-updated", async () => {
+  await rebuildSmartTaskPlan();
   await loadHomeData();
   renderAll();
   globalThis.IteraTasksView?.refresh?.();
+});
+
+window.addEventListener("itera:schedule-updated", async () => {
+  await loadHomeData({ force: true });
+  await rebuildSmartTaskPlan();
+  await loadHomeData({ force: true });
+  renderAll();
 });
 
 document.addEventListener(
@@ -865,6 +873,10 @@ function initializeAccountSettings() {
 
     document.getElementById("accountDisplayName").value = displayName;
     document.getElementById("accountEmail").value = currentUser?.email || "";
+    const planning = globalThis.IteraPlanning?.getPlanningSettings(currentUser);
+    form.elements.schoolWorkCutoff.value = planning?.schoolWorkCutoff || "20:30";
+    form.elements.sleepTime.value = planning?.sleepTime || "22:30";
+    form.elements.weekendStart.value = planning?.weekendStart || "09:00";
     form.elements.theme.value = preferences.theme;
     form.elements.mode.value = preferences.mode;
     document.getElementById("accountSettingsError").textContent = "";
@@ -894,6 +906,13 @@ function initializeAccountSettings() {
     const name = form.elements.displayName.value.trim();
     const theme = form.elements.theme.value || "neutral";
     const mode = form.elements.mode.value || "system";
+    const previousPlanning = globalThis.IteraPlanning?.getPlanningSettings(currentUser) || {};
+    const planningSettings = {
+      ...previousPlanning,
+      schoolWorkCutoff: form.elements.schoolWorkCutoff.value || previousPlanning.schoolWorkCutoff,
+      sleepTime: form.elements.sleepTime.value || previousPlanning.sleepTime,
+      weekendStart: form.elements.weekendStart.value || previousPlanning.weekendStart
+    };
     const errorElement = document.getElementById("accountSettingsError");
     const saveButton = document.getElementById("saveAccountSettingsButton");
 
@@ -911,7 +930,8 @@ function initializeAccountSettings() {
       first_name: name,
       itera_theme: theme,
       itera_mode: mode,
-      itera_theme_version: 2
+      itera_theme_version: 2,
+      itera_planning_settings: planningSettings
     };
 
     const { data: authData, error: authError } = await supabaseClient.auth.updateUser({
@@ -946,7 +966,10 @@ function initializeAccountSettings() {
     };
     profile = { ...(profile || {}), first_name: name };
     applyAccountPreferences({ theme, mode });
+    await rebuildSmartTaskPlan();
+    await loadHomeData({ force: true });
     updateCurrentDate();
+    renderAll();
     closeModal("accountSettingsModal");
     showToast("Setările contului au fost salvate.", "✓");
     saveButton.disabled = false;
@@ -1446,6 +1469,16 @@ async function handleQuickTaskSubmit(event) {
   const priority = isLifeTaskType(taskType)
     ? "medium"
     : document.getElementById("quickTaskPriority").value;
+
+  // Tests belong to the existing task model, but their likely time should come
+  // from the timetable whenever there is exactly one matching lesson.
+  if (taskType === "test" && !deadlineTime && subjectId && deadlineDate) {
+    const testDay = parseLocalDate(deadlineDate).getDay();
+    const matches = scheduleItems.filter(item =>
+      Number(item.day_of_week) === testDay && String(item.subject_id) === String(subjectId) && item.start_time
+    );
+    if (matches.length === 1) deadlineTime = String(matches[0].start_time).slice(0, 5);
+  }
 
   if (fixedPersonal && destination === "event" && !deadlineTime) {
     showToast("Alege ora la care vrei să păstrăm acest interval în program.", "!");
@@ -4453,7 +4486,7 @@ function renderTodayTimeline() {
     ...todaySchedule,
     ...events
       .filter((event) => event.date === todayString && event.time)
-      .map((event) => ({ ...event, endTime: "", source: "event" })),
+      .map((event) => ({ ...event, endTime: event.endTime || "", source: "event" })),
     ...tasks
       .filter((task) => getTaskPlanDate(task) === todayString && getTaskPlanTime(task) && !task.completed)
       .map((task) => ({
@@ -4461,11 +4494,30 @@ function renderTodayTimeline() {
         title: task.title,
         subject: task.subject,
         time: getTaskPlanTime(task),
-        endTime: "",
+        endTime: formatClockMinutes(
+          getMinutesFromTime(getTaskPlanTime(task)) + getTaskMinutes(task)
+        ),
         type: task.type || "homework",
         source: "task"
       }))
   ];
+
+  const plannedTasks = timelineItems
+    .filter((item) => item.source === "task" && item.time && item.endTime)
+    .sort((first, second) => first.time.localeCompare(second.time));
+  plannedTasks.forEach((task, index) => {
+    const next = plannedTasks[index + 1];
+    if (!next) return;
+    const gap = getMinutesFromTime(next.time) - getMinutesFromTime(task.endTime);
+    if (gap < 10 || gap > 30) return;
+    timelineItems.push({
+      title: "Pauză",
+      subject: "Timp de reset între sesiuni",
+      time: task.endTime,
+      endTime: next.time,
+      type: "personal"
+    });
+  });
 
   const lastClass = todaySchedule
     .slice()
@@ -4528,7 +4580,7 @@ function renderTodayTimeline() {
       return `
         <button type="button" class="timeline-item ${event.isCurrent ? "current-time" : ""} ${event.source ? "is-actionable" : ""}" ${event.source ? `data-home-open-id="${event.id || ""}" data-home-open-source="${event.source}" data-home-open-date="${todayString}"` : "disabled"}>
           <span class="timeline-time">
-            ${escapeHtml(event.time)}
+            ${escapeHtml(event.time)}${event.endTime ? `–${escapeHtml(event.endTime)}` : ""}
           </span>
 
           <div class="timeline-line">

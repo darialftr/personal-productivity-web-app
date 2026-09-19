@@ -324,6 +324,7 @@
     }
     closeDayBuilder();
     await reload();
+    global.dispatchEvent(new CustomEvent("itera:schedule-updated"));
     global.showToast?.("Orarul săptămânal este gata.", "✓");
   }
 
@@ -411,6 +412,7 @@
     }
     closeActivityDialog();
     await reload();
+    global.dispatchEvent(new CustomEvent("itera:schedule-updated"));
   }
 
   async function deleteItem() {
@@ -421,6 +423,7 @@
     if (!error) {
       closeActivityDialog();
       await reload();
+      global.dispatchEvent(new CustomEvent("itera:schedule-updated"));
     }
   }
 

@@ -352,7 +352,7 @@
     const isTest = task.task_type === "test";
     const isImportant = task.priority === "high";
     const reminderOffsets = isTest
-      ? [24 * 60, 2 * 60, 1]
+      ? [24 * 60]
       : isImportant
         ? [24 * 60, 60, 1]
         : [1];
@@ -394,7 +394,7 @@
     if (Number.isNaN(eventDate.getTime())) return [];
 
     const now = Date.now();
-    return Promise.all([24 * 60, 2 * 60]
+    return Promise.all([24 * 60]
       .map((minutesBefore) => ({
         minutesBefore,
         scheduledFor: new Date(eventDate.getTime() - minutesBefore * 60000)

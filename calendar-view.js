@@ -207,13 +207,14 @@
     if (error) { form.querySelector("[data-event-error]").textContent = "Evenimentul nu a putut fi salvat."; return; }
     await global.IteraPush?.scheduleTestEventReminders(data);
     selected = values.event_date; closeDialog(); await reload();
+    global.dispatchEvent(new CustomEvent("itera:schedule-updated"));
   }
 
   async function deleteEvent() {
     const id = root.querySelector("[data-event-form]").elements.id.value;
     if (!id) return;
     const { error } = await supabaseClient.from("calendar_events").delete().eq("id", id).eq("user_id", user.id);
-    if (!error) { closeDialog(); await reload(); }
+    if (!error) { closeDialog(); await reload(); global.dispatchEvent(new CustomEvent("itera:schedule-updated")); }
   }
 
   function subjectName(id) { return subjects.find(item => item.id === id)?.name || ""; }

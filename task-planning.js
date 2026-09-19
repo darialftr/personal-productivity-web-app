@@ -5,6 +5,14 @@
   const personalTaskOnlyMarker = "[itera:task-only]";
   const personalTypes = ["personal", "selfcare", "home", "health", "errand"];
   const capacityByEnergy = { 1: 45, 2: 90, 3: 150, 4: 210, 5: 270 };
+  const planningSettingsKey = "itera_planning_settings";
+  const planningDefaults = Object.freeze({
+    schoolWorkCutoff: "20:30",
+    sleepTime: "22:30",
+    weekendStart: "09:00",
+    schoolToHomeMinutes: 45,
+    travelBufferMinutes: 15
+  });
 
   const isoDate = (date = new Date()) => {
     const offset = date.getTimezoneOffset() * 60000;
@@ -76,15 +84,34 @@
     return cursor + duration <= latestEnd ? cursor : null;
   }
 
-  function fixedIntervals(date, scheduleItems, calendarEvents) {
+  function getPlanningSettings(user) {
+    const saved = user?.user_metadata?.[planningSettingsKey] || {};
+    const validTime = value => /^([01]\d|2[0-3]):[0-5]\d$/.test(String(value || ""));
+    return {
+      schoolWorkCutoff: validTime(saved.schoolWorkCutoff) ? saved.schoolWorkCutoff : planningDefaults.schoolWorkCutoff,
+      sleepTime: validTime(saved.sleepTime) ? saved.sleepTime : planningDefaults.sleepTime,
+      weekendStart: validTime(saved.weekendStart) ? saved.weekendStart : planningDefaults.weekendStart,
+      schoolToHomeMinutes: Math.max(0, Number(saved.schoolToHomeMinutes) || planningDefaults.schoolToHomeMinutes),
+      travelBufferMinutes: Math.max(0, Number(saved.travelBufferMinutes) || planningDefaults.travelBufferMinutes)
+    };
+  }
+
+  function fixedIntervals(date, scheduleItems, calendarEvents, settings) {
     const day = parseDate(date).getDay();
     const schedule = scheduleItems.filter(item => Number(item.day_of_week) === day && item.start_time).map(item => {
       const start = minutesFromTime(item.start_time);
-      return { start, end: minutesFromTime(item.end_time) ?? start + 60 };
+      const end = minutesFromTime(item.end_time) ?? start + 60;
+      const needsBuffer = (item.item_type && item.item_type !== "school") && Boolean(item.location);
+      return { start: needsBuffer ? Math.max(0, start - settings.travelBufferMinutes) : start,
+        end: needsBuffer ? end + settings.travelBufferMinutes : end };
     });
     const events = calendarEvents.filter(item => (item.event_date || item.date) === date && (item.start_time || item.time)).map(item => {
       const start = minutesFromTime(item.start_time || item.time);
-      return { start, end: minutesFromTime(item.end_time || item.endTime) ?? start + 60 };
+      const end = minutesFromTime(item.end_time || item.endTime) ?? start + 60;
+      // A location is the least ambiguous existing signal that the event happens away from home.
+      const needsBuffer = Boolean(item.location);
+      return { start: needsBuffer ? Math.max(0, start - settings.travelBufferMinutes) : start,
+        end: needsBuffer ? end + settings.travelBufferMinutes : end };
     });
     return mergeIntervals([...schedule, ...events]);
   }
@@ -97,13 +124,13 @@
       });
   }
 
-  function dayStart(date, scheduleItems, personal = false) {
+  function dayStart(date, scheduleItems, settings, personal = false) {
     const day = parseDate(date).getDay();
     const weekend = day === 0 || day === 6;
-    if (weekend) return personal ? 13 * 60 : 8 * 60 + 30;
+    if (weekend) return minutesFromTime(settings.weekendStart) ?? 9 * 60;
     const schoolEnd = scheduleItems.filter(item => Number(item.day_of_week) === day && item.end_time)
       .reduce((latest, item) => Math.max(latest, minutesFromTime(item.end_time) || 0), 0);
-    const academicStart = Math.max(15 * 60 + 30, schoolEnd ? schoolEnd + 45 : 0);
+    const academicStart = Math.max(15 * 60 + 30, schoolEnd ? schoolEnd + settings.schoolToHomeMinutes : 0);
     return personal ? Math.max(18 * 60, academicStart) : academicStart;
   }
 
@@ -118,13 +145,29 @@
   function buildPlan({ tasks = [], scheduleItems = [], calendarEvents = [], user = null, energy = 3,
     today = isoDate(), now = new Date() }) {
     const previous = getPlan(user);
+    const settings = getPlanningSettings(user);
+    const nowMinutes = now.getHours() * 60 + now.getMinutes();
     const openIds = new Set(tasks.filter(task => !task.completed).map(task => String(task.id)));
     const plan = Object.fromEntries(Object.entries(previous).filter(([id]) => openIds.has(id)));
-    const candidates = tasks.filter(isPlannable).sort((first, second) => {
+    const activeIds = new Set(tasks.filter(task => {
+      const entry = previous[String(task.id)];
+      return !task.completed && entry?.date === today && Number.isFinite(minutesFromTime(entry.time)) &&
+        minutesFromTime(entry.time) <= nowMinutes && minutesFromTime(entry.time) + Number(entry.duration || taskDuration(task)) > nowMinutes;
+    }).map(task => String(task.id)));
+    const activeIntervals = date => tasks.filter(task => activeIds.has(String(task.id))).map(task => {
+      const entry = previous[String(task.id)];
+      if (entry?.date !== date) return null;
+      const start = minutesFromTime(entry.time);
+      return Number.isFinite(start) ? { start, end: start + Number(entry.duration || taskDuration(task)) } : null;
+    }).filter(Boolean);
+    const candidates = tasks.filter(task => isPlannable(task) && !activeIds.has(String(task.id))).sort((first, second) => {
       const personalOrder = Number(isPersonalTask(first)) - Number(isPersonalTask(second));
       const priority = { high: 0, medium: 1, low: 2 };
-      return personalOrder || String(first.deadline_date || first.deadline).localeCompare(String(second.deadline_date || second.deadline)) ||
-        (priority[first.priority] ?? 1) - (priority[second.priority] ?? 1) ||
+      const deadlineOrder = String(first.deadline_date || first.deadline).localeCompare(String(second.deadline_date || second.deadline));
+      const priorityOrder = (priority[first.priority] ?? 1) - (priority[second.priority] ?? 1);
+      // Low-energy planning protects attention: urgency first, then deadline.
+      const energyOrder = Number(energy) <= 2 ? priorityOrder || deadlineOrder : deadlineOrder || priorityOrder;
+      return personalOrder || energyOrder ||
         String(first.created_at || "").localeCompare(String(second.created_at || ""));
     });
     candidates.forEach(task => { delete plan[String(task.id)]; });
@@ -135,8 +178,9 @@
         const weekend = [0, 6].includes(parseDate(date).getDay());
         days.set(date, {
           busy: mergeIntervals([
-            ...fixedIntervals(date, scheduleItems, calendarEvents),
-            ...personalEventIntervals(date, tasks)
+            ...fixedIntervals(date, scheduleItems, calendarEvents, settings),
+            ...personalEventIntervals(date, tasks),
+            ...activeIntervals(date)
           ]), academicEnd: 0, used: 0,
           capacity: date === today ? capacityByEnergy[Number(energy)] || capacityByEnergy[3] : weekend ? 210 : capacityByEnergy[3]
         });
@@ -163,15 +207,15 @@
       for (const date of possibleDates) {
         const state = ensureDay(date);
         if (!personal && state.used + duration > state.capacity) continue;
-        const currentMinutes = now.getHours() * 60 + now.getMinutes();
         let earliest = personal && deadline < today && date === today
-          ? roundQuarter(currentMinutes + 15)
-          : dayStart(date, scheduleItems, personal);
+          ? roundQuarter(nowMinutes + 15)
+          : dayStart(date, scheduleItems, settings, personal);
         const preferredTime = minutesFromTime(task.deadline_time || task.deadlineTime);
         if (preferredTime !== null) earliest = Math.max(earliest, preferredTime);
-        if (date === today) earliest = Math.max(earliest, roundQuarter(currentMinutes + 15));
+        if (date === today) earliest = Math.max(earliest, roundQuarter(nowMinutes + 15));
         if (personal) earliest = Math.max(earliest, state.academicEnd ? state.academicEnd + 15 : 0);
-        const slot = firstFreeSlot(earliest, duration, state.busy, 22 * 60 + 30);
+        const latestEnd = minutesFromTime(personal ? settings.sleepTime : settings.schoolWorkCutoff);
+        const slot = firstFreeSlot(earliest, duration, state.busy, latestEnd ?? 22 * 60 + 30);
         if (slot === null) continue;
         chosen = { date, time: clockFromMinutes(slot), slot, state };
         break;
@@ -208,6 +252,6 @@
     return savePlan(user, plan);
   }
 
-  global.IteraPlanning = Object.freeze({ buildPlan, getPlan, getTaskPlan, isPersonalEvent, isPersonalTask,
-    isPlannable, savePlan, removeTask, isoDate });
+  global.IteraPlanning = Object.freeze({ buildPlan, getPlan, getTaskPlan, getPlanningSettings, planningDefaults,
+    isPersonalEvent, isPersonalTask, isPlannable, savePlan, removeTask, isoDate });
 })(window);
