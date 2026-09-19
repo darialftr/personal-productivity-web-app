@@ -9,10 +9,12 @@
   const personalTaskOnlyMarker = "[itera:task-only]";
   const personalNoTimerMarker = "[itera:no-timer]";
   const personalCategoryPattern = /\[itera:category=([^\]]+)\]/i;
+  const testGradePattern = /\[itera:test-grade=([^\]]+)\]/i;
   const cleanTaskNotes = notes => String(notes || "")
     .replace(personalTaskOnlyMarker, "")
     .replace(personalNoTimerMarker, "")
     .replace(personalCategoryPattern, "")
+    .replace(testGradePattern, "")
     .replace("[itera:event]", "")
     .trim();
   const normalizeTask = task => {
@@ -150,6 +152,7 @@
     const plan = taskPlan(task);
     const planLabel = plan ? `Planificat ${formatTaskDate(plan.date)} · ${plan.time}` : "";
     const contextLabel = subject?.name || taskTypeLabel(task.task_type);
+    const gradeLabel = task.task_type === "test" ? String(task.notes || "").match(testGradePattern)?.[1] : null;
     const personalEvent = isPersonalEventLike(task);
     const reorderable = filter === "today" && !task.completed && !personalEvent && Boolean(plan);
     return `<div class="tasks-swipe-row" data-task-row="${task.id}" ${reorderable ? `data-plan-order="${task.id}" data-order-key="${task.id}"` : ""}>
@@ -158,7 +161,7 @@
       ${personalEvent
         ? '<span class="tasks-spa-event-icon" aria-label="Eveniment"></span>'
         : `<button class="tasks-spa-check" data-toggle-task="${task.id}" aria-label="Schimbă starea">${task.completed ? "✓" : ""}</button>`}
-      <div><strong>${escapeHtml(task.title)}</strong><small>${escapeHtml(contextLabel)}${planLabel ? ` · ${escapeHtml(planLabel)}` : ""}${dateLabel && (!plan || plan.date !== task.deadline_date) ? ` · ${isLifeTask(task.task_type) ? "ziua aleasă" : "termen"} ${escapeHtml(dateLabel)}` : ""}</small></div>
+      <div><strong>${escapeHtml(task.title)}</strong><small>${escapeHtml(contextLabel)}${gradeLabel ? ` · nota ${escapeHtml(gradeLabel)}` : ""}${planLabel ? ` · ${escapeHtml(planLabel)}` : ""}${dateLabel && (!plan || plan.date !== task.deadline_date) ? ` · ${isLifeTask(task.task_type) ? "ziua aleasă" : "termen"} ${escapeHtml(dateLabel)}` : ""}</small></div>
       ${personalEvent
         ? '<span class="tasks-spa-badge tasks-spa-event-badge">Eveniment</span>'
         : `<span class="tasks-spa-badge priority-${escapeHtml(task.priority || "medium")}">${task.task_type === "test" ? "TEST" : `${task.estimated_minutes || 0}m`}</span>`}
@@ -223,6 +226,8 @@
     }
     if (!task) { form.elements.task_type.value = "homework"; form.elements.priority.value = "medium"; form.elements.estimated_minutes.value = "30"; }
     form.elements.personal_kind.value = task && !isChecklistTask(task) ? "timer" : "checklist";
+    const savedGrade = String(task?.notes || "").match(testGradePattern)?.[1];
+    if (savedGrade && form.elements.test_grade) form.elements.test_grade.value = savedGrade;
     syncTaskFormType(form.elements.task_type.value);
     form.querySelector("[data-task-dialog-title]").textContent = task ? "Editează task-ul" : "Task nou";
     form.querySelector("[data-delete-task]").hidden = !task;
@@ -292,6 +297,10 @@
     const submitButton = form.querySelector('[type="submit"]');
     form.querySelector("[data-task-error]").textContent = "";
     const fixedPersonal = isFixedPersonalTask(values.task_type);
+    const existingTask = id ? tasks.find(task => String(task.id) === String(id)) : null;
+    const existingGrade = String(existingTask?.notes || "").match(testGradePattern)?.[1];
+    const receivedGrade = Number(values.test_grade);
+    const validGrade = values.task_type === "test" && Number.isFinite(receivedGrade) && receivedGrade >= 1 && receivedGrade <= 10;
     const keepAsTaskOnly = fixedPersonal;
     const categoryMarker = isLifeTask(values.task_type) && values.task_type !== "personal"
       ? `[itera:category=${values.task_type}]`
@@ -305,6 +314,9 @@
       notes: isLifeTask(values.task_type) && keepAsTaskOnly
         ? `${values.notes.trim()} ${personalTaskOnlyMarker} ${noTimerMarker} ${categoryMarker}`.trim()
         : values.notes.trim() || null };
+    if (values.task_type === "test" && (existingGrade || validGrade)) {
+      payload.notes = `${payload.notes || ""} [itera:test-grade=${existingGrade || receivedGrade}]`.trim();
+    }
     // A single lesson for the same subject is trustworthy timetable information;
     // use it for a test, while leaving ambiguous days for the student to correct.
     if (values.task_type === "test" && !payload.deadline_time && payload.subject_id && payload.deadline_date) {
@@ -335,8 +347,7 @@
       return;
     }
     const normalizedData = normalizeTask(data);
-    const receivedGrade = Number(values.test_grade);
-    if (values.task_type === "test" && Number.isFinite(receivedGrade) && receivedGrade >= 1 && receivedGrade <= 10 && data.subject_id) {
+    if (validGrade && !existingGrade && data.subject_id) {
       const { error: gradeError } = await supabaseClient.from("subject_grades").insert({
         user_id: user.id, subject_id: data.subject_id, grade: receivedGrade,
         description: `Test: ${data.title}`, grade_date: data.deadline_date || today()
