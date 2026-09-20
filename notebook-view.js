@@ -38,6 +38,7 @@
   let width = 3;
 
   let drawing = null;
+  let eraserChanged = false;
 
   /*
    * Redo history.
@@ -62,6 +63,7 @@
   let saving = false;
   let saveQueued = false;
   let saveVersion = 0;
+  let localCacheTimer = 0;
 
   let resizeObserver = null;
 
@@ -2520,7 +2522,13 @@
             </option>
           </select>
 
-          <div class="notebook-width-control" data-width-control>
+      <div
+
+  class="notebook-width-control"
+
+  data-width-control
+
+>
 
   <button
 
@@ -2563,6 +2571,48 @@
       <strong data-width-value>${width}</strong>
 
     </div>
+
+    <input
+
+      data-width
+
+      type="range"
+
+      min="1"
+
+      max="12"
+
+      step=".5"
+
+      value="${width}"
+
+      aria-label="Grosime pix"
+
+    />
+
+    <div
+
+      class="notebook-width-dots"
+
+      aria-hidden="true"
+
+    >
+
+      <i></i>
+
+      <i></i>
+
+      <i></i>
+
+      <i></i>
+
+      <i></i>
+
+    </div>
+
+  </div>
+
+</div>
 
           <input
             data-color
