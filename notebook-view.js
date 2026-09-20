@@ -3,25 +3,27 @@
 /*
  * ITERA NOTEBOOK
  *
- * Focus:
- * - Apple Pencil / stylus low latency
- * - live ink layer
- * - static page layer
- * - coalesced pointer samples
- * - no coordinate rounding
- * - no movement threshold that kills tiny strokes
- * - immediate dots / tiny strokes
- * - light handwriting stabilization
- * - pressure-sensitive ink
- * - fullscreen Focus Mode
- * - Apple-like bubbly floating toolbar
- * - Supabase persistence outside the writing path
+ * Low-latency Apple Pencil notebook engine.
+ *
+ * IMPORTANT:
+ * - Drawing never waits for Supabase.
+ * - Pointer samples are never artificially filtered by distance.
+ * - getCoalescedEvents() is used when available.
+ * - Live ink is drawn on a transparent second canvas.
+ * - Static page content is kept on the base canvas.
+ * - Small strokes / dots are preserved.
+ * - Smoothing is intentionally light and causal enough
+ *   to avoid making handwriting feel delayed.
+ * - Fullscreen uses the browser Fullscreen API when available,
+ *   with a CSS Focus Mode fallback.
  */
 
 (function (global) {
   let root = null;
+
   let canvas = null;
   let ctx = null;
+
   let inkCanvas = null;
   let inkCtx = null;
 
@@ -36,11 +38,25 @@
   let width = 3;
 
   let drawing = null;
+
+  /*
+   * Redo history.
+   * Every item has:
+   * {
+   *   kind: "stroke" | "element",
+   *   item: object
+   * }
+   */
   let redo = [];
 
   let mounted = false;
+
   let zoom = 1;
-  let pan = { x: 0, y: 0 };
+
+  let pan = {
+    x: 0,
+    y: 0,
+  };
 
   let saveTimer = 0;
   let saving = false;
@@ -55,7 +71,19 @@
   let autoShapes = false;
   let shapeTool = "";
 
+  /*
+   * Touch pointers are navigation.
+   * Pencil / mouse are drawing.
+   */
   const pointers = new Map();
+
+  const imageCache = new Map();
+
+  /*
+   * ---------------------------------------------------------
+   * COLORS
+   * ---------------------------------------------------------
+   */
 
   const palette = [
     "#4d4260",
@@ -68,18 +96,32 @@
     "#171717",
   ];
 
+  /*
+   * ---------------------------------------------------------
+   * PAGE TEMPLATES
+   * ---------------------------------------------------------
+   */
+
   const templates = {
     lined: "Liniat",
     grid: "Pătrățele",
     blank: "Simplu",
   };
 
+  /*
+   * ---------------------------------------------------------
+   * STYLES
+   * ---------------------------------------------------------
+   */
+
   const styles = `
     .notebook-shell {
       --nb-accent: #f3a9c5;
+
       position: relative;
       width: 100%;
       min-height: calc(100vh - 120px);
+
       padding: 18px;
       box-sizing: border-box;
     }
@@ -88,20 +130,28 @@
       display: flex;
       align-items: center;
       gap: 12px;
+
       margin-bottom: 14px;
     }
 
     .notebook-title-icon {
       width: 42px;
       height: 42px;
-      border-radius: 14px;
+
+      flex: 0 0 auto;
+
       display: grid;
       place-items: center;
-      background: color-mix(
-        in srgb,
-        var(--nb-accent) 24%,
-        transparent
-      );
+
+      border-radius: 15px;
+
+      background:
+        color-mix(
+          in srgb,
+          var(--nb-accent) 22%,
+          transparent
+        );
+
       color: var(--nb-accent);
     }
 
@@ -116,37 +166,55 @@
 
     .notebook-head .eyebrow {
       margin: 0;
+
       font-size: 11px;
       opacity: .55;
     }
 
     .notebook-head small {
       margin-left: auto;
-      opacity: .55;
+
       font-size: 11px;
+      opacity: .55;
     }
+
+    /*
+     * -------------------------------------------------------
+     * NORMAL TOOLBAR
+     * -------------------------------------------------------
+     */
 
     .notebook-toolbar {
       display: flex;
       align-items: center;
       flex-wrap: wrap;
-      gap: 7px;
-      padding: 9px;
+
+      gap: 6px;
+
+      padding: 8px;
+
       border-radius: 22px;
+
       margin-bottom: 14px;
-      background: color-mix(
-        in srgb,
-        var(--surface, #fff) 90%,
-        var(--nb-accent) 10%
-      );
-      border: 1px solid color-mix(
-        in srgb,
-        var(--nb-accent) 18%,
-        transparent
-      );
+
+      background:
+        color-mix(
+          in srgb,
+          var(--surface, #fff) 90%,
+          var(--nb-accent) 10%
+        );
+
+      border: 1px solid
+        color-mix(
+          in srgb,
+          var(--nb-accent) 18%,
+          transparent
+        );
+
       box-shadow:
-        0 8px 28px rgba(0,0,0,.07),
-        inset 0 1px 0 rgba(255,255,255,.7);
+        0 8px 28px rgba(0, 0, 0, .07),
+        inset 0 1px 0 rgba(255, 255, 255, .75);
+
       backdrop-filter: blur(20px) saturate(150%);
       -webkit-backdrop-filter: blur(20px) saturate(150%);
     }
@@ -154,36 +222,49 @@
     .notebook-toolbar button {
       width: 38px;
       height: 38px;
+
+      flex: 0 0 auto;
+
       border: 0;
       border-radius: 14px;
+
       display: grid;
       place-items: center;
+
+      padding: 0;
+
       background: transparent;
       color: currentColor;
+
       cursor: pointer;
+
+      -webkit-tap-highlight-color: transparent;
+
       transition:
         transform .12s ease,
         background .12s ease,
-        color .12s ease;
-      flex: 0 0 auto;
+        color .12s ease,
+        box-shadow .12s ease;
     }
 
     .notebook-toolbar button:hover {
-      background: rgba(127,127,127,.11);
+      background: rgba(127, 127, 127, .10);
       transform: scale(1.04);
     }
 
     .notebook-toolbar button:active {
-      transform: scale(.94);
+      transform: scale(.91);
     }
 
     .notebook-toolbar button.active {
       background: var(--nb-accent);
       color: white;
+
       box-shadow:
-        0 4px 13px color-mix(
+        0 4px 14px
+        color-mix(
           in srgb,
-          var(--nb-accent) 35%,
+          var(--nb-accent) 38%,
           transparent
         );
     }
@@ -191,7 +272,9 @@
     .notebook-toolbar svg {
       width: 20px;
       height: 20px;
+
       fill: none;
+
       stroke: currentColor;
       stroke-width: 1.8;
       stroke-linecap: round;
@@ -199,100 +282,185 @@
     }
 
     .notebook-toolbar input[type="range"] {
-      width: 74px;
+      width: 72px;
+
       accent-color: var(--nb-accent);
     }
 
     .notebook-toolbar input[type="color"] {
-      width: 28px;
-      height: 28px;
+      width: 29px;
+      height: 29px;
+
       border: 0;
       padding: 0;
+
       border-radius: 50%;
+
       overflow: hidden;
-      cursor: pointer;
+
       background: transparent;
+
+      cursor: pointer;
     }
 
     .notebook-toolbar select {
       height: 34px;
+
       border: 0;
       border-radius: 12px;
+
       padding: 0 9px;
-      background: rgba(127,127,127,.09);
+
+      background: rgba(127, 127, 127, .09);
+
       color: inherit;
+
       font-size: 12px;
+
+      outline: none;
     }
 
     .notebook-zoom {
-      min-width: 44px;
+      min-width: 42px;
+
       text-align: center;
+
       font-size: 11px;
-      opacity: .65;
+
+      opacity: .6;
     }
+
+    /*
+     * -------------------------------------------------------
+     * COLOR SWATCHES
+     * -------------------------------------------------------
+     */
 
     .notebook-swatches {
       display: flex;
       align-items: center;
-      gap: 5px;
-      padding: 0 4px;
+
+      gap: 7px;
+
+      padding: 0 5px;
     }
 
-    .notebook-toolbar .notebook-swatches button {
+    .notebook-toolbar
+    .notebook-swatches
+    button {
       width: 20px;
       height: 20px;
+
       min-width: 20px;
-      border-radius: 50%;
-      border: 2px solid rgba(255,255,255,.72);
+
       padding: 0;
-      box-sizing: border-box;
+
+      border-radius: 50%;
+
+      border: 2px solid
+        rgba(255, 255, 255, .82);
+
+      box-shadow:
+        0 1px 3px rgba(0, 0, 0, .12);
+
+      transform: none;
     }
 
-    .notebook-toolbar .notebook-swatches button.notebook-swatch-selected {
-      transform: scale(1.18);
-      outline: 2px solid var(--nb-accent);
+    .notebook-toolbar
+    .notebook-swatches
+    button:hover {
+      transform: scale(1.10);
+    }
+
+    .notebook-toolbar
+    .notebook-swatches
+    button.notebook-swatch-selected {
+      transform: scale(1.20);
+
+      outline:
+        2px solid var(--nb-accent);
+
       outline-offset: 2px;
     }
 
+    /*
+     * -------------------------------------------------------
+     * STAGE
+     * -------------------------------------------------------
+     */
+
     .notebook-stage {
       position: relative;
+
       width: 100%;
+
       height: min(76vh, 920px);
+
       min-height: 500px;
+
       overflow: hidden;
-      border-radius: 24px;
-      background: rgba(127,127,127,.07);
+
+      border-radius: 25px;
+
+      background:
+        rgba(127, 127, 127, .07);
+
       touch-action: none;
+
       overscroll-behavior: none;
+
       user-select: none;
       -webkit-user-select: none;
+
+      -webkit-touch-callout: none;
     }
 
     .notebook-sheet {
       position: absolute;
+
       left: 50%;
       top: 50%;
+
       transform-origin: center center;
+
       touch-action: none;
+
       user-select: none;
       -webkit-user-select: none;
+
       box-shadow:
-        0 12px 45px rgba(0,0,0,.12),
-        0 2px 7px rgba(0,0,0,.06);
-      border-radius: 3px;
+        0 16px 50px rgba(0, 0, 0, .13),
+        0 2px 8px rgba(0, 0, 0, .06);
+
+      border-radius: 4px;
+
       overflow: hidden;
+
+      will-change: transform;
     }
 
     .notebook-sheet canvas {
       position: absolute;
+
       inset: 0;
+
+      display: block;
+
       width: 100%;
       height: 100%;
-      display: block;
+
       touch-action: none;
+
       user-select: none;
       -webkit-user-select: none;
+
       -webkit-touch-callout: none;
+
+      /*
+       * Prevent browser gestures from competing
+       * with Apple Pencil input.
+       */
+      -webkit-user-drag: none;
     }
 
     .notebook-base-canvas {
@@ -303,26 +471,48 @@
       pointer-events: auto;
     }
 
+    /*
+     * -------------------------------------------------------
+     * PAGE CONTROLS
+     * -------------------------------------------------------
+     */
+
     .notebook-page-controls {
       display: flex;
       align-items: center;
       justify-content: center;
+
       gap: 9px;
+
       margin-top: 10px;
     }
 
     .notebook-page-controls button {
-      border: 0;
-      min-width: 38px;
+      width: 38px;
       height: 34px;
-      border-radius: 12px;
-      background: rgba(127,127,127,.09);
+
+      border: 0;
+      border-radius: 13px;
+
+      background:
+        rgba(127, 127, 127, .09);
+
       color: inherit;
+
       cursor: pointer;
+
+      transition:
+        transform .12s ease,
+        background .12s ease;
     }
 
     .notebook-page-controls button:hover {
-      background: rgba(127,127,127,.15);
+      background:
+        rgba(127, 127, 127, .15);
+    }
+
+    .notebook-page-controls button:active {
+      transform: scale(.92);
     }
 
     .notebook-page-controls span {
@@ -330,128 +520,332 @@
       opacity: .58;
     }
 
+    /*
+     * -------------------------------------------------------
+     * FULLSCREEN / FOCUS MODE
+     * -------------------------------------------------------
+     */
+
     .notebook-fullscreen-button {
       margin-left: auto;
     }
 
-    /* -----------------------------------------------------
-       FOCUS MODE
-       ----------------------------------------------------- */
-
     .notebook-focus {
       position: fixed !important;
+
       inset: 0 !important;
+
       z-index: 999999 !important;
+
       width: 100vw !important;
       height: 100dvh !important;
+
       min-height: 100dvh !important;
+
+      box-sizing: border-box;
+
       padding:
         max(10px, env(safe-area-inset-top))
         max(10px, env(safe-area-inset-right))
         max(10px, env(safe-area-inset-bottom))
-        max(10px, env(safe-area-inset-left)) !important;
-      box-sizing: border-box;
-      background: var(--background, #f7f5f8);
+        max(10px, env(safe-area-inset-left))
+        !important;
+
+      background:
+        var(--background, #f7f5f8);
     }
 
-    .notebook-focus .notebook-head {
-      display: none;
-    }
-
+    .notebook-focus .notebook-head,
     .notebook-focus .subjects-spa-back {
-      display: none;
+      display: none !important;
     }
+
+    /*
+     * Floating Apple-like toolbar.
+     */
 
     .notebook-focus .notebook-toolbar {
       position: fixed;
+
       z-index: 1000001;
-      top: max(12px, env(safe-area-inset-top));
+
+      top:
+        max(
+          10px,
+          env(safe-area-inset-top)
+        );
+
       left: 50%;
-      transform: translateX(-50%);
+
       width: max-content;
-      max-width: calc(100vw - 24px);
+
+      max-width:
+        calc(100vw - 24px);
+
       margin: 0;
-      flex-wrap: nowrap;
-      overflow-x: auto;
-      scrollbar-width: none;
-      border-radius: 24px;
+
       padding: 7px;
-      background: rgba(255,255,255,.72);
+
+      flex-wrap: nowrap;
+
+      overflow-x: auto;
+
+      scrollbar-width: none;
+
+      border-radius: 25px;
+
+      background:
+        rgba(255, 255, 255, .72);
+
       color: #171717;
+
+      border:
+        1px solid
+        rgba(255, 255, 255, .8);
+
       box-shadow:
-        0 10px 36px rgba(0,0,0,.12),
-        inset 0 1px 0 rgba(255,255,255,.9);
+        0 12px 38px rgba(0, 0, 0, .12),
+        inset 0 1px 0 rgba(255, 255, 255, .95);
+
+      backdrop-filter:
+        blur(25px)
+        saturate(160%);
+
+      -webkit-backdrop-filter:
+        blur(25px)
+        saturate(160%);
+
+      transform:
+        translateX(-50%);
+
       transition:
         opacity .18s ease,
         transform .18s ease;
     }
 
-    .notebook-focus .notebook-toolbar::-webkit-scrollbar {
+    .notebook-focus
+    .notebook-toolbar::-webkit-scrollbar {
       display: none;
     }
 
-    .notebook-focus .notebook-toolbar.hidden {
+    .notebook-focus
+    .notebook-toolbar.hidden {
       opacity: 0;
+
       pointer-events: none;
+
       transform:
         translateX(-50%)
         translateY(-12px)
         scale(.97);
     }
 
+    .notebook-focus
+    .notebook-toolbar
+    button {
+      width: 37px;
+      height: 37px;
+
+      border-radius: 14px;
+    }
+
+    .notebook-focus
+    .notebook-toolbar
+    button.active {
+      background: var(--nb-accent);
+      color: white;
+    }
+
+    .notebook-focus
+    .notebook-toolbar
+    select,
+    .notebook-focus
+    .notebook-toolbar
+    input[type="range"] {
+      display: none;
+    }
+
+    /*
+     * In fullscreen, the sheet gets the entire viewport.
+     */
+
     .notebook-focus .notebook-stage {
       position: fixed;
+
       inset: 0;
+
       width: 100vw;
       height: 100dvh;
+
       min-height: 0;
+
       border-radius: 0;
-      background: var(--background, #f7f5f8);
+
+      background:
+        var(--background, #f7f5f8);
     }
+
+    /*
+     * Page controls become a little floating pill.
+     */
 
     .notebook-focus .notebook-page-controls {
       position: fixed;
+
       z-index: 1000000;
-      bottom: max(14px, env(safe-area-inset-bottom));
+
+      bottom:
+        max(
+          13px,
+          env(safe-area-inset-bottom)
+        );
+
       left: 50%;
-      transform: translateX(-50%);
+
       margin: 0;
+
       padding: 6px 8px;
-      border-radius: 18px;
-      background: rgba(255,255,255,.68);
-      backdrop-filter: blur(18px);
-      -webkit-backdrop-filter: blur(18px);
-      box-shadow: 0 8px 25px rgba(0,0,0,.1);
+
+      border-radius: 19px;
+
+      background:
+        rgba(255, 255, 255, .70);
+
+      box-shadow:
+        0 9px 28px rgba(0, 0, 0, .10);
+
+      backdrop-filter:
+        blur(18px);
+
+      -webkit-backdrop-filter:
+        blur(18px);
+
+      transform:
+        translateX(-50%);
     }
 
-    .notebook-focus .notebook-fullscreen-button {
-      display: grid;
-    }
+    /*
+     * Fullscreen button is moved to top-right.
+     */
 
-    .notebook-focus .notebook-fullscreen-button {
+    .notebook-focus
+    .notebook-fullscreen-button {
       position: fixed;
+
       z-index: 1000002;
-      top: max(12px, env(safe-area-inset-top));
-      right: max(12px, env(safe-area-inset-right));
-      width: 38px;
-      height: 38px;
+
+      top:
+        max(
+          10px,
+          env(safe-area-inset-top)
+        );
+
+      right:
+        max(
+          10px,
+          env(safe-area-inset-right)
+        );
+
+      width: 37px;
+      height: 37px;
+
+      margin: 0;
+
       border-radius: 14px;
-      background: rgba(255,255,255,.78);
-      box-shadow: 0 5px 18px rgba(0,0,0,.1);
+
+      background:
+        rgba(255, 255, 255, .78);
+
+      color: #171717;
+
+      box-shadow:
+        0 6px 20px rgba(0, 0, 0, .10);
     }
+
+    /*
+     * -------------------------------------------------------
+     * TEXT EDITOR
+     * -------------------------------------------------------
+     */
 
     .notebook-text-editor {
       position: fixed;
+
       z-index: 1000010;
-      border: 1px solid rgba(0,0,0,.12);
-      border-radius: 12px;
+
+      min-width: 130px;
+
+      border:
+        1px solid
+        rgba(0, 0, 0, .12);
+
+      border-radius: 13px;
+
       padding: 9px 11px;
+
       outline: none;
-      background: rgba(255,255,255,.96);
-      box-shadow: 0 8px 28px rgba(0,0,0,.14);
+
+      background:
+        rgba(255, 255, 255, .97);
+
       color: #171717;
-      font: 16px system-ui, sans-serif;
+
+      box-shadow:
+        0 8px 28px rgba(0, 0, 0, .14);
+
+      font:
+        16px
+        system-ui,
+        -apple-system,
+        BlinkMacSystemFont,
+        sans-serif;
     }
+
+    /*
+     * -------------------------------------------------------
+     * DARK MODE
+     * -------------------------------------------------------
+     */
+
+    @media (prefers-color-scheme: dark) {
+      .notebook-focus
+      .notebook-toolbar {
+        background:
+          rgba(35, 35, 38, .74);
+
+        color: #fff;
+
+        border-color:
+          rgba(255, 255, 255, .10);
+
+        box-shadow:
+          0 12px 38px rgba(0, 0, 0, .30),
+          inset 0 1px 0
+          rgba(255, 255, 255, .08);
+      }
+
+      .notebook-focus
+      .notebook-fullscreen-button {
+        background:
+          rgba(35, 35, 38, .82);
+
+        color: #fff;
+      }
+
+      .notebook-focus
+      .notebook-page-controls {
+        background:
+          rgba(35, 35, 38, .74);
+
+        color: #fff;
+      }
+    }
+
+    /*
+     * -------------------------------------------------------
+     * MOBILE
+     * -------------------------------------------------------
+     */
 
     @media (max-width: 800px) {
       .notebook-shell {
@@ -466,6 +860,7 @@
       .notebook-toolbar button {
         width: 35px;
         height: 35px;
+
         border-radius: 12px;
       }
 
@@ -475,11 +870,19 @@
       }
 
       .notebook-stage {
-        height: calc(100dvh - 210px);
+        height:
+          calc(100dvh - 210px);
+
         min-height: 400px;
       }
     }
   `;
+
+  /*
+   * ---------------------------------------------------------
+   * ICONS
+   * ---------------------------------------------------------
+   */
 
   const icons = {
     gel: `
@@ -587,30 +990,60 @@
     `,
   };
 
+  /*
+   * ---------------------------------------------------------
+   * STYLE INJECTION
+   * ---------------------------------------------------------
+   */
+
   function injectStyles() {
-    if (document.getElementById("itera-notebook-styles")) {
+    if (
+      document.getElementById(
+        "itera-notebook-styles"
+      )
+    ) {
       return;
     }
 
-    const style = document.createElement("style");
-    style.id = "itera-notebook-styles";
+    const style =
+      document.createElement("style");
+
+    style.id =
+      "itera-notebook-styles";
+
     style.textContent = styles;
+
     document.head.appendChild(style);
   }
 
+  /*
+   * ---------------------------------------------------------
+   * NOTEBOOK DATA
+   * ---------------------------------------------------------
+   */
+
   function freshNotebook() {
     return {
-      version: 5,
+      version: 6,
+
       pages: [
         {
           template: "lined",
-          background: "#fffdf9",
-          orientation: "portrait",
+
+          background:
+            "#fffdf9",
+
+          orientation:
+            "portrait",
+
           strokes: [],
+
           elements: [],
         },
       ],
-      updatedAt: Date.now(),
+
+      updatedAt:
+        Date.now(),
     };
   }
 
@@ -619,9 +1052,11 @@
   }
 
   function storageKey() {
-    return `itera:notebook:${user?.id || "guest"}:${
-      subject?.id || "subject"
-    }`;
+    return (
+      `itera:notebook:` +
+      `${user?.id || "guest"}:` +
+      `${subject?.id || "subject"}`
+    );
   }
 
   function escapeHtml(value) {
@@ -638,30 +1073,48 @@
       !Array.isArray(notebook.pages) ||
       !notebook.pages.length
     ) {
-      notebook = freshNotebook();
+      notebook =
+        freshNotebook();
     }
 
-    notebook.pages.forEach((page) => {
-      page.template ||= "lined";
-      page.background ||= "#fffdf9";
-      page.orientation ||= "portrait";
-      page.strokes ||= [];
-      page.elements ||= [];
+    notebook.pages.forEach(
+      (page) => {
+        page.template ||= "lined";
 
-      page.strokes.forEach((stroke) => {
-        stroke.points ||= [];
-        stroke.tool ||= "gel";
-        stroke.color ||= "#4d4260";
-        stroke.width ||= 3;
-      });
-    });
+        page.background ||=
+          "#fffdf9";
+
+        page.orientation ||=
+          "portrait";
+
+        page.strokes ||= [];
+
+        page.elements ||= [];
+
+        page.strokes.forEach(
+          (stroke) => {
+            stroke.points ||= [];
+
+            stroke.tool ||= "gel";
+
+            stroke.color ||=
+              "#4d4260";
+
+            stroke.width ||= 3;
+          }
+        );
+      }
+    );
   }
 
   function loadLocal() {
     try {
-      const saved = JSON.parse(
-        localStorage.getItem(storageKey()) || "null"
-      );
+      const saved =
+        JSON.parse(
+          localStorage.getItem(
+            storageKey()
+          ) || "null"
+        );
 
       if (
         saved &&
@@ -675,68 +1128,110 @@
     return freshNotebook();
   }
 
+  /*
+   * ---------------------------------------------------------
+   * CLOUD
+   * ---------------------------------------------------------
+   */
+
   async function loadCloud() {
     try {
-      const { data, error } = await supabaseClient
+      const {
+        data,
+        error,
+      } = await supabaseClient
         .from("notebooks")
-        .select("content,updated_at")
-        .eq("user_id", user.id)
-        .eq("subject_id", subject.id)
+        .select(
+          "content,updated_at"
+        )
+        .eq(
+          "user_id",
+          user.id
+        )
+        .eq(
+          "subject_id",
+          subject.id
+        )
         .maybeSingle();
 
       if (
         error ||
         !data?.content ||
-        !Array.isArray(data.content.pages) ||
+        !Array.isArray(
+          data.content.pages
+        ) ||
         !mounted
       ) {
         return;
       }
 
-      const cloudTime = Number(
-        data.content.updatedAt || 0
-      );
+      const cloudTime =
+        Number(
+          data.content.updatedAt ||
+            0
+        );
 
-      const localTime = Number(
-        notebook.updatedAt || 0
-      );
+      const localTime =
+        Number(
+          notebook.updatedAt ||
+            0
+        );
 
-      if (cloudTime > localTime) {
-        notebook = data.content;
+      if (
+        cloudTime > localTime
+      ) {
+        notebook =
+          data.content;
+
         normalizeNotebook();
+
+        activePage =
+          Math.min(
+            activePage,
+            notebook.pages.length - 1
+          );
+
         renderCanvas();
-        updateStatus("Sincronizat");
+
+        updateStatus(
+          "Sincronizat"
+        );
       }
     } catch (_) {}
   }
 
   /*
-   * IMPORTANT:
-   *
-   * Local persistence is synchronous but tiny.
-   * Supabase NEVER runs while a Pencil stroke is active.
+   * Supabase is intentionally delayed.
+   * It never runs from pointermove.
    */
 
   function scheduleSave() {
     clearTimeout(saveTimer);
 
-    saveTimer = setTimeout(() => {
-      if (drawing || pointers.size) {
-        scheduleSave();
-        return;
-      }
+    saveTimer =
+      setTimeout(() => {
+        if (
+          drawing ||
+          pointers.size
+        ) {
+          scheduleSave();
+          return;
+        }
 
-      void persist();
-    }, 1200);
+        void persist();
+      }, 1200);
   }
 
   function localSave() {
     try {
-      notebook.updatedAt = Date.now();
+      notebook.updatedAt =
+        Date.now();
 
       localStorage.setItem(
         storageKey(),
-        JSON.stringify(notebook)
+        JSON.stringify(
+          notebook
+        )
       );
     } catch (_) {}
 
@@ -765,53 +1260,83 @@
     do {
       saveQueued = false;
 
-      if (drawing || pointers.size) {
+      if (
+        drawing ||
+        pointers.size
+      ) {
         saveQueued = true;
         break;
       }
 
-      const version = ++saveVersion;
+      const version =
+        ++saveVersion;
 
-      notebook.updatedAt = Date.now();
+      notebook.updatedAt =
+        Date.now();
 
       let snapshot;
 
       try {
         snapshot =
-          typeof structuredClone === "function"
-            ? structuredClone(notebook)
+          typeof structuredClone ===
+          "function"
+            ? structuredClone(
+                notebook
+              )
             : JSON.parse(
-                JSON.stringify(notebook)
+                JSON.stringify(
+                  notebook
+                )
               );
       } catch (_) {
         break;
       }
 
       try {
-        await supabaseClient
-          .from("notebooks")
-          .upsert(
-            {
-              user_id: user.id,
-              subject_id: subject.id,
-              content: snapshot,
-              updated_at: new Date().toISOString(),
-            },
-            {
-              onConflict: "user_id,subject_id",
-            }
-          );
+        const result =
+          await supabaseClient
+            .from("notebooks")
+            .upsert(
+              {
+                user_id:
+                  user.id,
+
+                subject_id:
+                  subject.id,
+
+                content:
+                  snapshot,
+
+                updated_at:
+                  new Date().toISOString(),
+              },
+              {
+                onConflict:
+                  "user_id,subject_id",
+              }
+            );
+
+        if (
+          result?.error
+        ) {
+          throw result.error;
+        }
 
         if (
           mounted &&
-          version === saveVersion &&
+          version ===
+            saveVersion &&
           !drawing &&
           !pointers.size
         ) {
-          updateStatus("Salvat");
+          updateStatus(
+            "Salvat"
+          );
         }
       } catch (_) {
-        updateStatus("Salvat local");
+        updateStatus(
+          "Salvat local"
+        );
       }
     } while (
       saveQueued &&
@@ -824,33 +1349,55 @@
 
   function updateStatus(text) {
     root
-      ?.querySelector("[data-notebook-status]")
+      ?.querySelector(
+        "[data-notebook-status]"
+      )
       ?.replaceChildren(text);
   }
 
+  /*
+   * ---------------------------------------------------------
+   * RENDER UI
+   * ---------------------------------------------------------
+   */
+
   function render() {
-    if (!root || !notebook || !subject) {
+    if (
+      !root ||
+      !notebook ||
+      !subject
+    ) {
       return;
     }
 
     injectStyles();
 
-    const p = currentPage();
+    const page =
+      currentPage();
 
     root.innerHTML = `
       <a
         class="subjects-spa-back"
         href="#/subjects/${subject.id}"
       >
-        ← ${escapeHtml(subject.name)}
+        ← ${escapeHtml(
+          subject.name
+        )}
       </a>
 
       <section
         class="notebook-shell"
-        style="--nb-accent:${subject.color || "#f3a9c5"}"
+        style="--nb-accent:${
+          subject.color ||
+          "#f3a9c5"
+        }"
       >
+
         <header class="notebook-head">
-          <div class="notebook-title-icon">
+
+          <div
+            class="notebook-title-icon"
+          >
             <svg viewBox="0 0 48 48">
               <path
                 d="M12 18h24v10H12zM16 28l-3 12m19-12 3 12M12 40h8m8 0h8M19 13h10"
@@ -864,38 +1411,71 @@
           </div>
 
           <div>
-            <p class="eyebrow">Caietul tău</p>
-            <h2>${escapeHtml(subject.name)}</h2>
+            <p class="eyebrow">
+              Caietul tău
+            </p>
+
+            <h2>
+              ${escapeHtml(
+                subject.name
+              )}
+            </h2>
           </div>
 
-          <small data-notebook-status>
+          <small
+            data-notebook-status
+          >
             Pregătit
           </small>
+
         </header>
 
         <div
           class="notebook-toolbar"
           data-notebook-toolbar
         >
-          ${toolButton("gel", icons.gel, "Pix gel")}
-          ${toolButton("ballpoint", icons.ballpoint, "Pix")}
-          ${toolButton("pencil", icons.pencil, "Creion")}
+
+          ${toolButton(
+            "gel",
+            icons.gel,
+            "Pix gel"
+          )}
+
+          ${toolButton(
+            "ballpoint",
+            icons.ballpoint,
+            "Pix"
+          )}
+
+          ${toolButton(
+            "pencil",
+            icons.pencil,
+            "Creion"
+          )}
+
           ${toolButton(
             "highlighter",
             icons.highlighter,
             "Marker"
           )}
+
           ${toolButton(
             "eraser",
             icons.eraser,
             "Radieră"
           )}
-          ${toolButton("text", icons.text, "Text")}
+
+          ${toolButton(
+            "text",
+            icons.text,
+            "Text"
+          )}
 
           <button
             data-auto-shapes
             aria-pressed="${autoShapes}"
             title="Forme automate"
+            aria-label="Forme automate"
           >
             ${icons.shapes}
           </button>
@@ -903,6 +1483,7 @@
           <button
             data-add-image
             title="Adaugă imagine"
+            aria-label="Adaugă imagine"
           >
             ${icons.image}
           </button>
@@ -910,6 +1491,7 @@
           <button
             data-undo
             title="Anulează"
+            aria-label="Anulează"
           >
             ${icons.undo}
           </button>
@@ -917,6 +1499,7 @@
           <button
             data-redo
             title="Refă"
+            aria-label="Refă"
           >
             ${icons.redo}
           </button>
@@ -924,6 +1507,7 @@
           <button
             data-zoom-out
             title="Micșorează"
+            aria-label="Micșorează"
           >
             ${icons.zoomOut}
           </button>
@@ -932,12 +1516,15 @@
             class="notebook-zoom"
             data-zoom
           >
-            ${Math.round(zoom * 100)}%
+            ${Math.round(
+              zoom * 100
+            )}%
           </span>
 
           <button
             data-zoom-in
             title="Mărește"
+            aria-label="Mărește"
           >
             ${icons.zoomIn}
           </button>
@@ -947,9 +1534,12 @@
             type="color"
             value="${color}"
             title="Culoare"
+            aria-label="Culoare"
           />
 
-          <span class="notebook-swatches">
+          <span
+            class="notebook-swatches"
+          >
             ${palette
               .map(
                 (c) => `
@@ -957,7 +1547,7 @@
                     type="button"
                     data-swatch="${c}"
                     style="background:${c}"
-                    aria-label="Culoare"
+                    aria-label="Culoare ${c}"
                   ></button>
                 `
               )
@@ -974,29 +1564,48 @@
             title="Grosime"
           />
 
-          <select data-shape title="Formă">
-            <option value="">Liber</option>
-            <option value="line">Linie</option>
-            <option value="arrow">Săgeată</option>
+          <select
+            data-shape
+            title="Formă"
+          >
+            <option value="">
+              Liber
+            </option>
+
+            <option value="line">
+              Linie
+            </option>
+
+            <option value="arrow">
+              Săgeată
+            </option>
+
             <option value="rectangle">
               Dreptunghi
             </option>
+
             <option value="ellipse">
               Elipsă
             </option>
+
             <option value="triangle">
               Triunghi
             </option>
           </select>
 
-          <select data-template title="Pagină">
-            ${Object.entries(templates)
+          <select
+            data-template
+            title="Pagină"
+          >
+            ${Object.entries(
+              templates
+            )
               .map(
                 ([id, label]) => `
                   <option
                     value="${id}"
                     ${
-                      p.template === id
+                      page.template === id
                         ? "selected"
                         : ""
                     }
@@ -1008,11 +1617,15 @@
               .join("")}
           </select>
 
-          <select data-orientation title="Orientare">
+          <select
+            data-orientation
+            title="Orientare"
+          >
             <option
               value="portrait"
               ${
-                p.orientation === "portrait"
+                page.orientation ===
+                "portrait"
                   ? "selected"
                   : ""
               }
@@ -1023,7 +1636,8 @@
             <option
               value="landscape"
               ${
-                p.orientation === "landscape"
+                page.orientation ===
+                "landscape"
                   ? "selected"
                   : ""
               }
@@ -1047,6 +1661,7 @@
             accept="image/*"
             hidden
           />
+
         </div>
 
         <div
@@ -1069,37 +1684,71 @@
           </div>
         </div>
 
-        <div class="notebook-page-controls">
-          <button data-prev>‹</button>
+        <div
+          class="notebook-page-controls"
+        >
+          <button
+            data-prev
+            aria-label="Pagina anterioară"
+          >
+            ‹
+          </button>
 
-          <span data-page-label>
-            Pagina ${activePage + 1}
-            / ${notebook.pages.length}
+          <span
+            data-page-label
+          >
+            Pagina ${
+              activePage + 1
+            }
+            /
+            ${notebook.pages.length}
           </span>
 
-          <button data-next>›</button>
-          <button data-add-page>＋</button>
+          <button
+            data-next
+            aria-label="Pagina următoare"
+          >
+            ›
+          </button>
+
+          <button
+            data-add-page
+            aria-label="Pagină nouă"
+          >
+            ＋
+          </button>
         </div>
+
       </section>
     `;
 
-    canvas = root.querySelector(
-      "[data-notebook-canvas]"
-    );
+    canvas =
+      root.querySelector(
+        "[data-notebook-canvas]"
+      );
 
-    inkCanvas = root.querySelector(
-      "[data-notebook-ink]"
-    );
+    inkCanvas =
+      root.querySelector(
+        "[data-notebook-ink]"
+      );
 
-    ctx = canvas.getContext("2d", {
-      alpha: false,
-      desynchronized: true,
-    });
+    ctx =
+      canvas.getContext(
+        "2d",
+        {
+          alpha: false,
+          desynchronized: true,
+        }
+      );
 
-    inkCtx = inkCanvas.getContext("2d", {
-      alpha: true,
-      desynchronized: true,
-    });
+    inkCtx =
+      inkCanvas.getContext(
+        "2d",
+        {
+          alpha: true,
+          desynchronized: true,
+        }
+      );
 
     bind();
 
@@ -1112,11 +1761,19 @@
     setZoom(zoom);
   }
 
-  function toolButton(id, icon, title) {
+  function toolButton(
+    id,
+    icon,
+    title
+  ) {
     return `
       <button
         data-tool="${id}"
-        class="${tool === id ? "active" : ""}"
+        class="${
+          tool === id
+            ? "active"
+            : ""
+        }"
         title="${title}"
         aria-label="${title}"
       >
@@ -1132,79 +1789,183 @@
    */
 
   function pageAspect() {
-    return currentPage().orientation ===
+    return currentPage()
+      .orientation ===
       "landscape"
       ? 297 / 210
       : 210 / 297;
   }
 
   function resizeCanvas() {
-    if (!canvas || !inkCanvas) {
+    if (
+      !canvas ||
+      !inkCanvas ||
+      !root
+    ) {
       return;
     }
 
-    const stage = root.querySelector(
-      "[data-notebook-stage]"
-    );
+    const stage =
+      root.querySelector(
+        "[data-notebook-stage]"
+      );
 
-    const sheet = root.querySelector(
-      "[data-notebook-sheet]"
-    );
+    const sheet =
+      root.querySelector(
+        "[data-notebook-sheet]"
+      );
 
-    if (!stage || !sheet) {
+    if (
+      !stage ||
+      !sheet
+    ) {
       return;
     }
 
-    const stageWidth = stage.clientWidth;
-    const stageHeight = stage.clientHeight;
+    const stageWidth =
+      stage.clientWidth;
 
-    const aspect = pageAspect();
+    const stageHeight =
+      stage.clientHeight;
 
-    let widthPx = stageWidth * 0.72;
-    let heightPx = widthPx / aspect;
+    const aspect =
+      pageAspect();
 
-    if (heightPx > stageHeight * 0.9) {
-      heightPx = stageHeight * 0.9;
-      widthPx = heightPx * aspect;
+    let widthPx =
+      stageWidth * 0.72;
+
+    let heightPx =
+      widthPx / aspect;
+
+    if (
+      heightPx >
+      stageHeight * 0.90
+    ) {
+      heightPx =
+        stageHeight * 0.90;
+
+      widthPx =
+        heightPx * aspect;
     }
 
-    if (widthPx < 280) {
+    if (
+      widthPx < 280 &&
+      stageWidth >= 280
+    ) {
       widthPx = 280;
-      heightPx = widthPx / aspect;
+      heightPx =
+        widthPx / aspect;
     }
 
-    sheet.style.width = `${widthPx}px`;
-    sheet.style.height = `${heightPx}px`;
+    /*
+     * Fullscreen:
+     *
+     * Fit the whole A4 page into the viewport,
+     * leaving comfortable space around it.
+     */
 
-    const dpr = Math.min(
-      global.devicePixelRatio || 1,
-      2
-    );
+    if (fullscreen) {
+      const safeWidth =
+        stageWidth * 0.92;
 
-    const pixelWidth = Math.max(
-      1,
-      Math.round(widthPx * dpr)
-    );
+      const safeHeight =
+        stageHeight * 0.92;
 
-    const pixelHeight = Math.max(
-      1,
-      Math.round(heightPx * dpr)
-    );
+      widthPx =
+        Math.min(
+          safeWidth,
+          safeHeight * aspect
+        );
 
-    canvas.width = pixelWidth;
-    canvas.height = pixelHeight;
+      heightPx =
+        widthPx / aspect;
+    }
 
-    inkCanvas.width = pixelWidth;
-    inkCanvas.height = pixelHeight;
+    sheet.style.width =
+      `${widthPx}px`;
 
-    canvas.style.width = `${widthPx}px`;
-    canvas.style.height = `${heightPx}px`;
+    sheet.style.height =
+      `${heightPx}px`;
 
-    inkCanvas.style.width = `${widthPx}px`;
-    inkCanvas.style.height = `${heightPx}px`;
+    const dpr =
+      Math.min(
+        global.devicePixelRatio ||
+          1,
+        2
+      );
 
-    renderCanvas();
-    clearInk();
+    const pixelWidth =
+      Math.max(
+        1,
+        Math.round(
+          widthPx * dpr
+        )
+      );
+
+    const pixelHeight =
+      Math.max(
+        1,
+        Math.round(
+          heightPx * dpr
+        )
+      );
+
+    /*
+     * Avoid resetting the canvas if its
+     * backing dimensions have not changed.
+     *
+     * This is important for Pencil latency.
+     */
+
+    const changed =
+      canvas.width !==
+        pixelWidth ||
+      canvas.height !==
+        pixelHeight;
+
+    if (changed) {
+      canvas.width =
+        pixelWidth;
+
+      canvas.height =
+        pixelHeight;
+
+      inkCanvas.width =
+        pixelWidth;
+
+      inkCanvas.height =
+        pixelHeight;
+
+      canvas.style.width =
+        `${widthPx}px`;
+
+      canvas.style.height =
+        `${heightPx}px`;
+
+      inkCanvas.style.width =
+        `${widthPx}px`;
+
+      inkCanvas.style.height =
+        `${heightPx}px`;
+
+      renderCanvas();
+
+      clearInk();
+    } else {
+      canvas.style.width =
+        `${widthPx}px`;
+
+      canvas.style.height =
+        `${heightPx}px`;
+
+      inkCanvas.style.width =
+        `${widthPx}px`;
+
+      inkCanvas.style.height =
+        `${heightPx}px`;
+    }
+
+    setZoom(zoom);
   }
 
   /*
@@ -1214,30 +1975,62 @@
    */
 
   function paintPaper() {
-    if (!ctx || !canvas) {
+    if (
+      !ctx ||
+      !canvas
+    ) {
       return;
     }
 
-    const dpr = Math.min(
-      global.devicePixelRatio || 1,
-      2
+    const w =
+      canvas.width;
+
+    const h =
+      canvas.height;
+
+    const dpr =
+      Math.min(
+        global.devicePixelRatio ||
+          1,
+        2
+      );
+
+    ctx.setTransform(
+      1,
+      0,
+      0,
+      1,
+      0,
+      0
     );
 
-    const w = canvas.width;
-    const h = canvas.height;
-
-    ctx.setTransform(1, 0, 0, 1, 0, 0);
-
-    ctx.clearRect(0, 0, w, h);
+    ctx.clearRect(
+      0,
+      0,
+      w,
+      h
+    );
 
     ctx.fillStyle =
-      currentPage().background || "#fffdf9";
+      currentPage()
+        .background ||
+      "#fffdf9";
 
-    ctx.fillRect(0, 0, w, h);
+    ctx.fillRect(
+      0,
+      0,
+      w,
+      h
+    );
 
-    const template = currentPage().template;
+    const template =
+      currentPage()
+        .template;
 
-    if (template === "blank") {
+    if (
+      template ===
+      "blank"
+    ) {
       return;
     }
 
@@ -1248,31 +2041,76 @@
         ? "rgba(110,130,160,.12)"
         : "rgba(100,120,160,.18)";
 
-    ctx.lineWidth = 1 * dpr;
+    ctx.lineWidth =
+      1 * dpr;
 
-    if (template === "grid") {
-      const gap = 22 * dpr;
+    if (
+      template ===
+      "grid"
+    ) {
+      const gap =
+        22 * dpr;
 
-      for (let x = gap; x < w; x += gap) {
+      for (
+        let x = gap;
+        x < w;
+        x += gap
+      ) {
         ctx.beginPath();
-        ctx.moveTo(x, 0);
-        ctx.lineTo(x, h);
+
+        ctx.moveTo(
+          x,
+          0
+        );
+
+        ctx.lineTo(
+          x,
+          h
+        );
+
         ctx.stroke();
       }
 
-      for (let y = gap; y < h; y += gap) {
+      for (
+        let y = gap;
+        y < h;
+        y += gap
+      ) {
         ctx.beginPath();
-        ctx.moveTo(0, y);
-        ctx.lineTo(w, y);
+
+        ctx.moveTo(
+          0,
+          y
+        );
+
+        ctx.lineTo(
+          w,
+          y
+        );
+
         ctx.stroke();
       }
     } else {
-      const gap = 31 * dpr;
+      const gap =
+        31 * dpr;
 
-      for (let y = gap; y < h; y += gap) {
+      for (
+        let y = gap;
+        y < h;
+        y += gap
+      ) {
         ctx.beginPath();
-        ctx.moveTo(0, y);
-        ctx.lineTo(w, y);
+
+        ctx.moveTo(
+          0,
+          y
+        );
+
+        ctx.lineTo(
+          w,
+          y
+        );
+
         ctx.stroke();
       }
 
@@ -1280,8 +2118,17 @@
         "rgba(230,100,130,.16)";
 
       ctx.beginPath();
-      ctx.moveTo(58 * dpr, 0);
-      ctx.lineTo(58 * dpr, h);
+
+      ctx.moveTo(
+        58 * dpr,
+        0
+      );
+
+      ctx.lineTo(
+        58 * dpr,
+        h
+      );
+
       ctx.stroke();
     }
 
@@ -1290,47 +2137,69 @@
 
   /*
    * ---------------------------------------------------------
-   * DRAWING
+   * STATIC RENDER
    * ---------------------------------------------------------
    */
 
   function renderCanvas() {
-    if (!ctx || !canvas) {
+    if (
+      !ctx ||
+      !canvas
+    ) {
       return;
     }
 
     paintPaper();
 
-    const dpr = Math.min(
-      global.devicePixelRatio || 1,
-      2
+    const dpr =
+      Math.min(
+        global.devicePixelRatio ||
+          1,
+        2
+      );
+
+    const page =
+      currentPage();
+
+    page.strokes.forEach(
+      (stroke) => {
+        drawStroke(
+          ctx,
+          stroke,
+          dpr
+        );
+      }
     );
 
-    currentPage().strokes.forEach((stroke) => {
-      drawStroke(
-        ctx,
-        stroke,
-        dpr
-      );
-    });
-
-    currentPage().elements.forEach((element) => {
-      drawElement(
-        ctx,
-        element,
-        dpr
-      );
-    });
+    page.elements.forEach(
+      (element) => {
+        drawElement(
+          ctx,
+          element,
+          dpr
+        );
+      }
+    );
 
     clearInk();
   }
 
   function clearInk() {
-    if (!inkCtx || !inkCanvas) {
+    if (
+      !inkCtx ||
+      !inkCanvas
+    ) {
       return;
     }
 
-    inkCtx.setTransform(1, 0, 0, 1, 0, 0);
+    inkCtx.setTransform(
+      1,
+      0,
+      0,
+      1,
+      0,
+      0
+    );
 
     inkCtx.clearRect(
       0,
@@ -1341,110 +2210,177 @@
   }
 
   /*
-   * This is deliberately light.
+   * ---------------------------------------------------------
+   * HANDWRITING SMOOTHING
+   * ---------------------------------------------------------
    *
-   * It does NOT wait for future points.
-   * It only smooths the points that already exist.
+   * The old version moved points toward their neighbours.
+   * That is mathematically nice but can make the visible
+   * stroke feel delayed because the next point is needed.
+   *
+   * We therefore use a very light smoothing pass for the
+   * already received points only.
+   *
+   * During the live stroke, we don't wait for future samples.
    */
 
-  function stabilizedPoints(points) {
-    if (!points || points.length <= 2) {
+  function smoothForDisplay(
+    points
+  ) {
+    if (
+      !points ||
+      points.length < 3
+    ) {
       return points || [];
     }
 
-    const result = [points[0]];
+    const result = [
+      points[0],
+    ];
 
-    const amount = 0.18;
+    /*
+     * Small value on purpose.
+     *
+     * This removes jitter without
+     * making handwriting feel "rubbery".
+     */
 
-    for (let i = 1; i < points.length - 1; i++) {
-      const previous = points[i - 1];
-      const current = points[i];
-      const next = points[i + 1];
+    const amount = 0.12;
+
+    for (
+      let i = 1;
+      i <
+        points.length - 1;
+      i++
+    ) {
+      const prev =
+        points[i - 1];
+
+      const current =
+        points[i];
+
+      const next =
+        points[i + 1];
 
       result.push([
         current[0] +
-          ((
-            previous[0] +
-            next[0]
-          ) /
-            2 -
-            current[0]) *
+          (
+            (
+              prev[0] +
+              next[0]
+            ) /
+              2 -
+            current[0]
+          ) *
             amount,
 
         current[1] +
-          ((
-            previous[1] +
-            next[1]
-          ) /
-            2 -
-            current[1]) *
+          (
+            (
+              prev[1] +
+              next[1]
+            ) /
+              2 -
+            current[1]
+          ) *
             amount,
 
         current[2],
       ]);
     }
 
-    result.push(points[points.length - 1]);
+    result.push(
+      points[
+        points.length - 1
+      ]
+    );
 
     return result;
   }
+
+  /*
+   * ---------------------------------------------------------
+   * DRAW STROKE
+   * ---------------------------------------------------------
+   */
 
   function drawStroke(
     target,
     stroke,
     dpr
   ) {
-    const points = stroke.points || [];
+    const points =
+      stroke.points || [];
 
     if (!points.length) {
       return;
     }
 
-    const w = canvas.clientWidth;
-    const h = canvas.clientHeight;
+    const w =
+      canvas.clientWidth;
+
+    const h =
+      canvas.clientHeight;
 
     const smooth =
-      stabilizedPoints(points);
+      smoothForDisplay(
+        points
+      );
 
     const alpha =
-      stroke.tool === "highlighter"
+      stroke.tool ===
+      "highlighter"
         ? 0.24
-        : stroke.tool === "pencil"
+        : stroke.tool ===
+          "pencil"
         ? 0.72
         : 1;
 
     target.save();
 
-    target.globalAlpha = alpha;
+    target.globalAlpha =
+      alpha;
 
     target.strokeStyle =
-      stroke.color || color;
+      stroke.color ||
+      color;
 
     target.fillStyle =
-      stroke.color || color;
+      stroke.color ||
+      color;
 
-    target.lineCap = "round";
-    target.lineJoin = "round";
+    target.lineCap =
+      "round";
+
+    target.lineJoin =
+      "round";
 
     /*
-     * Tiny strokes need to appear immediately.
+     * Tiny stroke / dot.
      */
-    if (smooth.length === 1) {
-      const p = smooth[0];
+
+    if (
+      smooth.length === 1
+    ) {
+      const p =
+        smooth[0];
+
+      const pressure =
+        Number(p[2]) || 1;
 
       const radius =
         Math.max(
           0.7,
           stroke.width *
-            (Number(p[2]) || 1) *
-            0.5
-        );
+            pressure *
+            0.48
+        ) * dpr;
 
       target.beginPath();
 
       target.arc(
-        p[0] * w,
-        p[1] * h,
+        p[0] * w * dpr,
+        p[1] * h * dpr,
         radius,
         0,
         Math.PI * 2
@@ -1453,15 +2389,24 @@
       target.fill();
 
       target.restore();
+
       return;
     }
 
-    for (let i = 1; i < smooth.length; i++) {
-      const a = smooth[i - 1];
-      const b = smooth[i];
+    /*
+     * Two-point strokes are rendered directly.
+     * This makes tiny i/t/punctuation strokes
+     * appear without waiting for a third point.
+     */
 
-      const next =
-        smooth[i + 1] || b;
+    if (
+      smooth.length === 2
+    ) {
+      const a =
+        smooth[0];
+
+      const b =
+        smooth[1];
 
       const pressure =
         (
@@ -1471,43 +2416,115 @@
           Number(b[2]) || 1
         );
 
-      const averagePressure =
-        pressure / 2;
+      target.lineWidth =
+        stroke.width *
+        (pressure / 2) *
+        dpr;
+
+      target.beginPath();
+
+      target.moveTo(
+        a[0] * w * dpr,
+        a[1] * h * dpr
+      );
+
+      target.lineTo(
+        b[0] * w * dpr,
+        b[1] * h * dpr
+      );
+
+      target.stroke();
+
+      target.restore();
+
+      return;
+    }
+
+    /*
+     * Normal handwriting.
+     */
+
+    for (
+      let i = 1;
+      i < smooth.length;
+      i++
+    ) {
+      const a =
+        smooth[i - 1];
+
+      const b =
+        smooth[i];
+
+      const next =
+        smooth[i + 1] ||
+        b;
+
+      const pressure =
+        (
+          Number(a[2]) || 1
+        ) +
+        (
+          Number(b[2]) || 1
+        );
 
       target.lineWidth =
         stroke.width *
-        averagePressure *
+        (pressure / 2) *
         dpr;
 
-      const ax = a[0] * w * dpr;
-      const ay = a[1] * h * dpr;
-
-      const bx = b[0] * w * dpr;
-      const by = b[1] * h * dpr;
-
-      const nx =
-        (
-          b[0] +
-          next[0]
-        ) /
-        2 *
+      const ax =
+        a[0] *
         w *
         dpr;
 
-      const ny =
-        (
-          b[1] +
-          next[1]
-        ) /
-        2 *
+      const ay =
+        a[1] *
+        h *
+        dpr;
+
+      const bx =
+        b[0] *
+        w *
+        dpr;
+
+      const by =
+        b[1] *
         h *
         dpr;
 
       target.beginPath();
 
-      target.moveTo(ax, ay);
+      target.moveTo(
+        ax,
+        ay
+      );
 
-      if (i < smooth.length - 1) {
+      if (
+        i <
+        smooth.length - 1
+      ) {
+        const nx =
+          (
+            (
+              b[0] +
+              next[0]
+            ) /
+              2
+          ) *
+          w *
+          dpr;
+
+        const ny =
+          (
+            (
+              b[1] +
+              next[1]
+            ) /
+              2
+          ) *
+          h *
+          dpr;
+
         target.quadraticCurveTo(
           bx,
           by,
@@ -1515,7 +2532,10 @@
           ny
         );
       } else {
-        target.lineTo(bx, by);
+        target.lineTo(
+          bx,
+          by
+        );
       }
 
       target.stroke();
@@ -1524,38 +2544,22 @@
     target.restore();
   }
 
+  /*
+   * ---------------------------------------------------------
+   * ELEMENTS
+   * ---------------------------------------------------------
+   */
+
   function drawElement(
     target,
     element,
     dpr
   ) {
-    if (element.type === "text") {
-      const w = canvas.clientWidth;
-      const h = canvas.clientHeight;
-
-      target.save();
-
-      target.fillStyle =
-        element.color || "#171717";
-
-      target.font =
-        `${element.size || 18}px system-ui, -apple-system, sans-serif`;
-
-      target.textBaseline = "top";
-
-      target.fillText(
-        element.text,
-        element.x * w,
-        element.y * h
-      );
-
-      target.restore();
-
-      return;
-    }
-
-    if (element.type === "image") {
-      drawImageElement(
+    if (
+      element.type ===
+      "text"
+    ) {
+      drawTextElement(
         target,
         element,
         dpr
@@ -1564,7 +2568,22 @@
       return;
     }
 
-    if (element.type === "shape") {
+    if (
+      element.type ===
+      "image"
+    ) {
+      drawImageElement(
+        target,
+        element
+      );
+
+      return;
+    }
+
+    if (
+      element.type ===
+      "shape"
+    ) {
       drawShape(
         target,
         element,
@@ -1573,41 +2592,103 @@
     }
   }
 
+  function drawTextElement(
+    target,
+    element
+  ) {
+    const w =
+      canvas.clientWidth;
+
+    const h =
+      canvas.clientHeight;
+
+    target.save();
+
+    target.fillStyle =
+      element.color ||
+      "#171717";
+
+    target.font =
+      `${element.size || 18}px system-ui, -apple-system, sans-serif`;
+
+    target.textBaseline =
+      "top";
+
+    target.fillText(
+      element.text,
+      element.x * w,
+      element.y * h
+    );
+
+    target.restore();
+  }
+
+  /*
+   * ---------------------------------------------------------
+   * SHAPES
+   * ---------------------------------------------------------
+   */
+
   function drawShape(
     target,
     shape,
     dpr
   ) {
-    const w = canvas.clientWidth;
-    const h = canvas.clientHeight;
+    const w =
+      canvas.clientWidth;
 
-    const x = shape.x * w;
-    const y = shape.y * h;
-    const sw = shape.w * w;
-    const sh = shape.h * h;
+    const h =
+      canvas.clientHeight;
+
+    const x =
+      shape.x * w;
+
+    const y =
+      shape.y * h;
+
+    const sw =
+      shape.w * w;
+
+    const sh =
+      shape.h * h;
 
     target.save();
 
     target.strokeStyle =
-      shape.color || color;
+      shape.color ||
+      color;
 
     target.lineWidth =
-      (shape.width || 3) * dpr;
+      (shape.width || 3) *
+      dpr;
 
-    target.lineCap = "round";
-    target.lineJoin = "round";
+    target.lineCap =
+      "round";
+
+    target.lineJoin =
+      "round";
 
     target.beginPath();
 
-    if (shape.shape === "line") {
-      target.moveTo(x, y);
+    if (
+      shape.shape ===
+      "line"
+    ) {
+      target.moveTo(
+        x,
+        y
+      );
+
       target.lineTo(
         x + sw,
         y + sh
       );
     }
 
-    if (shape.shape === "arrow") {
+    if (
+      shape.shape ===
+      "arrow"
+    ) {
       drawArrow(
         target,
         x,
@@ -1617,7 +2698,10 @@
       );
     }
 
-    if (shape.shape === "rectangle") {
+    if (
+      shape.shape ===
+      "rectangle"
+    ) {
       target.rect(
         x,
         y,
@@ -1626,7 +2710,10 @@
       );
     }
 
-    if (shape.shape === "ellipse") {
+    if (
+      shape.shape ===
+      "ellipse"
+    ) {
       target.ellipse(
         x + sw / 2,
         y + sh / 2,
@@ -1638,7 +2725,10 @@
       );
     }
 
-    if (shape.shape === "triangle") {
+    if (
+      shape.shape ===
+      "triangle"
+    ) {
       target.moveTo(
         x + sw / 2,
         y
@@ -1658,6 +2748,7 @@
     }
 
     target.stroke();
+
     target.restore();
   }
 
@@ -1668,15 +2759,23 @@
     x2,
     y2
   ) {
-    const angle = Math.atan2(
-      y2 - y1,
-      x2 - x1
-    );
+    const angle =
+      Math.atan2(
+        y2 - y1,
+        x2 - x1
+      );
 
     const size = 9;
 
-    target.moveTo(x1, y1);
-    target.lineTo(x2, y2);
+    target.moveTo(
+      x1,
+      y1
+    );
+
+    target.lineTo(
+      x2,
+      y2
+    );
 
     target.moveTo(
       x2,
@@ -1686,10 +2785,16 @@
     target.lineTo(
       x2 -
         size *
-          Math.cos(angle - Math.PI / 6),
+          Math.cos(
+            angle -
+              Math.PI / 6
+          ),
       y2 -
         size *
-          Math.sin(angle - Math.PI / 6)
+          Math.sin(
+            angle -
+              Math.PI / 6
+          )
     );
 
     target.moveTo(
@@ -1700,31 +2805,46 @@
     target.lineTo(
       x2 -
         size *
-          Math.cos(angle + Math.PI / 6),
+          Math.cos(
+            angle +
+              Math.PI / 6
+          ),
       y2 -
         size *
-          Math.sin(angle + Math.PI / 6)
+          Math.sin(
+            angle +
+              Math.PI / 6
+          )
     );
   }
 
-  const imageCache = new Map();
+  /*
+   * ---------------------------------------------------------
+   * IMAGES
+   * ---------------------------------------------------------
+   */
 
   function drawImageElement(
     target,
     element
   ) {
-    let image = imageCache.get(
-      element.src
-    );
+    let image =
+      imageCache.get(
+        element.src
+      );
 
     if (!image) {
-      image = new Image();
+      image =
+        new Image();
 
       image.onload = () => {
-        renderCanvas();
+        if (mounted) {
+          renderCanvas();
+        }
       };
 
-      image.src = element.src;
+      image.src =
+        element.src;
 
       imageCache.set(
         element.src,
@@ -1734,12 +2854,17 @@
       return;
     }
 
-    if (!image.complete) {
+    if (
+      !image.complete
+    ) {
       return;
     }
 
-    const w = canvas.clientWidth;
-    const h = canvas.clientHeight;
+    const w =
+      canvas.clientWidth;
+
+    const h =
+      canvas.clientHeight;
 
     target.drawImage(
       image,
@@ -1756,17 +2881,58 @@
    * ---------------------------------------------------------
    */
 
-  function pointFromEvent(event) {
+  function pointFromEvent(
+    event
+  ) {
     const rect =
       inkCanvas.getBoundingClientRect();
+
+    const x =
+      (
+        event.clientX -
+        rect.left
+      ) / rect.width;
+
+    const y =
+      (
+        event.clientY -
+        rect.top
+      ) / rect.height;
+
+    /*
+     * Pencil pressure:
+     *
+     * We don't exaggerate pressure too much.
+     * Very light Pencil strokes remain visible.
+     */
+
+    let pressure = 1;
+
+    if (
+      event.pointerType ===
+        "pen" &&
+      Number.isFinite(
+        event.pressure
+      ) &&
+      event.pressure > 0
+    ) {
+      pressure =
+        Math.max(
+          0.28,
+          Math.min(
+            1.65,
+            event.pressure *
+              1.35
+          )
+        );
+    }
 
     return [
       Math.max(
         0,
         Math.min(
           1,
-          (event.clientX - rect.left) /
-            rect.width
+          x
         )
       ),
 
@@ -1774,22 +2940,11 @@
         0,
         Math.min(
           1,
-          (event.clientY - rect.top) /
-            rect.height
+          y
         )
       ),
 
-      event.pointerType === "pen" &&
-      Number.isFinite(event.pressure) &&
-      event.pressure > 0
-        ? Math.max(
-            0.2,
-            Math.min(
-              1.8,
-              event.pressure * 1.45
-            )
-          )
-        : 1,
+      pressure,
     ];
   }
 
@@ -1800,16 +2955,21 @@
    */
 
   function drawLive() {
-    if (!drawing || !inkCtx) {
+    if (
+      !drawing ||
+      !inkCtx
+    ) {
       return;
     }
 
     clearInk();
 
-    const dpr = Math.min(
-      global.devicePixelRatio || 1,
-      2
-    );
+    const dpr =
+      Math.min(
+        global.devicePixelRatio ||
+          1,
+        2
+      );
 
     drawStroke(
       inkCtx,
@@ -1818,50 +2978,78 @@
     );
   }
 
-  function addSamples(events) {
+  /*
+   * Add every useful sample.
+   *
+   * The only sample we remove is an EXACT duplicate.
+   */
+
+  function addSamples(
+    events
+  ) {
     if (!drawing) {
       return;
     }
 
-    for (const event of events) {
-      const p =
-        pointFromEvent(event);
-
-      const last =
-        drawing.points[
-          drawing.points.length - 1
-        ];
-
-      /*
-       * Only reject EXACT duplicate samples.
-       *
-       * This is important for:
-       * - i dots
-       * - t crosses
-       * - punctuation
-       * - tiny strokes
-       */
+    for (
+      const event of events
+    ) {
       if (
-        last &&
-        p[0] === last[0] &&
-        p[1] === last[1]
+        !event ||
+        !Number.isFinite(
+          event.clientX
+        ) ||
+        !Number.isFinite(
+          event.clientY
+        )
       ) {
         continue;
       }
 
-      drawing.points.push(p);
+      const p =
+        pointFromEvent(
+          event
+        );
+
+      const last =
+        drawing.points[
+          drawing.points.length -
+            1
+        ];
+
+      if (
+        last &&
+        p[0] === last[0] &&
+        p[1] === last[1] &&
+        p[2] === last[2]
+      ) {
+        continue;
+      }
+
+      drawing.points.push(
+        p
+      );
     }
 
     drawLive();
   }
 
+  /*
+   * ---------------------------------------------------------
+   * POINTER DOWN
+   * ---------------------------------------------------------
+   */
+
   function begin(event) {
-    if (!canvas || !inkCanvas) {
+    if (
+      !inkCanvas
+    ) {
       return;
     }
 
     if (
-      event.pointerType === "mouse" &&
+      event.pointerType ===
+        "mouse" &&
       event.button !== 0
     ) {
       return;
@@ -1869,71 +3057,128 @@
 
     event.preventDefault();
 
+    /*
+     * Touch is navigation.
+     */
+
     pointers.set(
       event.pointerId,
       {
-        x: event.clientX,
-        y: event.clientY,
+        x:
+          event.clientX,
+
+        y:
+          event.clientY,
       }
     );
 
-    /*
-     * Touch is reserved for navigation/pan.
-     * Pencil gets priority.
-     */
     if (
-      event.pointerType === "touch"
+      event.pointerType ===
+      "touch"
     ) {
       return;
     }
 
+    /*
+     * Pencil / mouse.
+     */
+
     if (
-      event.pointerType === "pen" ||
-      event.pointerType === "mouse"
+      event.pointerType !==
+        "pen" &&
+      event.pointerType !==
+        "mouse"
     ) {
-      try {
-        inkCanvas.setPointerCapture(
-          event.pointerId
-        );
-      } catch (_) {}
+      return;
+    }
 
-      if (tool === "text") {
-        addText(event);
-        return;
-      }
+    try {
+      inkCanvas.setPointerCapture(
+        event.pointerId
+      );
+    } catch (_) {}
 
-      if (tool === "eraser") {
-        eraseAt(
-          pointFromEvent(event)
-        );
-        return;
-      }
+    /*
+     * Text tool.
+     */
 
-      redo = [];
+    if (
+      tool === "text"
+    ) {
+      addText(event);
 
-      drawing = {
-        tool,
-        color,
-        width:
-          tool === "highlighter"
-            ? width * 3
-            : width,
-        points: [],
-      };
+      return;
+    }
 
-      currentPage().strokes.push(
+    /*
+     * Eraser.
+     */
+
+    if (
+      tool === "eraser"
+    ) {
+      eraseAt(
+        pointFromEvent(
+          event
+        )
+      );
+
+      return;
+    }
+
+    /*
+     * A new drawing invalidates redo.
+     */
+
+    redo = [];
+
+    drawing = {
+      tool,
+
+      color,
+
+      width:
+        tool ===
+        "highlighter"
+          ? width * 3
+          : width,
+
+      points: [],
+
+      pointerId:
+        event.pointerId,
+
+      createdAt:
+        Date.now(),
+    };
+
+    currentPage()
+      .strokes.push(
         drawing
       );
 
-      /*
-       * First point is rendered immediately.
-       */
-      addSamples([event]);
-    }
+    /*
+     * FIRST POINT:
+     * immediately.
+     */
+
+    addSamples([
+      event,
+    ]);
   }
 
+  /*
+   * ---------------------------------------------------------
+   * POINTER MOVE
+   * ---------------------------------------------------------
+   */
+
   function move(event) {
-    if (!pointers.has(event.pointerId)) {
+    if (
+      !pointers.has(
+        event.pointerId
+      )
+    ) {
       return;
     }
 
@@ -1942,64 +3187,245 @@
     pointers.set(
       event.pointerId,
       {
-        x: event.clientX,
-        y: event.clientY,
+        x:
+          event.clientX,
+
+        y:
+          event.clientY,
       }
     );
 
     /*
-     * Touch = navigation only.
+     * Touch = pan.
      */
-    if (
-      event.pointerType === "touch"
-    ) {
-      return;
-    }
 
-    if (!drawing) {
-      if (tool === "eraser") {
-        eraseAt(
-          pointFromEvent(event)
-        );
-      }
+    if (
+      event.pointerType ===
+      "touch"
+    ) {
+      handleTouchPan();
 
       return;
     }
 
     /*
-     * The browser may have several Pencil
-     * samples waiting between animation frames.
-     *
-     * We take ALL of them.
+     * Pencil / mouse.
      */
-    const events =
-      typeof event.getCoalescedEvents ===
-      "function"
-        ? event.getCoalescedEvents()
-        : [event];
 
-    addSamples(events);
+    if (
+      !drawing ||
+      drawing.pointerId !==
+        event.pointerId
+    ) {
+      return;
+    }
+
+    /*
+     * getCoalescedEvents()
+     * gives us all Pencil samples
+     * between browser frames.
+     */
+
+    let events;
+
+    if (
+      typeof event.getCoalescedEvents ===
+        "function"
+    ) {
+      events =
+        event.getCoalescedEvents();
+
+      if (
+        !events ||
+        !events.length
+      ) {
+        events = [
+          event,
+        ];
+      }
+    } else {
+      events = [
+        event,
+      ];
+    }
+
+    addSamples(
+      events
+    );
   }
 
+  /*
+   * ---------------------------------------------------------
+   * TOUCH PAN
+   * ---------------------------------------------------------
+   *
+   * One finger touch:
+   * pan.
+   *
+   * Two finger touch:
+   * pinch zoom + pan.
+   *
+   * Apple Pencil always has priority because
+   * Pencil events are not touch events.
+   */
+
+  function handleTouchPan() {
+    if (
+      pointers.size === 1
+    ) {
+      const [
+        pointer,
+      ] =
+        [...pointers.values()];
+
+      const start =
+        pointer.start;
+
+      if (!start) {
+        return;
+      }
+
+      pan = {
+        x:
+          pointer.x -
+          start.x,
+
+        y:
+          pointer.y -
+          start.y,
+      };
+
+      setZoom(zoom);
+
+      return;
+    }
+
+    if (
+      pointers.size < 2
+    ) {
+      return;
+    }
+
+    const entries =
+      [...pointers.entries()];
+
+    const a =
+      entries[0][1];
+
+    const b =
+      entries[1][1];
+
+    if (
+      !a.gesture ||
+      !b.gesture
+    ) {
+      return;
+    }
+
+    const distance =
+      Math.hypot(
+        a.x - b.x,
+        a.y - b.y
+      );
+
+    const base =
+      a.gesture.distance ||
+      distance ||
+      1;
+
+    const centerX =
+      (
+        a.gesture.x +
+        b.gesture.x
+      ) / 2;
+
+    const centerY =
+      (
+        a.gesture.y +
+        b.gesture.y
+      ) / 2;
+
+    pan = {
+      x:
+        a.gesture.panX +
+        (
+          (
+            a.x +
+            b.x
+          ) / 2 -
+          centerX
+        ),
+
+      y:
+        a.gesture.panY +
+        (
+          (
+            a.y +
+            b.y
+          ) / 2 -
+          centerY
+        ),
+    };
+
+    setZoom(
+      (
+        a.gesture.zoom ||
+        zoom
+      ) *
+        distance /
+        base
+    );
+  }
+
+  /*
+   * ---------------------------------------------------------
+   * POINTER UP / CANCEL
+   * ---------------------------------------------------------
+   */
+
   function finish(event) {
+    /*
+     * Process the final Pencil sample FIRST.
+     *
+     * This fixes tiny missing endings.
+     */
+
+    if (
+      drawing &&
+      drawing.pointerId ===
+        event.pointerId &&
+      (
+        event.pointerType ===
+          "pen" ||
+        event.pointerType ===
+          "mouse"
+      )
+    ) {
+      addSamples([
+        event,
+      ]);
+
+      applyShapeRecognition();
+
+      /*
+       * Render the finished stroke
+       * onto the static layer immediately.
+       */
+
+      renderCanvas();
+
+      drawing = null;
+
+      localSave();
+    }
+
+    /*
+     * Remove pointer.
+     */
+
     pointers.delete(
       event.pointerId
     );
-
-    if (
-      drawing &&
-      event.pointerId ===
-        drawing.pointerId
-    ) {
-      drawing = null;
-    }
-
-    if (
-      drawing &&
-      event.pointerType === "pen"
-    ) {
-      addSamples([event]);
-    }
 
     try {
       inkCanvas.releasePointerCapture(
@@ -2007,26 +3433,59 @@
       );
     } catch (_) {}
 
+    /*
+     * Prepare touch gesture state
+     * for the next gesture.
+     */
+
     if (
-      event.pointerType === "pen" ||
-      event.pointerType === "mouse"
+      event.pointerType ===
+      "touch"
     ) {
-      /*
-       * Move the finished stroke to the static
-       * layer immediately.
-       */
-      renderCanvas();
-
-      /*
-       * Local save is deferred until after
-       * the stroke. Supabase is even later.
-       */
-      localSave();
+      if (
+        pointers.size === 0
+      ) {
+        pan = {
+          x: 0,
+          y: 0,
+        };
+      }
     }
 
-    if (!pointers.size) {
-      drawing = null;
+    clearInk();
+  }
+
+  /*
+   * ---------------------------------------------------------
+   * POINTER SETUP
+   * ---------------------------------------------------------
+   */
+
+  function preparePointerGesture(
+    event
+  ) {
+    const existing =
+      pointers.get(
+        event.pointerId
+      );
+
+    if (!existing) {
+      return;
     }
+
+    existing.start = {
+      x:
+        event.clientX,
+
+      y:
+        event.clientY,
+    };
+
+    existing.x =
+      event.clientX;
+
+    existing.y =
+      event.clientY;
   }
 
   /*
@@ -2035,12 +3494,16 @@
    * ---------------------------------------------------------
    */
 
-  function eraseAt(at) {
-    const p = currentPage();
+  function eraseAt(
+    at
+  ) {
+    const page =
+      currentPage();
 
     const radius =
       Math.max(
         0.008,
+
         width /
           Math.max(
             canvas.clientWidth,
@@ -2049,82 +3512,117 @@
           2.5
       );
 
-    const removed = [];
+    let changed = false;
 
-    p.strokes =
-      p.strokes.filter((stroke) => {
-        const hit =
-          stroke.points.some(
-            (point) =>
-              Math.hypot(
-                point[0] - at[0],
-                point[1] - at[1]
-              ) < radius
-          );
+    page.strokes =
+      page.strokes.filter(
+        (stroke) => {
+          const hit =
+            stroke.points.some(
+              (point) =>
+                Math.hypot(
+                  point[0] -
+                    at[0],
 
-        if (hit) {
-          removed.push(stroke);
+                  point[1] -
+                    at[1]
+                ) <
+                radius
+            );
+
+          if (hit) {
+            redo.push({
+              kind:
+                "stroke",
+
+              item:
+                stroke,
+            });
+
+            changed = true;
+          }
+
+          return !hit;
         }
+      );
 
-        return !hit;
-      });
-
-    if (!removed.length) {
+    if (!changed) {
       return;
     }
 
-    redo.push(
-      ...removed
-    );
-
     renderCanvas();
+
     localSave();
   }
 
   /*
    * ---------------------------------------------------------
-   * SHAPES
+   * AUTO SHAPE RECOGNITION
    * ---------------------------------------------------------
    */
 
-  function recognizeShape(stroke) {
+  function recognizeShape(
+    stroke
+  ) {
     const points =
-      stroke.points || [];
+      stroke.points ||
+      [];
 
-    if (points.length < 4) {
+    if (
+      points.length < 4
+    ) {
       return null;
     }
 
-    const first = points[0];
+    const first =
+      points[0];
+
     const last =
-      points[points.length - 1];
+      points[
+        points.length - 1
+      ];
 
-    const minX = Math.min(
-      ...points.map((p) => p[0])
-    );
+    const xs =
+      points.map(
+        (p) => p[0]
+      );
 
-    const maxX = Math.max(
-      ...points.map((p) => p[0])
-    );
+    const ys =
+      points.map(
+        (p) => p[1]
+      );
 
-    const minY = Math.min(
-      ...points.map((p) => p[1])
-    );
+    const minX =
+      Math.min(...xs);
 
-    const maxY = Math.max(
-      ...points.map((p) => p[1])
-    );
+    const maxX =
+      Math.max(...xs);
 
-    const w = maxX - minX;
-    const h = maxY - minY;
+    const minY =
+      Math.min(...ys);
+
+    const maxY =
+      Math.max(...ys);
+
+    const w =
+      maxX - minX;
+
+    const h =
+      maxY - minY;
 
     const closed =
       Math.hypot(
-        first[0] - last[0],
-        first[1] - last[1]
+        first[0] -
+          last[0],
+
+        first[1] -
+          last[1]
       ) < 0.055;
 
-    const near = (x, y) =>
+    const near = (
+      x,
+      y
+    ) =>
       points.some(
         (p) =>
           Math.hypot(
@@ -2135,43 +3633,91 @@
 
     if (closed) {
       const rectangle =
-        near(minX, minY) &&
-        near(maxX, minY) &&
-        near(maxX, maxY) &&
-        near(minX, maxY);
+        near(
+          minX,
+          minY
+        ) &&
+        near(
+          maxX,
+          minY
+        ) &&
+        near(
+          maxX,
+          maxY
+        ) &&
+        near(
+          minX,
+          maxY
+        );
 
       const triangle =
         near(
-          (minX + maxX) / 2,
+          (minX +
+            maxX) /
+            2,
+
           minY
         ) &&
-        near(minX, maxY) &&
-        near(maxX, maxY);
+        near(
+          minX,
+          maxY
+        ) &&
+        near(
+          maxX,
+          maxY
+        );
 
       return {
-        type: "shape",
-        shape: rectangle
-          ? "rectangle"
-          : triangle
-          ? "triangle"
-          : "ellipse",
+        type:
+          "shape",
+
+        shape:
+          rectangle
+            ? "rectangle"
+            : triangle
+            ? "triangle"
+            : "ellipse",
+
         x: minX,
         y: minY,
-        w: Math.max(w, 0.001),
-        h: Math.max(h, 0.001),
-        color: stroke.color,
-        width: stroke.width,
+
+        w:
+          Math.max(
+            w,
+            0.001
+          ),
+
+        h:
+          Math.max(
+            h,
+            0.001
+          ),
+
+        color:
+          stroke.color,
+
+        width:
+          stroke.width,
+
+        createdAt:
+          stroke.createdAt ||
+          Date.now(),
       };
     }
 
     const dx =
-      last[0] - first[0];
+      last[0] -
+      first[0];
 
     const dy =
-      last[1] - first[1];
+      last[1] -
+      first[1];
 
     const length =
-      Math.hypot(dx, dy);
+      Math.hypot(
+        dx,
+        dy
+      );
 
     if (!length) {
       return null;
@@ -2179,34 +3725,137 @@
 
     const deviation =
       points.reduce(
-        (sum, p) => {
+        (
+          sum,
+          p
+        ) => {
           const distance =
             Math.abs(
               dy * p[0] -
                 dx * p[1] +
-                last[0] * first[1] -
-                last[1] * first[0]
-            ) / length;
+                last[0] *
+                  first[1] -
+                last[1] *
+                  first[0]
+            ) /
+            length;
 
-          return sum + distance;
+          return (
+            sum +
+            distance
+          );
         },
         0
       ) / points.length;
 
-    if (deviation < 0.01) {
+    if (
+      deviation < 0.01
+    ) {
       return {
-        type: "shape",
-        shape: "line",
-        x: first[0],
-        y: first[1],
-        w: dx,
-        h: dy,
-        color: stroke.color,
-        width: stroke.width,
+        type:
+          "shape",
+
+        shape:
+          "line",
+
+        x:
+          first[0],
+
+        y:
+          first[1],
+
+        w:
+          dx,
+
+        h:
+          dy,
+
+        color:
+          stroke.color,
+
+        width:
+          stroke.width,
+
+        createdAt:
+          stroke.createdAt ||
+          Date.now(),
       };
     }
 
     return null;
+  }
+
+  function makeManualShape(
+    stroke,
+    selected
+  ) {
+    const points =
+      stroke.points ||
+      [];
+
+    if (
+      points.length < 2
+    ) {
+      return null;
+    }
+
+    const xs =
+      points.map(
+        (p) => p[0]
+      );
+
+    const ys =
+      points.map(
+        (p) => p[1]
+      );
+
+    const minX =
+      Math.min(...xs);
+
+    const maxX =
+      Math.max(...xs);
+
+    const minY =
+      Math.min(...ys);
+
+    const maxY =
+      Math.max(...ys);
+
+    return {
+      type:
+        "shape",
+
+      shape:
+        selected,
+
+      x:
+        minX,
+
+      y:
+        minY,
+
+      w:
+        Math.max(
+          maxX - minX,
+          0.001
+        ),
+
+      h:
+        Math.max(
+          maxY - minY,
+          0.001
+        ),
+
+      color:
+        stroke.color,
+
+      width:
+        stroke.width,
+
+      createdAt:
+        stroke.createdAt ||
+        Date.now(),
+    };
   }
 
   function applyShapeRecognition() {
@@ -2214,7 +3863,10 @@
       return;
     }
 
-    if (!autoShapes && !shapeTool) {
+    if (
+      !autoShapes &&
+      !shapeTool
+    ) {
       return;
     }
 
@@ -2227,69 +3879,34 @@
             stroke,
             shapeTool
           )
-        : recognizeShape(stroke);
+        : recognizeShape(
+            stroke
+          );
 
     if (!shape) {
       return;
     }
 
+    const page =
+      currentPage();
+
     const index =
-      currentPage().strokes.indexOf(
+      page.strokes.indexOf(
         stroke
       );
 
-    if (index >= 0) {
-      currentPage().strokes.splice(
+    if (
+      index >= 0
+    ) {
+      page.strokes.splice(
         index,
         1
       );
     }
 
-    currentPage().elements.push(
+    page.elements.push(
       shape
     );
-  }
-
-  function makeManualShape(
-    stroke,
-    selected
-  ) {
-    const points =
-      stroke.points || [];
-
-    if (points.length < 2) {
-      return null;
-    }
-
-    const xs = points.map(
-      (p) => p[0]
-    );
-
-    const ys = points.map(
-      (p) => p[1]
-    );
-
-    const minX = Math.min(...xs);
-    const maxX = Math.max(...xs);
-    const minY = Math.min(...ys);
-    const maxY = Math.max(...ys);
-
-    return {
-      type: "shape",
-      shape: selected,
-      x: minX,
-      y: minY,
-      w: Math.max(
-        maxX - minX,
-        0.001
-      ),
-      h: Math.max(
-        maxY - minY,
-        0.001
-      ),
-      color: stroke.color,
-      width: stroke.width,
-    };
   }
 
   /*
@@ -2298,12 +3915,18 @@
    * ---------------------------------------------------------
    */
 
-  function addText(event) {
+  function addText(
+    event
+  ) {
     const at =
-      pointFromEvent(event);
+      pointFromEvent(
+        event
+      );
 
     const input =
-      document.createElement("input");
+      document.createElement(
+        "input"
+      );
 
     input.className =
       "notebook-text-editor";
@@ -2323,49 +3946,74 @@
 
     input.focus();
 
-    let finished = false;
+    let finished =
+      false;
 
-    const commit = () => {
-      if (finished) {
-        return;
-      }
+    const commit =
+      () => {
+        if (finished) {
+          return;
+        }
 
-      finished = true;
+        finished = true;
 
-      const value =
-        input.value.trim();
+        const value =
+          input.value.trim();
 
-      input.remove();
+        input.remove();
 
-      if (!value) {
-        return;
-      }
+        if (!value) {
+          return;
+        }
 
-      currentPage().elements.push({
-        type: "text",
-        text: value,
-        x: at[0],
-        y: at[1],
-        color,
-        size: Math.max(
-          16,
-          width * 5
-        ),
-      });
+        currentPage()
+          .elements.push({
+            type:
+              "text",
 
-      renderCanvas();
-      localSave();
-    };
+            text:
+              value,
+
+            x:
+              at[0],
+
+            y:
+              at[1],
+
+            color,
+
+            size:
+              Math.max(
+                16,
+                width * 5
+              ),
+
+            createdAt:
+              Date.now(),
+          });
+
+        renderCanvas();
+
+        localSave();
+      };
 
     input.addEventListener(
       "keydown",
       (e) => {
-        if (e.key === "Enter") {
+        if (
+          e.key ===
+          "Enter"
+        ) {
           commit();
         }
 
-        if (e.key === "Escape") {
-          finished = true;
+        if (
+          e.key ===
+          "Escape"
+        ) {
+          finished =
+            true;
+
           input.remove();
         }
       }
@@ -2374,17 +4022,21 @@
     input.addEventListener(
       "blur",
       commit,
-      { once: true }
+      {
+        once: true,
+      }
     );
   }
 
   /*
    * ---------------------------------------------------------
-   * IMAGE
+   * IMAGE IMPORT
    * ---------------------------------------------------------
    */
 
-  function addImage(file) {
+  function addImage(
+    file
+  ) {
     if (!file) {
       return;
     }
@@ -2392,87 +4044,117 @@
     const reader =
       new FileReader();
 
-    reader.onload = () => {
-      const src =
-        reader.result;
+    reader.onload =
+      () => {
+        const src =
+          reader.result;
 
-      const image =
-        new Image();
+        const image =
+          new Image();
 
-      image.onload = () => {
-        const max = 1600;
+        image.onload =
+          () => {
+            const max =
+              1600;
 
-        const ratio =
-          Math.min(
-            1,
-            max /
+            const ratio =
+              Math.min(
+                1,
+
+                max /
+                  Math.max(
+                    image.width,
+                    image.height
+                  )
+              );
+
+            const off =
+              document.createElement(
+                "canvas"
+              );
+
+            off.width =
               Math.max(
-                image.width,
-                image.height
-              )
-          );
+                1,
+                Math.round(
+                  image.width *
+                    ratio
+                )
+              );
 
-        const off =
-          document.createElement(
-            "canvas"
-          );
+            off.height =
+              Math.max(
+                1,
+                Math.round(
+                  image.height *
+                    ratio
+                )
+              );
 
-        off.width =
-          Math.max(
-            1,
-            Math.round(
-              image.width * ratio
-            )
-          );
+            const offCtx =
+              off.getContext(
+                "2d"
+              );
 
-        off.height =
-          Math.max(
-            1,
-            Math.round(
-              image.height * ratio
-            )
-          );
+            offCtx.drawImage(
+              image,
+              0,
+              0,
+              off.width,
+              off.height
+            );
 
-        const offCtx =
-          off.getContext("2d");
+            currentPage()
+              .elements.push({
+                type:
+                  "image",
 
-        offCtx.drawImage(
-          image,
-          0,
-          0,
-          off.width,
-          off.height
-        );
+                src:
+                  off.toDataURL(
+                    "image/jpeg",
+                    0.82
+                  ),
 
-        currentPage().elements.push({
-          type: "image",
-          src: off.toDataURL(
-            "image/jpeg",
-            0.82
-          ),
-          x: 0.12,
-          y: 0.12,
-          w: 0.76,
-          h: Math.min(
-            0.7,
-            0.76 *
-              (off.height /
-                off.width)
-          ),
-        });
+                x:
+                  0.12,
 
-        renderCanvas();
-        localSave();
+                y:
+                  0.12,
 
-        updateStatus(
-          "Imagine adăugată"
-        );
+                w:
+                  0.76,
+
+                h:
+                  Math.min(
+                    0.70,
+
+                    0.76 *
+                      (
+                        off.height /
+                        off.width
+                      )
+                  ),
+
+                createdAt:
+                  Date.now(),
+              });
+
+            renderCanvas();
+
+            localSave();
+
+            updateStatus(
+              "Imagine adăugată"
+            );
+          };
+
+        image.src =
+          src;
       };
 
-      image.src = src;
-    };
-
-    reader.readAsDataURL(file);
+    reader.readAsDataURL(
+      file
+    );
   }
 
   /*
@@ -2481,14 +4163,18 @@
    * ---------------------------------------------------------
    */
 
-  function setZoom(value) {
-    zoom = Math.max(
-      0.55,
-      Math.min(
-        3.5,
-        value
-      )
-    );
+  function setZoom(
+    value
+  ) {
+    zoom =
+      Math.max(
+        0.55,
+
+        Math.min(
+          3.5,
+          value
+        )
+      );
 
     const sheet =
       root?.querySelector(
@@ -2500,7 +4186,9 @@
     }
 
     sheet.style.transform =
-      `translate(-50%, -50%) translate(${pan.x}px, ${pan.y}px) scale(${zoom})`;
+      `translate(-50%, -50%) ` +
+      `translate(${pan.x}px, ${pan.y}px) ` +
+      `scale(${zoom})`;
 
     const label =
       root.querySelector(
@@ -2509,27 +4197,60 @@
 
     if (label) {
       label.textContent =
-        `${Math.round(zoom * 100)}%`;
+        `${Math.round(
+          zoom * 100
+        )}%`;
     }
   }
 
   /*
    * ---------------------------------------------------------
-   * FULLSCREEN / FOCUS MODE
+   * FULLSCREEN
    * ---------------------------------------------------------
    */
 
-  function setFullscreen(value) {
-    fullscreen = value;
-
+  async function enterBrowserFullscreen() {
     const shell =
-      root.querySelector(
+      root?.querySelector(
         ".notebook-shell"
       );
 
-    const toolbar =
-      root.querySelector(
-        "[data-notebook-toolbar]"
+    if (
+      !shell ||
+      !document.documentElement.requestFullscreen
+    ) {
+      return false;
+    }
+
+    try {
+      await shell.requestFullscreen();
+
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  async function exitBrowserFullscreen() {
+    if (
+      document.fullscreenElement &&
+      document.exitFullscreen
+    ) {
+      try {
+        await document.exitFullscreen();
+      } catch (_) {}
+    }
+  }
+
+  function applyFullscreenUi(
+    value
+  ) {
+    fullscreen =
+      value;
+
+    const shell =
+      root?.querySelector(
+        ".notebook-shell"
       );
 
     if (!shell) {
@@ -2541,54 +4262,100 @@
       fullscreen
     );
 
-    if (fullscreen) {
-      document.body.style.overflow =
-        "hidden";
+    document.body.style.overflow =
+      fullscreen
+        ? "hidden"
+        : "";
 
-      const button =
-        root.querySelector(
-          "[data-fullscreen]"
-        );
-
-      if (button) {
-        button.innerHTML =
-          icons.exitFullscreen;
-
-        button.title =
-          "Ieși din Focus Mode";
-      }
-
-      toolbar?.classList.remove(
-        "hidden"
+    const button =
+      root.querySelector(
+        "[data-fullscreen]"
       );
 
-      scheduleToolbarHide();
-    } else {
-      document.body.style.overflow =
-        "";
+    if (button) {
+      button.innerHTML =
+        fullscreen
+          ? icons.exitFullscreen
+          : icons.fullscreen;
 
-      const button =
-        root.querySelector(
-          "[data-fullscreen]"
-        );
+      button.title =
+        fullscreen
+          ? "Ieși din fullscreen"
+          : "Fullscreen";
 
-      if (button) {
-        button.innerHTML =
-          icons.fullscreen;
-
-        button.title =
-          "Focus Mode";
-      }
-
-      toolbar?.classList.remove(
-        "hidden"
+      button.setAttribute(
+        "aria-label",
+        button.title
       );
     }
 
-    requestAnimationFrame(() => {
-      resizeCanvas();
-      setZoom(zoom);
-    });
+    const toolbar =
+      root.querySelector(
+        "[data-notebook-toolbar]"
+      );
+
+    toolbar?.classList.remove(
+      "hidden"
+    );
+
+    requestAnimationFrame(
+      () => {
+        resizeCanvas();
+
+        setZoom(zoom);
+      }
+    );
+
+    if (fullscreen) {
+      scheduleToolbarHide();
+    }
+  }
+
+  async function setFullscreen(
+    value
+  ) {
+    if (
+      value === fullscreen
+    ) {
+      return;
+    }
+
+    if (value) {
+      const success =
+        await enterBrowserFullscreen();
+
+      /*
+       * Even if browser fullscreen is unavailable,
+       * CSS Focus Mode still works.
+       */
+
+      applyFullscreenUi(
+        true
+      );
+
+      if (!success) {
+        updateStatus(
+          "Focus Mode"
+        );
+      }
+
+      return;
+    }
+
+    if (
+      document.fullscreenElement
+    ) {
+      await exitBrowserFullscreen();
+
+      /*
+       * fullscreenchange will update UI.
+       */
+      return;
+    }
+
+    applyFullscreenUi(
+      false
+    );
   }
 
   function scheduleToolbarHide() {
@@ -2601,19 +4368,22 @@
     );
 
     toolbarHideTimer =
-      setTimeout(() => {
-        if (!fullscreen) {
-          return;
-        }
+      setTimeout(
+        () => {
+          if (!fullscreen) {
+            return;
+          }
 
-        root
-          ?.querySelector(
-            "[data-notebook-toolbar]"
-          )
-          ?.classList.add(
-            "hidden"
-          );
-      }, 2600);
+          root
+            ?.querySelector(
+              "[data-notebook-toolbar]"
+            )
+            ?.classList.add(
+              "hidden"
+            );
+        },
+        2800
+      );
   }
 
   function wakeToolbar() {
@@ -2621,16 +4391,112 @@
       return;
     }
 
-    const toolbar =
-      root.querySelector(
+    root
+      ?.querySelector(
         "[data-notebook-toolbar]"
+      )
+      ?.classList.remove(
+        "hidden"
       );
 
-    toolbar?.classList.remove(
-      "hidden"
-    );
-
     scheduleToolbarHide();
+  }
+
+  /*
+   * ---------------------------------------------------------
+   * UNDO / REDO
+   * ---------------------------------------------------------
+   */
+
+  function undo() {
+    const page =
+      currentPage();
+
+    const lastStroke =
+      page.strokes[
+        page.strokes.length - 1
+      ];
+
+    const lastElement =
+      page.elements[
+        page.elements.length - 1
+      ];
+
+    if (
+      !lastStroke &&
+      !lastElement
+    ) {
+      return;
+    }
+
+    const strokeTime =
+      Number(
+        lastStroke?.createdAt ||
+          0
+      );
+
+    const elementTime =
+      Number(
+        lastElement?.createdAt ||
+          0
+      );
+
+    if (
+      lastElement &&
+      (
+        !lastStroke ||
+        elementTime >
+          strokeTime
+      )
+    ) {
+      redo.push({
+        kind:
+          "element",
+
+        item:
+          page.elements.pop(),
+      });
+    } else {
+      redo.push({
+        kind:
+          "stroke",
+
+        item:
+          page.strokes.pop(),
+      });
+    }
+
+    renderCanvas();
+
+    localSave();
+  }
+
+  function redoLast() {
+    const action =
+      redo.pop();
+
+    if (!action) {
+      return;
+    }
+
+    if (
+      action.kind ===
+      "element"
+    ) {
+      currentPage()
+        .elements.push(
+          action.item
+        );
+    } else {
+      currentPage()
+        .strokes.push(
+          action.item
+        );
+    }
+
+    renderCanvas();
+
+    localSave();
   }
 
   /*
@@ -2640,34 +4506,45 @@
    */
 
   function bind() {
+    /*
+     * Tools.
+     */
+
     root
       .querySelectorAll(
         "[data-tool]"
       )
-      .forEach((button) => {
-        button.addEventListener(
-          "click",
-          () => {
-            tool =
-              button.dataset.tool;
+      .forEach(
+        (button) => {
+          button.addEventListener(
+            "click",
+            () => {
+              tool =
+                button.dataset.tool;
 
-            root
-              .querySelectorAll(
-                "[data-tool]"
-              )
-              .forEach(
-                (item) => {
-                  item.classList.toggle(
-                    "active",
-                    item === button
-                  );
-                }
-              );
+              root
+                .querySelectorAll(
+                  "[data-tool]"
+                )
+                .forEach(
+                  (item) => {
+                    item.classList.toggle(
+                      "active",
+                      item ===
+                        button
+                    );
+                  }
+                );
 
-            wakeToolbar();
-          }
-        );
-      });
+              wakeToolbar();
+            }
+          );
+        }
+      );
+
+    /*
+     * Auto shapes.
+     */
 
     root
       .querySelector(
@@ -2679,8 +4556,11 @@
           autoShapes =
             !autoShapes;
 
-          if (autoShapes) {
-            shapeTool = "";
+          if (
+            autoShapes
+          ) {
+            shapeTool =
+              "";
 
             const select =
               root.querySelector(
@@ -2688,7 +4568,8 @@
               );
 
             if (select) {
-              select.value = "";
+              select.value =
+                "";
             }
           }
 
@@ -2699,10 +4580,18 @@
 
           event.currentTarget.setAttribute(
             "aria-pressed",
-            String(autoShapes)
+            String(
+              autoShapes
+            )
           );
+
+          wakeToolbar();
         }
       );
+
+    /*
+     * Manual shape.
+     */
 
     root
       .querySelector(
@@ -2714,8 +4603,11 @@
           shapeTool =
             event.target.value;
 
-          if (shapeTool) {
-            autoShapes = false;
+          if (
+            shapeTool
+          ) {
+            autoShapes =
+              false;
 
             const button =
               root.querySelector(
@@ -2731,8 +4623,14 @@
               "false"
             );
           }
+
+          wakeToolbar();
         }
       );
+
+    /*
+     * Color picker.
+     */
 
     root
       .querySelector(
@@ -2745,34 +4643,48 @@
             event.target.value;
 
           updateSwatches();
+
+          wakeToolbar();
         }
       );
+
+    /*
+     * Color circles.
+     */
 
     root
       .querySelectorAll(
         "[data-swatch]"
       )
-      .forEach((button) => {
-        button.addEventListener(
-          "click",
-          () => {
-            color =
-              button.dataset.swatch;
+      .forEach(
+        (button) => {
+          button.addEventListener(
+            "click",
+            () => {
+              color =
+                button.dataset.swatch;
 
-            const picker =
-              root.querySelector(
-                "[data-color]"
-              );
+              const picker =
+                root.querySelector(
+                  "[data-color]"
+                );
 
-            if (picker) {
-              picker.value =
-                color;
+              if (picker) {
+                picker.value =
+                  color;
+              }
+
+              updateSwatches();
+
+              wakeToolbar();
             }
+          );
+        }
+      );
 
-            updateSwatches();
-          }
-        );
-      });
+    /*
+     * Width.
+     */
 
     root
       .querySelector(
@@ -2788,6 +4700,10 @@
         }
       );
 
+    /*
+     * Template.
+     */
+
     root
       .querySelector(
         "[data-template]"
@@ -2795,13 +4711,19 @@
       .addEventListener(
         "change",
         (event) => {
-          currentPage().template =
+          currentPage()
+            .template =
             event.target.value;
 
           renderCanvas();
+
           localSave();
         }
       );
+
+    /*
+     * Orientation.
+     */
 
     root
       .querySelector(
@@ -2810,10 +4732,12 @@
       .addEventListener(
         "change",
         (event) => {
-          currentPage().orientation =
+          currentPage()
+            .orientation =
             event.target.value;
 
           zoom = 1;
+
           pan = {
             x: 0,
             y: 0,
@@ -2825,66 +4749,22 @@
         }
       );
 
+    /*
+     * Undo.
+     */
+
     root
       .querySelector(
         "[data-undo]"
       )
       .addEventListener(
         "click",
-        () => {
-          /*
-           * Undo the most recently created
-           * object across both arrays.
-           */
-          const strokes =
-            currentPage().strokes;
-
-          const elements =
-            currentPage().elements;
-
-          const lastStroke =
-            strokes[strokes.length - 1];
-
-          const lastElement =
-            elements[elements.length - 1];
-
-          if (
-            !lastStroke &&
-            !lastElement
-          ) {
-            return;
-          }
-
-          const strokeTime =
-            lastStroke?.createdAt ||
-            0;
-
-          const elementTime =
-            lastElement?.createdAt ||
-            0;
-
-          /*
-           * Old notebooks don't necessarily
-           * have createdAt, so strokes are
-           * preferred when timestamps are absent.
-           */
-          if (
-            lastElement &&
-            elementTime > strokeTime
-          ) {
-            redo.push(
-              elements.pop()
-            );
-          } else {
-            redo.push(
-              strokes.pop()
-            );
-          }
-
-          renderCanvas();
-          localSave();
-        }
+        undo
       );
+
+    /*
+     * Redo.
+     */
 
     root
       .querySelector(
@@ -2892,28 +4772,12 @@
       )
       .addEventListener(
         "click",
-        () => {
-          const item =
-            redo.pop();
-
-          if (!item) {
-            return;
-          }
-
-          if (item.type) {
-            currentPage().elements.push(
-              item
-            );
-          } else {
-            currentPage().strokes.push(
-              item
-            );
-          }
-
-          renderCanvas();
-          localSave();
-        }
+        redoLast
       );
+
+    /*
+     * Zoom.
+     */
 
     root
       .querySelector(
@@ -2925,6 +4789,8 @@
           setZoom(
             zoom + 0.2
           );
+
+          wakeToolbar();
         }
       );
 
@@ -2938,8 +4804,14 @@
           setZoom(
             zoom - 0.2
           );
+
+          wakeToolbar();
         }
       );
+
+    /*
+     * Fullscreen.
+     */
 
     root
       .querySelector(
@@ -2947,12 +4819,16 @@
       )
       .addEventListener(
         "click",
-        () => {
-          setFullscreen(
+        async () => {
+          await setFullscreen(
             !fullscreen
           );
         }
       );
+
+    /*
+     * Image.
+     */
 
     root
       .querySelector(
@@ -2977,12 +4853,18 @@
         "change",
         (event) => {
           addImage(
-            event.target.files?.[0]
+            event.target
+              .files?.[0]
           );
 
-          event.target.value = "";
+          event.target.value =
+            "";
         }
       );
+
+    /*
+     * Previous page.
+     */
 
     root
       .querySelector(
@@ -2991,13 +4873,17 @@
       .addEventListener(
         "click",
         () => {
-          if (activePage <= 0) {
+          if (
+            activePage <=
+            0
+          ) {
             return;
           }
 
           activePage--;
 
           zoom = 1;
+
           pan = {
             x: 0,
             y: 0,
@@ -3008,6 +4894,10 @@
           render();
         }
       );
+
+    /*
+     * Next page.
+     */
 
     root
       .querySelector(
@@ -3018,7 +4908,9 @@
         () => {
           if (
             activePage >=
-            notebook.pages.length - 1
+            notebook.pages
+              .length -
+              1
           ) {
             return;
           }
@@ -3026,6 +4918,7 @@
           activePage++;
 
           zoom = 1;
+
           pan = {
             x: 0,
             y: 0,
@@ -3036,6 +4929,10 @@
           render();
         }
       );
+
+    /*
+     * Add page.
+     */
 
     root
       .querySelector(
@@ -3046,20 +4943,25 @@
         () => {
           notebook.pages.push({
             template:
-              currentPage().template,
+              currentPage()
+                .template,
 
             background:
-              currentPage().background,
+              currentPage()
+                .background,
 
             orientation:
-              currentPage().orientation,
+              currentPage()
+                .orientation,
 
             strokes: [],
+
             elements: [],
           });
 
           activePage =
-            notebook.pages.length - 1;
+            notebook.pages.length -
+            1;
 
           zoom = 1;
 
@@ -3071,38 +4973,143 @@
           redo = [];
 
           render();
+
           localSave();
         }
       );
 
     /*
-     * -----------------------------------------------------
-     * Pencil events
-     * -----------------------------------------------------
+     * -------------------------------------------------------
+     * PENCIL / POINTER EVENTS
+     * -------------------------------------------------------
      */
 
     inkCanvas.addEventListener(
       "pointerdown",
-      begin,
-      { passive: false }
+      (event) => {
+        if (
+          event.pointerType ===
+          "touch"
+        ) {
+          pointers.set(
+            event.pointerId,
+            {
+              x:
+                event.clientX,
+
+              y:
+                event.clientY,
+
+              start: {
+                x:
+                  event.clientX,
+
+                y:
+                  event.clientY,
+              },
+            }
+          );
+
+          /*
+           * Save initial gesture state.
+           */
+
+          if (
+            pointers.size >=
+            2
+          ) {
+            const entries =
+              [
+                ...pointers.values(),
+              ];
+
+            const a =
+              entries[0];
+
+            const b =
+              entries[1];
+
+            const distance =
+              Math.hypot(
+                a.x - b.x,
+                a.y - b.y
+              );
+
+            for (
+              const pointer of
+                entries
+            ) {
+              pointer.gesture = {
+                x:
+                  (
+                    a.x +
+                    b.x
+                  ) / 2,
+
+                y:
+                  (
+                    a.y +
+                    b.y
+                  ) / 2,
+
+                distance,
+
+                zoom,
+
+                panX:
+                  pan.x,
+
+                panY:
+                  pan.y,
+              };
+            }
+          }
+
+          return;
+        }
+
+        begin(event);
+      },
+      {
+        passive: false,
+      }
     );
 
     inkCanvas.addEventListener(
       "pointermove",
       move,
-      { passive: false }
+      {
+        passive: false,
+      }
     );
 
     inkCanvas.addEventListener(
       "pointerup",
       finish,
-      { passive: true }
+      {
+        passive: false,
+      }
     );
 
     inkCanvas.addEventListener(
       "pointercancel",
       finish,
-      { passive: true }
+      {
+        passive: false,
+      }
+    );
+
+    inkCanvas.addEventListener(
+      "pointerleave",
+      () => {
+        /*
+         * Do nothing.
+         *
+         * Apple Pencil can leave the CSS
+         * bounds for a tiny moment while
+         * pointer capture remains active.
+         */
+      }
     );
 
     inkCanvas.addEventListener(
@@ -3113,38 +5120,57 @@
     );
 
     /*
-     * Wake toolbar when the user moves
-     * toward the top in Focus Mode.
+     * Toolbar wake.
      */
+
     root.addEventListener(
       "pointermove",
       (event) => {
         if (
           fullscreen &&
-          event.clientY < 100
+          event.clientY <
+            100
         ) {
           wakeToolbar();
         }
       },
-      { passive: true }
+      {
+        passive: true,
+      }
     );
 
     /*
-     * Escape exits Focus Mode.
+     * Fullscreen state from browser.
      */
+
+    document.addEventListener(
+      "fullscreenchange",
+      handleFullscreenChange
+    );
+
+    /*
+     * Keyboard shortcuts.
+     */
+
     document.addEventListener(
       "keydown",
       handleKeydown
     );
+
+    /*
+     * Resize observer.
+     */
 
     if (
       typeof ResizeObserver !==
       "undefined"
     ) {
       resizeObserver =
-        new ResizeObserver(() => {
-          resizeCanvas();
-        });
+        new ResizeObserver(
+          () => {
+            resizeCanvas();
+          }
+        );
 
       resizeObserver.observe(
         root.querySelector(
@@ -3156,63 +5182,122 @@
     updateSwatches();
   }
 
-  function handleKeydown(event) {
+  /*
+   * ---------------------------------------------------------
+   * FULLSCREEN CHANGE
+   * ---------------------------------------------------------
+   */
+
+  function handleFullscreenChange() {
+    /*
+     * If the browser exited fullscreen
+     * using its own UI, synchronize our
+     * Focus Mode state.
+     */
+
     if (
-      event.key === "Escape" &&
+      !document.fullscreenElement &&
       fullscreen
     ) {
-      setFullscreen(false);
+      applyFullscreenUi(
+        false
+      );
+
+      return;
     }
 
     if (
-      (event.metaKey ||
-        event.ctrlKey) &&
-      event.key.toLowerCase() === "z"
+      document.fullscreenElement &&
+      !fullscreen
     ) {
-      event.preventDefault();
-
-      root
-        ?.querySelector(
-          "[data-undo]"
-        )
-        ?.click();
-    }
-
-    if (
-      (event.metaKey ||
-        event.ctrlKey) &&
-      event.key.toLowerCase() === "y"
-    ) {
-      event.preventDefault();
-
-      root
-        ?.querySelector(
-          "[data-redo]"
-        )
-        ?.click();
+      applyFullscreenUi(
+        true
+      );
     }
   }
+
+  /*
+   * ---------------------------------------------------------
+   * KEYBOARD
+   * ---------------------------------------------------------
+   */
+
+  function handleKeydown(
+    event
+  ) {
+    if (
+      event.key ===
+        "Escape" &&
+      fullscreen &&
+      !document.fullscreenElement
+    ) {
+      applyFullscreenUi(
+        false
+      );
+
+      return;
+    }
+
+    if (
+      (
+        event.metaKey ||
+        event.ctrlKey
+      ) &&
+      event.key.toLowerCase() ===
+        "z"
+    ) {
+      event.preventDefault();
+
+      undo();
+
+      return;
+    }
+
+    if (
+      (
+        event.metaKey ||
+        event.ctrlKey
+      ) &&
+      event.key.toLowerCase() ===
+        "y"
+    ) {
+      event.preventDefault();
+
+      redoLast();
+    }
+  }
+
+  /*
+   * ---------------------------------------------------------
+   * SWATCHES
+   * ---------------------------------------------------------
+   */
 
   function updateSwatches() {
     root
       ?.querySelectorAll(
         "[data-swatch]"
       )
-      .forEach((button) => {
-        const selected =
-          button.dataset.swatch.toLowerCase() ===
-          color.toLowerCase();
+      .forEach(
+        (button) => {
+          const selected =
+            button.dataset.swatch
+              .toLowerCase() ===
+            color.toLowerCase();
 
-        button.classList.toggle(
-          "notebook-swatch-selected",
-          selected
-        );
+          button.classList.toggle(
+            "notebook-swatch-selected",
+            selected
+          );
 
-        button.setAttribute(
-          "aria-pressed",
-          String(selected)
-        );
-      });
+          button.setAttribute(
+            "aria-pressed",
+            String(
+              selected
+            )
+          );
+        }
+      );
   }
 
   /*
@@ -3221,7 +5306,9 @@
    * ---------------------------------------------------------
    */
 
-  async function mount(subjectId) {
+  async function mount(
+    subjectId
+  ) {
     root =
       document.getElementById(
         "notebookViewRoot"
@@ -3234,75 +5321,110 @@
     mounted = true;
 
     root.innerHTML = `
-      <div class="subjects-spa-state">
+      <div
+        class="subjects-spa-state"
+      >
         Se deschide caietul…
       </div>
     `;
 
-    const {
-      data: { session },
-    } =
-      await supabaseClient.auth.getSession();
+    try {
+      const {
+        data: {
+          session,
+        },
+      } =
+        await supabaseClient.auth
+          .getSession();
 
-    if (!mounted) {
-      return;
-    }
+      if (!mounted) {
+        return;
+      }
 
-    user = session?.user;
+      user =
+        session?.user;
 
-    if (!user) {
+      if (!user) {
+        root.innerHTML = `
+          <div
+            class="subjects-spa-state"
+          >
+            Trebuie să fii autentificat.
+          </div>
+        `;
+
+        return;
+      }
+
+      const {
+        data,
+      } =
+        await supabaseClient
+          .from("subjects")
+          .select(
+            "id,name,color"
+          )
+          .eq(
+            "id",
+            subjectId
+          )
+          .eq(
+            "user_id",
+            user.id
+          )
+          .maybeSingle();
+
+      if (!mounted) {
+        return;
+      }
+
+      if (!data) {
+        root.innerHTML = `
+          <div
+            class="subjects-spa-state"
+          >
+            Caietul nu a fost găsit.
+          </div>
+        `;
+
+        return;
+      }
+
+      subject =
+        data;
+
+      notebook =
+        loadLocal();
+
+      normalizeNotebook();
+
+      activePage = 0;
+
+      redo = [];
+
+      zoom = 1;
+
+      pan = {
+        x: 0,
+        y: 0,
+      };
+
+      render();
+
+      void loadCloud();
+    } catch (_) {
+      if (!mounted) {
+        return;
+      }
+
       root.innerHTML = `
-        <div class="subjects-spa-state">
-          Trebuie să fii autentificat.
+        <div
+          class="subjects-spa-state"
+        >
+          Nu am putut deschide caietul.
         </div>
       `;
-
-      return;
     }
-
-    const { data } =
-      await supabaseClient
-        .from("subjects")
-        .select(
-          "id,name,color"
-        )
-        .eq("id", subjectId)
-        .eq("user_id", user.id)
-        .maybeSingle();
-
-    if (!mounted) {
-      return;
-    }
-
-    if (!data) {
-      root.innerHTML = `
-        <div class="subjects-spa-state">
-          Caietul nu a fost găsit.
-        </div>
-      `;
-
-      return;
-    }
-
-    subject = data;
-
-    notebook =
-      loadLocal();
-
-    normalizeNotebook();
-
-    activePage = 0;
-    redo = [];
-
-    zoom = 1;
-    pan = {
-      x: 0,
-      y: 0,
-    };
-
-    render();
-
-    void loadCloud();
   }
 
   /*
@@ -3320,18 +5442,26 @@
       toolbarHideTimer
     );
 
-    if (notebook) {
+    if (
+      notebook
+    ) {
       try {
         localStorage.setItem(
           storageKey(),
-          JSON.stringify(notebook)
+          JSON.stringify(
+            notebook
+          )
         );
       } catch (_) {}
     }
 
-    if (resizeObserver) {
+    if (
+      resizeObserver
+    ) {
       resizeObserver.disconnect();
-      resizeObserver = null;
+
+      resizeObserver =
+        null;
     }
 
     document.removeEventListener(
@@ -3339,21 +5469,46 @@
       handleKeydown
     );
 
+    document.removeEventListener(
+      "fullscreenchange",
+      handleFullscreenChange
+    );
+
+    if (
+      document.fullscreenElement
+    ) {
+      try {
+        document.exitFullscreen();
+      } catch (_) {}
+    }
+
     document.body.style.overflow =
       "";
 
     mounted = false;
 
+    fullscreen = false;
+
     root = null;
+
     canvas = null;
+
     ctx = null;
+
     inkCanvas = null;
+
     inkCtx = null;
 
     drawing = null;
 
     pointers.clear();
   }
+
+  /*
+   * ---------------------------------------------------------
+   * PUBLIC API
+   * ---------------------------------------------------------
+   */
 
   global.IteraNotebookView =
     Object.freeze({
