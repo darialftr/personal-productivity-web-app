@@ -94,30 +94,9 @@
     }
     updateStatus("Sincronizat");
   }
-  let saveIdleHandle = 0;
-
-  function cancelScheduledSave() {
-    clearTimeout(saveTimer);
-    saveTimer = 0;
-    if (
-      saveIdleHandle &&
-      typeof global.cancelIdleCallback === "function"
-    ) {
-      global.cancelIdleCallback(saveIdleHandle);
-      saveIdleHandle = 0;
-    }
-  }
-
-  function isUserInteracting() {
-    return (
-      pointers.size > 0 ||
-      drawing !== null ||
-      penPointerId !== null
-    );
-  }
-
-  let saveIdleHandle = 0;
+  
 let saveQuietTimer = 0;
+let saveIdleHandle = 0;
 
 function cancelScheduledSave() {
   clearTimeout(saveTimer);
@@ -131,8 +110,9 @@ function cancelScheduledSave() {
     typeof global.cancelIdleCallback === "function"
   ) {
     global.cancelIdleCallback(saveIdleHandle);
-    saveIdleHandle = 0;
   }
+
+  saveIdleHandle = 0;
 }
 
 function isUserInteracting() {
@@ -143,13 +123,21 @@ function isUserInteracting() {
   );
 }
 
-/*
- * IMPORTANT:
- * Pencil-ul nu declanșează salvarea imediat după pointerup.
- * Așteptăm să existe o perioadă reală fără input.
- */
 function scheduleNotebookSave() {
-  cancelScheduledSave();
+  clearTimeout(saveQuietTimer);
+  saveQuietTimer = 0;
+
+  if (saveIdleHandle) {
+    if (
+      typeof global.cancelIdleCallback === "function"
+    ) {
+      global.cancelIdleCallback(saveIdleHandle);
+    } else {
+      global.clearTimeout(saveIdleHandle);
+    }
+
+    saveIdleHandle = 0;
+  }
 
   saveQueued = true;
 
@@ -160,14 +148,9 @@ function scheduleNotebookSave() {
       return;
     }
 
-    const run = () => {
+    const save = () => {
       saveIdleHandle = 0;
 
-      /*
-       * Dacă utilizatorul a început din nou să scrie
-       * înainte ca browserul să ne dea timp liber,
-       * NU salvăm.
-       */
       if (isUserInteracting()) {
         return;
       }
@@ -176,27 +159,22 @@ function scheduleNotebookSave() {
     };
 
     if (
-      typeof global.requestIdleCallback ===
-      "function"
+      typeof global.requestIdleCallback === "function"
     ) {
-      saveIdleHandle =
-        global.requestIdleCallback(
-          run,
-          { timeout: 4000 }
-        );
+      saveIdleHandle = global.requestIdleCallback(
+        save,
+        { timeout: 5000 }
+      );
     } else {
-      saveIdleHandle =
-        global.setTimeout(
-          run,
-          0
-        );
+      saveIdleHandle = global.setTimeout(save, 0);
     }
-  }, 1800);
+  }, 2000);
 }
 
 function saveSoon() {
   scheduleNotebookSave();
 }
+
 
   async function persist() {
     if (!notebook || !user || !subject) return;
@@ -1668,25 +1646,7 @@ function saveSoon() {
      * pointerup wait for a complete canvas redraw.
      */
     queueRedraw();
-    /*
-
-     * Așteptăm puțin înainte să programăm salvarea.
-
-     * Dacă utilizatorul începe următorul stroke,
-
-     * begin() va anula salvarea.
-
-     */
-
-    global.setTimeout(() => {
-
-      if (!isUserInteracting()) {
-
-        scheduleNotebookSave();
-
-      }
-
-    }, 50);
+    
   }
 
   function eraseAt(at) {
