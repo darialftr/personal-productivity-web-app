@@ -286,6 +286,130 @@
 
       accent-color: var(--nb-accent);
     }
+    .notebook-width-control {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.notebook-width-toggle {
+  position: relative;
+}
+
+.notebook-width-preview {
+  display: block;
+  width: 8px;
+  height: 8px;
+  min-width: 4px;
+  min-height: 4px;
+  border-radius: 999px;
+  background: currentColor;
+  box-shadow: 0 0 0 1px rgba(0,0,0,.06);
+  transition: width .12s ease, height .12s ease;
+}
+
+.notebook-width-popover {
+  position: absolute;
+  top: calc(100% + 9px);
+  left: 50%;
+  z-index: 1000030;
+
+  width: 154px;
+  padding: 10px 11px 9px;
+
+  border-radius: 17px;
+
+  background: rgba(255,255,255,.90);
+  border: 1px solid rgba(255,255,255,.92);
+
+  box-shadow:
+    0 12px 34px rgba(0,0,0,.15),
+    inset 0 1px 0 rgba(255,255,255,.95);
+
+  backdrop-filter: blur(22px) saturate(160%);
+  -webkit-backdrop-filter: blur(22px) saturate(160%);
+
+  transform:
+    translateX(-50%)
+    translateY(-4px)
+    scale(.97);
+
+  opacity: 0;
+  pointer-events: none;
+
+  transition:
+    opacity .14s ease,
+    transform .14s ease;
+}
+
+.notebook-width-control.open .notebook-width-popover {
+  opacity: 1;
+  pointer-events: auto;
+
+  transform:
+    translateX(-50%)
+    translateY(0)
+    scale(1);
+}
+
+.notebook-width-label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  margin-bottom: 7px;
+
+  font-size: 10px;
+  opacity: .68;
+}
+
+.notebook-width-popover input[type="range"] {
+  display: block !important;
+  width: 100% !important;
+  margin: 2px 0 7px;
+
+  accent-color: var(--nb-accent);
+}
+
+.notebook-width-dots {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+
+  padding: 0 2px;
+
+  opacity: .42;
+}
+
+.notebook-width-dots i {
+  display: block;
+
+  width: 4px;
+  height: 4px;
+
+  border-radius: 50%;
+  background: currentColor;
+}
+
+.notebook-width-dots i:nth-child(2) {
+  width: 6px;
+  height: 6px;
+}
+
+.notebook-width-dots i:nth-child(3) {
+  width: 8px;
+  height: 8px;
+}
+
+.notebook-width-dots i:nth-child(4) {
+  width: 11px;
+  height: 11px;
+}
+
+.notebook-width-dots i:nth-child(5) {
+  width: 14px;
+  height: 14px;
+}
 
     .notebook-toolbar input[type="color"] {
       width: 29px;
@@ -2396,16 +2520,49 @@
             </option>
           </select>
 
-          <input
-            data-width
-            type="range"
-            min="1"
-            max="12"
-            step=".5"
-            value="${width}"
-            title="Grosime"
-            aria-label="Grosime"
-          />
+          <div class="notebook-width-control" data-width-control>
+
+  <button
+
+    type="button"
+
+    class="notebook-width-toggle"
+
+    data-width-toggle
+
+    title="Grosime pix"
+
+    aria-label="Grosime pix"
+
+    aria-expanded="false"
+
+  >
+
+    <span
+
+      class="notebook-width-preview"
+
+      data-width-preview
+
+    ></span>
+
+  </button>
+
+  <div
+
+    class="notebook-width-popover"
+
+    data-width-popover
+
+  >
+
+    <div class="notebook-width-label">
+
+      <span>Grosime</span>
+
+      <strong data-width-value>${width}</strong>
+
+    </div>
 
           <input
             data-color
