@@ -872,6 +872,47 @@ function saveSoon() {
 
     ctx.restore();
   }
+  function drawLiveSegment(stroke, from, to) {
+  if (!canvas || !ctx || !from || !to) return;
+
+  const w = canvas.clientWidth;
+  const h = canvas.clientHeight;
+
+  ctx.save();
+
+  ctx.globalAlpha =
+    stroke.tool === "highlighter"
+      ? 0.24
+      : stroke.tool === "pencil"
+      ? 0.72
+      : 1;
+
+  ctx.strokeStyle = stroke.color;
+  ctx.lineCap = "round";
+  ctx.lineJoin = "round";
+
+  ctx.lineWidth =
+    stroke.width *
+    ((Number(from[2]) || 1) +
+      (Number(to[2]) || 1)) /
+    2;
+
+  ctx.beginPath();
+
+  ctx.moveTo(
+    from[0] * w,
+    from[1] * h
+  );
+
+  ctx.lineTo(
+    to[0] * w,
+    to[1] * h
+  );
+
+  ctx.stroke();
+
+  ctx.restore();
+}
 
   function drawElement(element) {
     const w = canvas.clientWidth;
@@ -1231,7 +1272,6 @@ function saveSoon() {
     page().strokes.push(
       drawing
     );
-    queueRedraw();
   }
 
   function move(event) {
@@ -1384,7 +1424,11 @@ function saveSoon() {
     }
 
     drawing.points.push(next);
-    queueRedraw();
+drawLiveSegment(
+  drawing,
+  last,
+  next
+);
   }
 
   function recognizeShape(stroke) {
