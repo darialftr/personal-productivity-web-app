@@ -515,9 +515,14 @@
       transform: scale(.92);
     }
 
-    .notebook-page-controls span {
+    .notebook-page-label {
+      min-width: 90px;
+
+      text-align: center;
+
       font-size: 11px;
-      opacity: .58;
+
+      opacity: .55;
     }
 
     /*
@@ -560,20 +565,13 @@
       display: none !important;
     }
 
-    /*
-     * Floating Apple-like toolbar.
-     */
-
     .notebook-focus .notebook-toolbar {
       position: fixed;
 
       z-index: 1000001;
 
       top:
-        max(
-          10px,
-          env(safe-area-inset-top)
-        );
+        max(10px, env(safe-area-inset-top));
 
       left: 50%;
 
@@ -604,8 +602,11 @@
         rgba(255, 255, 255, .8);
 
       box-shadow:
-        0 12px 38px rgba(0, 0, 0, .12),
-        inset 0 1px 0 rgba(255, 255, 255, .95);
+        0 12px 38px
+        rgba(0, 0, 0, .12),
+
+        inset 0 1px 0
+        rgba(255, 255, 255, .95);
 
       backdrop-filter:
         blur(25px)
@@ -641,8 +642,7 @@
     }
 
     .notebook-focus
-    .notebook-toolbar
-    button {
+    .notebook-toolbar button {
       width: 37px;
       height: 37px;
 
@@ -650,24 +650,17 @@
     }
 
     .notebook-focus
-    .notebook-toolbar
-    button.active {
+    .notebook-toolbar button.active {
       background: var(--nb-accent);
       color: white;
     }
 
     .notebook-focus
-    .notebook-toolbar
-    select,
+    .notebook-toolbar select,
     .notebook-focus
-    .notebook-toolbar
-    input[type="range"] {
+    .notebook-toolbar input[type="range"] {
       display: none;
     }
-
-    /*
-     * In fullscreen, the sheet gets the entire viewport.
-     */
 
     .notebook-focus .notebook-stage {
       position: fixed;
@@ -686,159 +679,100 @@
     }
 
     /*
-     * Page controls become a little floating pill.
+     * -------------------------------------------------------
+     * PAGE NAVIGATION
+     * -------------------------------------------------------
      */
 
-    .notebook-focus .notebook-page-controls {
-      position: fixed;
+    .notebook-pages {
+      display: flex;
 
-      z-index: 1000000;
+      align-items: center;
+      justify-content: center;
 
-      bottom:
-        max(
-          13px,
-          env(safe-area-inset-bottom)
-        );
+      gap: 8px;
 
-      left: 50%;
-
-      margin: 0;
-
-      padding: 6px 8px;
-
-      border-radius: 19px;
-
-      background:
-        rgba(255, 255, 255, .70);
-
-      box-shadow:
-        0 9px 28px rgba(0, 0, 0, .10);
-
-      backdrop-filter:
-        blur(18px);
-
-      -webkit-backdrop-filter:
-        blur(18px);
-
-      transform:
-        translateX(-50%);
+      margin-top: 10px;
     }
 
-    /*
-     * Fullscreen button is moved to top-right.
-     */
+    .notebook-pages button {
+      width: 36px;
+      height: 34px;
 
-    .notebook-focus
-    .notebook-fullscreen-button {
-      position: fixed;
+      border: 0;
 
-      z-index: 1000002;
-
-      top:
-        max(
-          10px,
-          env(safe-area-inset-top)
-        );
-
-      right:
-        max(
-          10px,
-          env(safe-area-inset-right)
-        );
-
-      width: 37px;
-      height: 37px;
-
-      margin: 0;
-
-      border-radius: 14px;
+      border-radius: 12px;
 
       background:
-        rgba(255, 255, 255, .78);
+        rgba(127, 127, 127, .09);
 
-      color: #171717;
+      color: inherit;
 
-      box-shadow:
-        0 6px 20px rgba(0, 0, 0, .10);
+      cursor: pointer;
+    }
+
+    .notebook-pages button:hover {
+      background:
+        rgba(127, 127, 127, .15);
     }
 
     /*
      * -------------------------------------------------------
-     * TEXT EDITOR
+     * PAGE THUMBNAILS
      * -------------------------------------------------------
      */
 
-    .notebook-text-editor {
-      position: fixed;
+    .notebook-page-strip {
+      display: flex;
 
-      z-index: 1000010;
+      gap: 8px;
 
-      min-width: 130px;
+      overflow-x: auto;
+
+      padding:
+        8px 2px 4px;
+
+      scrollbar-width: none;
+    }
+
+    .notebook-page-strip::-webkit-scrollbar {
+      display: none;
+    }
+
+    .notebook-page-thumb {
+      position: relative;
+
+      flex: 0 0 auto;
+
+      width: 48px;
+      height: 64px;
+
+      border-radius: 8px;
 
       border:
-        1px solid
-        rgba(0, 0, 0, .12);
+        2px solid transparent;
 
-      border-radius: 13px;
+      overflow: hidden;
 
-      padding: 9px 11px;
-
-      outline: none;
-
-      background:
-        rgba(255, 255, 255, .97);
-
-      color: #171717;
+      background: white;
 
       box-shadow:
-        0 8px 28px rgba(0, 0, 0, .14);
+        0 2px 8px
+        rgba(0, 0, 0, .08);
 
-      font:
-        16px
-        system-ui,
-        -apple-system,
-        BlinkMacSystemFont,
-        sans-serif;
+      cursor: pointer;
     }
 
-    /*
-     * -------------------------------------------------------
-     * DARK MODE
-     * -------------------------------------------------------
-     */
+    .notebook-page-thumb.active {
+      border-color:
+        var(--nb-accent);
+    }
 
-    @media (prefers-color-scheme: dark) {
-      .notebook-focus
-      .notebook-toolbar {
-        background:
-          rgba(35, 35, 38, .74);
+    .notebook-page-thumb canvas {
+      width: 100%;
+      height: 100%;
 
-        color: #fff;
-
-        border-color:
-          rgba(255, 255, 255, .10);
-
-        box-shadow:
-          0 12px 38px rgba(0, 0, 0, .30),
-          inset 0 1px 0
-          rgba(255, 255, 255, .08);
-      }
-
-      .notebook-focus
-      .notebook-fullscreen-button {
-        background:
-          rgba(35, 35, 38, .82);
-
-        color: #fff;
-      }
-
-      .notebook-focus
-      .notebook-page-controls {
-        background:
-          rgba(35, 35, 38, .74);
-
-        color: #fff;
-      }
+      display: block;
     }
 
     /*
@@ -847,406 +781,202 @@
      * -------------------------------------------------------
      */
 
-    @media (max-width: 800px) {
+    @media (max-width: 720px) {
       .notebook-shell {
         padding: 10px;
       }
 
       .notebook-toolbar {
-        gap: 4px;
+        gap: 5px;
+
         padding: 7px;
+
+        border-radius: 20px;
       }
 
       .notebook-toolbar button {
         width: 35px;
         height: 35px;
 
-        border-radius: 12px;
-      }
-
-      .notebook-toolbar select,
-      .notebook-toolbar input[type="range"] {
-        display: none;
+        border-radius: 13px;
       }
 
       .notebook-stage {
-        height:
-          calc(100dvh - 210px);
+        height: calc(100dvh - 220px);
 
-        min-height: 400px;
+        min-height: 430px;
+
+        border-radius: 20px;
+      }
+
+      .notebook-head small {
+        display: none;
       }
     }
   `;
 
   /*
    * ---------------------------------------------------------
-   * ICONS
+   * HELPERS
    * ---------------------------------------------------------
    */
 
-  const icons = {
-    gel: `
-      <svg viewBox="0 0 24 24">
-        <path d="M5 19l9.8-9.8 3 3L8 22H5v-3Z"/>
-        <path d="M13.5 5.5l2-2a1.4 1.4 0 0 1 2 0l3 3a1.4 1.4 0 0 1 0 2l-2 2"/>
-      </svg>
-    `,
-
-    ballpoint: `
-      <svg viewBox="0 0 24 24">
-        <path d="M6 18.5 16.5 8l3.5 3.5L9.5 22H6v-3.5Z"/>
-        <path d="m14 10 3 3"/>
-        <path d="M18 4l2 2"/>
-      </svg>
-    `,
-
-    pencil: `
-      <svg viewBox="0 0 24 24">
-        <path d="m4 17 9.8-9.8 4.2 4.2L8.2 21H4v-4Z"/>
-        <path d="m13.8 7.2 2-2 4.2 4.2-2 2"/>
-        <path d="m4 17 4 4"/>
-      </svg>
-    `,
-
-    highlighter: `
-      <svg viewBox="0 0 24 24">
-        <path d="m5 15 8.8-8.8a1.7 1.7 0 0 1 2.4 0l1.6 1.6a1.7 1.7 0 0 1 0 2.4L9 19H5v-4Z"/>
-        <path d="M5 19h12"/>
-        <path d="M4 22h16"/>
-      </svg>
-    `,
-
-    eraser: `
-      <svg viewBox="0 0 24 24">
-        <path d="m7 18-3-3a2 2 0 0 1 0-2.8l7.2-7.2a2 2 0 0 1 2.8 0l4 4a2 2 0 0 1 0 2.8L11 18H7Z"/>
-        <path d="M7 18h10"/>
-      </svg>
-    `,
-
-    text: `
-      <svg viewBox="0 0 24 24">
-        <path d="M5 5h14"/>
-        <path d="M12 5v14"/>
-        <path d="M8 19h8"/>
-      </svg>
-    `,
-
-    shapes: `
-      <svg viewBox="0 0 24 24">
-        <rect x="3.5" y="4" width="7" height="7" rx="1"/>
-        <circle cx="17" cy="7.5" r="3.5"/>
-        <path d="m6 20 5-6 5 6H6Z"/>
-      </svg>
-    `,
-
-    image: `
-      <svg viewBox="0 0 24 24">
-        <rect x="3" y="4" width="18" height="16" rx="2"/>
-        <circle cx="8.5" cy="9" r="1.5"/>
-        <path d="m5 17 4-4 3 3 2-2 5 4"/>
-      </svg>
-    `,
-
-    undo: `
-      <svg viewBox="0 0 24 24">
-        <path d="M9 7 4 12l5 5"/>
-        <path d="M4 12h10a6 6 0 0 1 6 6"/>
-      </svg>
-    `,
-
-    redo: `
-      <svg viewBox="0 0 24 24">
-        <path d="m15 7 5 5-5 5"/>
-        <path d="M20 12H10a6 6 0 0 0-6 6"/>
-      </svg>
-    `,
-
-    zoomOut: `
-      <svg viewBox="0 0 24 24">
-        <circle cx="10.5" cy="10.5" r="6.5"/>
-        <path d="M15.5 15.5 21 21"/>
-        <path d="M8 10.5h5"/>
-      </svg>
-    `,
-
-    zoomIn: `
-      <svg viewBox="0 0 24 24">
-        <circle cx="10.5" cy="10.5" r="6.5"/>
-        <path d="M15.5 15.5 21 21"/>
-        <path d="M8 10.5h5M10.5 8v5"/>
-      </svg>
-    `,
-
-    fullscreen: `
-      <svg viewBox="0 0 24 24">
-        <path d="M8 4H4v4M16 4h4v4M4 16v4h4M20 16v4h-4"/>
-      </svg>
-    `,
-
-    exitFullscreen: `
-      <svg viewBox="0 0 24 24">
-        <path d="M9 4v5H4M15 4v5h5M4 15h5v5M20 15h-5v5"/>
-      </svg>
-    `,
-  };
-
-  /*
-   * ---------------------------------------------------------
-   * STYLE INJECTION
-   * ---------------------------------------------------------
-   */
-
-  function injectStyles() {
-    if (
-      document.getElementById(
-        "itera-notebook-styles"
-      )
-    ) {
-      return;
-    }
-
-    const style =
-      document.createElement("style");
-
-    style.id =
-      "itera-notebook-styles";
-
-    style.textContent = styles;
-
-    document.head.appendChild(style);
-  }
-
-  /*
-   * ---------------------------------------------------------
-   * NOTEBOOK DATA
-   * ---------------------------------------------------------
-   */
-
-  function freshNotebook() {
-    return {
-      version: 6,
-
-      pages: [
-        {
-          template: "lined",
-
-          background:
-            "#fffdf9",
-
-          orientation:
-            "portrait",
-
-          strokes: [],
-
-          elements: [],
-        },
-      ],
-
-      updatedAt:
-        Date.now(),
-    };
+  function clamp(value, min, max) {
+    return Math.max(
+      min,
+      Math.min(max, value)
+    );
   }
 
   function currentPage() {
-    return notebook.pages[activePage];
+    if (!notebook?.pages?.length) {
+      return null;
+    }
+
+    return notebook.pages[
+      clamp(
+        activePage,
+        0,
+        notebook.pages.length - 1
+      )
+    ];
   }
 
   function storageKey() {
     return (
-      `itera:notebook:` +
-      `${user?.id || "guest"}:` +
-      `${subject?.id || "subject"}`
+      "itera_notebook_" +
+      String(subject?.id || "default")
     );
   }
 
-  function escapeHtml(value) {
-    return String(value || "")
-      .replaceAll("&", "&amp;")
-      .replaceAll("<", "&lt;")
-      .replaceAll(">", "&gt;")
-      .replaceAll('"', "&quot;");
+  function pageSize() {
+    return {
+      width: 794,
+      height: 1123,
+    };
   }
 
-  function normalizeNotebook() {
-    if (
-      !notebook ||
-      !Array.isArray(notebook.pages) ||
-      !notebook.pages.length
-    ) {
-      notebook =
-        freshNotebook();
+  function createPage() {
+    return {
+      id:
+        "page_" +
+        Date.now() +
+        "_" +
+        Math.random()
+          .toString(36)
+          .slice(2),
+
+      template: "lined",
+
+      orientation: "portrait",
+
+      strokes: [],
+
+      elements: [],
+    };
+  }
+
+  function createNotebook() {
+    return {
+      version: 3,
+
+      pages: [
+        createPage(),
+      ],
+
+      activePage: 0,
+
+      updatedAt: Date.now(),
+    };
+  }
+
+  function ensureNotebook() {
+    if (!notebook) {
+      notebook = createNotebook();
     }
+
+    if (!Array.isArray(notebook.pages)) {
+      notebook.pages = [
+        createPage(),
+      ];
+    }
+
+    if (!notebook.pages.length) {
+      notebook.pages.push(
+        createPage()
+      );
+    }
+
+    activePage = clamp(
+      Number(
+        notebook.activePage ?? 0
+      ),
+      0,
+      notebook.pages.length - 1
+    );
 
     notebook.pages.forEach(
       (page) => {
-        page.template ||= "lined";
+        if (!Array.isArray(page.strokes)) {
+          page.strokes = [];
+        }
 
-        page.background ||=
-          "#fffdf9";
+        if (!Array.isArray(page.elements)) {
+          page.elements = [];
+        }
 
-        page.orientation ||=
-          "portrait";
+        if (!page.template) {
+          page.template = "lined";
+        }
 
-        page.strokes ||= [];
-
-        page.elements ||= [];
-
-        page.strokes.forEach(
-          (stroke) => {
-            stroke.points ||= [];
-
-            stroke.tool ||= "gel";
-
-            stroke.color ||=
-              "#4d4260";
-
-            stroke.width ||= 3;
-          }
-        );
+        if (!page.orientation) {
+          page.orientation = "portrait";
+        }
       }
     );
   }
 
   function loadLocal() {
     try {
-      const saved =
-        JSON.parse(
-          localStorage.getItem(
-            storageKey()
-          ) || "null"
+      const raw =
+        localStorage.getItem(
+          storageKey()
         );
 
+      if (!raw) {
+        return false;
+      }
+
+      const parsed =
+        JSON.parse(raw);
+
       if (
-        saved &&
-        Array.isArray(saved.pages) &&
-        saved.pages.length
+        parsed &&
+        Array.isArray(parsed.pages)
       ) {
-        return saved;
+        notebook = parsed;
+
+        ensureNotebook();
+
+        return true;
       }
     } catch (_) {}
 
-    return freshNotebook();
+    return false;
   }
-
-  /*
-   * ---------------------------------------------------------
-   * CLOUD
-   * ---------------------------------------------------------
-   */
-
-  async function loadCloud() {
-    try {
-      const {
-        data,
-        error,
-      } = await supabaseClient
-        .from("notebooks")
-        .select(
-          "content,updated_at"
-        )
-        .eq(
-          "user_id",
-          user.id
-        )
-        .eq(
-          "subject_id",
-          subject.id
-        )
-        .maybeSingle();
-
-      if (
-        error ||
-        !data?.content ||
-        !Array.isArray(
-          data.content.pages
-        ) ||
-        !mounted
-      ) {
-        return;
-      }
-
-      const cloudTime =
-        Number(
-          data.content.updatedAt ||
-            0
-        );
-
-      const localTime =
-        Number(
-          notebook.updatedAt ||
-            0
-        );
-
-      if (
-        cloudTime > localTime
-      ) {
-        notebook =
-          data.content;
-
-        normalizeNotebook();
-
-        activePage =
-          Math.min(
-            activePage,
-            notebook.pages.length - 1
-          );
-
-        renderCanvas();
-
-        updateStatus(
-          "Sincronizat"
-        );
-      }
-    } catch (_) {}
-  }
-
-  /*
-   * Supabase is intentionally delayed.
-   * It never runs from pointermove.
-   */
 
   function scheduleSave() {
     clearTimeout(saveTimer);
 
     saveTimer =
-      setTimeout(() => {
-        if (
-          drawing ||
-          pointers.size
-        ) {
-          scheduleSave();
-          return;
-        }
-
-        void persist();
-      }, 1200);
-  }
-
-  function localSave() {
-    try {
-      notebook.updatedAt =
-        Date.now();
-
-      localStorage.setItem(
-        storageKey(),
-        JSON.stringify(
-          notebook
-        )
+      setTimeout(
+        () => persist(),
+        650
       );
-    } catch (_) {}
-
-    scheduleSave();
   }
 
   async function persist() {
-    if (
-      !mounted ||
-      !user ||
-      !subject ||
-      drawing ||
-      pointers.size
-    ) {
-      saveQueued = true;
+    if (!mounted || !notebook) {
       return;
     }
 
@@ -1257,249 +987,1333 @@
 
     saving = true;
 
-    do {
-      saveQueued = false;
+    const version =
+      ++saveVersion;
 
-      if (
-        drawing ||
-        pointers.size
-      ) {
-        saveQueued = true;
-        break;
-      }
-
-      const version =
-        ++saveVersion;
-
+    try {
       notebook.updatedAt =
         Date.now();
 
-      let snapshot;
-
       try {
-        snapshot =
-          typeof structuredClone ===
-          "function"
-            ? structuredClone(
-                notebook
-              )
-            : JSON.parse(
-                JSON.stringify(
-                  notebook
-                )
-              );
-      } catch (_) {
-        break;
-      }
-
-      try {
-        const result =
-          await supabaseClient
-            .from("notebooks")
-            .upsert(
-              {
-                user_id:
-                  user.id,
-
-                subject_id:
-                  subject.id,
-
-                content:
-                  snapshot,
-
-                updated_at:
-                  new Date().toISOString(),
-              },
-              {
-                onConflict:
-                  "user_id,subject_id",
-              }
-            );
-
-        if (
-          result?.error
-        ) {
-          throw result.error;
-        }
-
-        if (
-          mounted &&
-          version ===
-            saveVersion &&
-          !drawing &&
-          !pointers.size
-        ) {
-          updateStatus(
-            "Salvat"
-          );
-        }
-      } catch (_) {
-        updateStatus(
-          "Salvat local"
+        localStorage.setItem(
+          storageKey(),
+          JSON.stringify(notebook)
         );
+      } catch (_) {}
+
+      /*
+       * Supabase persistence is deliberately
+       * allowed to happen asynchronously.
+       * Nothing in the drawing pipeline waits for it.
+       */
+
+      if (
+        global.supabase &&
+        subject?.id &&
+        user?.id
+      ) {
+        try {
+          const payload = {
+            user_id: user.id,
+
+            subject_id:
+              subject.id,
+
+            content:
+              JSON.stringify(notebook),
+
+            updated_at:
+              new Date().toISOString(),
+          };
+
+          const result =
+            await global.supabase
+              .from("notebook_pages")
+              .upsert(
+                payload,
+                {
+                  onConflict:
+                    "user_id,subject_id",
+                }
+              );
+
+          if (result?.error) {
+            /*
+             * Local storage remains the fallback.
+             */
+          }
+        } catch (_) {}
       }
-    } while (
-      saveQueued &&
-      !drawing &&
-      !pointers.size
-    );
+    } finally {
+      saving = false;
 
-    saving = false;
+      if (
+        saveQueued ||
+        version !== saveVersion
+      ) {
+        saveQueued = false;
+
+        scheduleSave();
+      }
+    }
   }
-
-  function updateStatus(text) {
-    root
-      ?.querySelector(
-        "[data-notebook-status]"
-      )
-      ?.replaceChildren(text);
-  }
-
-  /*
-   * ---------------------------------------------------------
-   * RENDER UI
+  yles
    * ---------------------------------------------------------
    */
 
+  function icon(name) {
+    return icons[name] || "";
+  }
+
+  function escapeHtml(value) {
+    return String(value ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
   function render() {
-    if (
-      !root ||
-      !notebook ||
-      !subject
-    ) {
+    if (!root || !mounted) {
       return;
     }
 
-    injectStyles();
-
-    const page =
-      currentPage();
+    ensureNotebook();
 
     root.innerHTML = `
-      <a
-        class="subjects-spa-back"
-        href="#/subjects/${subject.id}"
-      >
-        ← ${escapeHtml(
-          subject.name
-        )}
-      </a>
+      <div class="notebook-shell">
 
-      <section
-        class="notebook-shell"
-        style="--nb-accent:${
-          subject.color ||
-          "#f3a9c5"
-        }"
-      >
+        <div class="notebook-head">
 
-        <header class="notebook-head">
-
-          <div
-            class="notebook-title-icon"
-          >
-            <svg viewBox="0 0 48 48">
-              <path
-                d="M12 18h24v10H12zM16 28l-3 12m19-12 3 12M12 40h8m8 0h8M19 13h10"
-                fill="none"
-                stroke="currentColor"
-                stroke-width="3"
-                stroke-linecap="round"
-                stroke-linejoin="round"
-              />
-            </svg>
+          <div class="notebook-title-icon">
+            ${icon("pencil")}
           </div>
 
           <div>
             <p class="eyebrow">
-              Caietul tău
+              NOTEBOOK
             </p>
 
             <h2>
               ${escapeHtml(
-                subject.name
+                subject?.name ||
+                "Notebook"
               )}
             </h2>
           </div>
 
-          <small
-            data-notebook-status
-          >
-            Pregătit
+          <small>
+            ${notebook.pages.length}
+            ${notebook.pages.length === 1 ? "pagină" : "pagini"}
           </small>
 
-        </header>
+        </div>
 
-        <div
-          class="notebook-toolbar"
-          data-notebook-toolbar
-        >
-
-          ${toolButton(
-            "gel",
-            icons.gel,
-            "Pix gel"
-          )}
-
-          ${toolButton(
-            "ballpoint",
-            icons.ballpoint,
-            "Pix"
-          )}
-
-          ${toolButton(
-            "pencil",
-            icons.pencil,
-            "Creion"
-          )}
-
-          ${toolButton(
-            "highlighter",
-            icons.highlighter,
-            "Marker"
-          )}
-
-          ${toolButton(
-            "eraser",
-            icons.eraser,
-            "Radieră"
-          )}
-
-          ${toolButton(
-            "text",
-            icons.text,
-            "Text"
-          )}
+        <div class="notebook-toolbar">
 
           <button
-            data-auto-shapes
-            aria-pressed="${autoShapes}"
+            type="button"
+            data-tool="gel"
+            class="${tool === "gel" ? "active" : ""}"
+            title="Pix"
+            aria-label="Pix"
+          >
+            ${icon("gel")}
+          </button>
+
+          <button
+            type="button"
+            data-tool="ballpoint"
+            class="${tool === "ballpoint" ? "active" : ""}"
+            title="Pix cu bilă"
+            aria-label="Pix cu bilă"
+          >
+            ${icon("ballpoint")}
+          </button>
+
+          <button
+            type="button"
+            data-tool="pencil"
+            class="${tool === "pencil" ? "active" : ""}"
+            title="Creion"
+            aria-label="Creion"
+          >
+            ${icon("pencil")}
+          </button>
+
+          <button
+            type="button"
+            data-tool="highlighter"
+            class="${tool === "highlighter" ? "active" : ""}"
+            title="Marker"
+            aria-label="Marker"
+          >
+            ${icon("highlighter")}
+          </button>
+
+          <button
+            type="button"
+            data-tool="eraser"
+            class="${tool === "eraser" ? "active" : ""}"
+            title="Radieră"
+            aria-label="Radieră"
+          >
+            ${icon("eraser")}
+          </button>
+
+          <div class="notebook-swatches">
+
+            ${palette
+              .map(
+                (swatch) => `
+                  <button
+                    type="button"
+                    class="${
+                      color === swatch
+                        ? "notebook-swatch-selected"
+                        : ""
+                    }"
+                    data-color="${swatch}"
+                    title="${swatch}"
+                    aria-label="Culoare ${swatch}"
+                    style="
+                      background:${swatch};
+                    "
+                  ></button>
+                `
+              )
+              .join("")}
+
+          </div>
+
+          <input
+            type="color"
+            data-color-picker
+            value="${color}"
+            title="Alege culoarea"
+            aria-label="Alege culoarea"
+          />
+
+          <div
+            class="notebook-width-control"
+            data-width-control
+          >
+
+            <button
+              type="button"
+              class="notebook-width-toggle"
+              data-width-toggle
+              title="Grosime pix"
+              aria-label="Grosime pix"
+              aria-expanded="false"
+            >
+              <span
+                class="notebook-width-preview"
+                data-width-preview
+              ></span>
+            </button>
+
+            <div
+              class="notebook-width-popover"
+              data-width-popover
+            >
+
+              <div class="notebook-width-label">
+                <span>Grosime</span>
+
+                <strong
+                  data-width-value
+                >
+                  ${width}
+                </strong>
+              </div>
+
+              <input
+                data-width
+                type="range"
+                min="1"
+                max="12"
+                step=".5"
+                value="${width}"
+                aria-label="Grosime pix"
+              />
+
+              <div
+                class="notebook-width-dots"
+                aria-hidden="true"
+              >
+                <i></i>
+                <i></i>
+                <i></i>
+                <i></i>
+                <i></i>
+              </div>
+
+            </div>
+
+          </div>
+
+          <button
+            type="button"
+            data-text
+            class="${tool === "text" ? "active" : ""}"
+            title="Text"
+            aria-label="Text"
+          >
+            ${icon("text")}
+          </button>
+
+          <button
+            type="button"
+            data-shapes
+            class="${
+              autoShapes
+                ? "active"
+                : ""
+            }"
             title="Forme automate"
             aria-label="Forme automate"
           >
-            ${icons.shapes}
+            ${icon("shapes")}
           </button>
 
           <button
-            data-add-image
-            title="Adaugă imagine"
-            aria-label="Adaugă imagine"
+            type="button"
+            data-image
+            title="Imagine"
+            aria-label="Imagine"
           >
-            ${icons.image}
+            ${icon("image")}
           </button>
 
           <button
+            type="button"
             data-undo
-            title="Anulează"
-            aria-label="Anulează"
+            title="Înapoi"
+            aria-label="Înapoi"
           >
-            ${icons.undo}
+            ${icon("undo")}
           </button>
 
           <button
+            type="button"
             data-redo
             title="Refă"
             aria-label="Refă"
+          >
+            ${icon("redo")}
+          </button>
+
+          <button
+            type="button"
+            data-zoom-out
+            title="Micșorează"
+            aria-label="Micșorează"
+          >
+            ${icon("zoomOut")}
+          </button>
+
+          <span
+            class="notebook-zoom"
+            data-zoom-label
+          >
+            ${Math.round(zoom * 100)}%
+          </span>
+
+          <button
+            type="button"
+            data-zoom-in
+            title="Mărește"
+            aria-label="Mărește"
+          >
+            ${icon("zoomIn")}
+          </button>
+
+          <button
+            type="button"
+            class="notebook-fullscreen-button"
+            data-fullscreen
+            title="Ecran complet"
+            aria-label="Ecran complet"
+          >
+            ${icon(
+              fullscreen
+                ? "exitFullscreen"
+                : "fullscreen"
+            )}
+          </button>
+
+        </div>
+
+        <div
+          class="notebook-stage"
+          data-stage
+        >
+
+          <div
+            class="notebook-sheet"
+            data-sheet
+          >
+
+            <canvas
+              class="notebook-base-canvas"
+              data-canvas
+            ></canvas>
+
+            <canvas
+              class="notebook-ink-canvas"
+              data-ink-canvas
+            ></canvas>
+
+          </div>
+
+        </div>
+
+        <div
+          class="notebook-page-controls"
+        >
+
+          <button
+            type="button"
+            data-prev-page
+            aria-label="Pagina anterioară"
+            title="Pagina anterioară"
+          >
+            ‹
+          </button>
+
+          <span
+            class="notebook-page-label"
+            data-page-label
+          >
+            Pagina ${activePage + 1}
+            / ${notebook.pages.length}
+          </span>
+
+          <button
+            type="button"
+            data-next-page
+            aria-label="Pagina următoare"
+            title="Pagina următoare"
+          >
+            ›
+          </button>
+
+          <button
+            type="button"
+            data-add-page
+            aria-label="Adaugă pagină"
+            title="Adaugă pagină"
+          >
+            +
+          </button>
+
+        </div>
+
+      </div>
+    `;
+
+    canvas =
+      root.querySelector(
+        "[data-canvas]"
+      );
+
+    ctx =
+      canvas?.getContext("2d");
+
+    inkCanvas =
+      root.querySelector(
+        "[data-ink-canvas]"
+      );
+
+    inkCtx =
+      inkCanvas?.getContext("2d");
+
+    setupCanvas();
+
+    bindToolbar();
+
+    bindCanvas();
+
+    renderCanvas();
+
+    updateTransform();
+
+    updateWidthUi();
+  }
+
+  /*
+   * ---------------------------------------------------------
+   * CANVAS
+   * ---------------------------------------------------------
+   */
+
+  function setupCanvas() {
+    if (
+      !canvas ||
+      !inkCanvas
+    ) {
+      return;
+    }
+
+    const sheet =
+      root.querySelector(
+        "[data-sheet]"
+      );
+
+    if (!sheet) {
+      return;
+    }
+
+    const size =
+      pageSize();
+
+    const page =
+      currentPage();
+
+    const landscape =
+      page?.orientation ===
+      "landscape";
+
+    const logicalWidth =
+      landscape
+        ? size.height
+        : size.width;
+
+    const logicalHeight =
+      landscape
+        ? size.width
+        : size.height;
+
+    sheet.style.width =
+      logicalWidth + "px";
+
+    sheet.style.height =
+      logicalHeight + "px";
+
+    const rect =
+      sheet.getBoundingClientRect();
+
+    const dpr =
+      Math.min(
+        global.devicePixelRatio || 1,
+        2
+      );
+
+    const widthPx =
+      Math.max(
+        1,
+        Math.round(
+          rect.width * dpr
+        )
+      );
+
+    const heightPx =
+      Math.max(
+        1,
+        Math.round(
+          rect.height * dpr
+        )
+      );
+
+    if (
+      canvas.width !== widthPx ||
+      canvas.height !== heightPx
+    ) {
+      canvas.width = widthPx;
+      canvas.height = heightPx;
+    }
+
+    if (
+      inkCanvas.width !== widthPx ||
+      inkCanvas.height !== heightPx
+    ) {
+      inkCanvas.width = widthPx;
+      inkCanvas.height = heightPx;
+    }
+
+    canvas.style.width =
+      rect.width + "px";
+
+    canvas.style.height =
+      rect.height + "px";
+
+    inkCanvas.style.width =
+      rect.width + "px";
+
+    inkCanvas.style.height =
+      rect.height + "px";
+
+    if (ctx) {
+      ctx.setTransform(
+        dpr,
+        0,
+        0,
+        dpr,
+        0,
+        0
+      );
+    }
+
+    if (inkCtx) {
+      inkCtx.setTransform(
+        dpr,
+        0,
+        0,
+        dpr,
+        0,
+        0
+      );
+    }
+  }
+
+  function clearInk() {
+    if (!inkCtx || !inkCanvas) {
+      return;
+    }
+
+    inkCtx.clearRect(
+      0,
+      0,
+      inkCanvas.width,
+      inkCanvas.height
+    );
+  }
+
+  /*
+   * ---------------------------------------------------------
+   * PAGE BACKGROUND
+   * ---------------------------------------------------------
+   */
+
+  function drawPageBackground() {
+    if (!ctx || !canvas) {
+      return;
+    }
+
+    const page =
+      currentPage();
+
+    if (!page) {
+      return;
+    }
+
+    const w =
+      canvas.clientWidth;
+
+    const h =
+      canvas.clientHeight;
+
+    ctx.save();
+
+    ctx.clearRect(
+      0,
+      0,
+      w,
+      h
+    );
+
+    ctx.fillStyle =
+      "#ffffff";
+
+    ctx.fillRect(
+      0,
+      0,
+      w,
+      h
+    );
+
+    if (
+      page.template ===
+      "lined"
+    ) {
+      drawLinedBackground(
+        w,
+        h
+      );
+    }
+
+    if (
+      page.template ===
+      "grid"
+    ) {
+      drawGridBackground(
+        w,
+        h
+      );
+    }
+
+    ctx.restore();
+  }
+
+  function drawLinedBackground(
+    w,
+    h
+  ) {
+    const spacing =
+      Math.max(
+        24,
+        h / 38
+      );
+
+    ctx.save();
+
+    ctx.strokeStyle =
+      "rgba(140, 140, 150, .16)";
+
+    ctx.lineWidth = 1;
+
+    for (
+      let y = spacing;
+      y < h;
+      y += spacing
+    ) {
+      ctx.beginPath();
+
+      ctx.moveTo(
+        0,
+        y
+      );
+
+      ctx.lineTo(
+        w,
+        y
+      );
+
+      ctx.stroke();
+    }
+
+    ctx.strokeStyle =
+      "rgba(245, 150, 175, .20)";
+
+    ctx.beginPath();
+
+    ctx.moveTo(
+      w * .105,
+      0
+    );
+
+    ctx.lineTo(
+      w * .105,
+      h
+    );
+
+    ctx.stroke();
+
+    ctx.restore();
+  }
+
+  function drawGridBackground(
+    w,
+    h
+  ) {
+    const spacing =
+      Math.max(
+        22,
+        h / 42
+      );
+
+    ctx.save();
+
+    ctx.strokeStyle =
+      "rgba(140, 140, 150, .13)";
+
+    ctx.lineWidth = 1;
+
+    for (
+      let x = 0;
+      x < w;
+      x += spacing
+    ) {
+      ctx.beginPath();
+
+      ctx.moveTo(
+        x,
+        0
+      );
+
+      ctx.lineTo(
+        x,
+        h
+      );
+
+      ctx.stroke();
+    }
+
+    for (
+      let y = 0;
+      y < h;
+      y += spacing
+    ) {
+      ctx.beginPath();
+
+      ctx.moveTo(
+        0,
+        y
+      );
+
+      ctx.lineTo(
+        w,
+        y
+      );
+
+      ctx.stroke();
+    }
+
+    ctx.restore();
+  }
+
+  /*
+   * ---------------------------------------------------------
+   * STROKES
+   * ---------------------------------------------------------
+   */
+
+  function drawStroke(
+    targetCtx,
+    stroke,
+    dpr = 1
+  ) {
+    if (
+      !targetCtx ||
+      !stroke ||
+      !stroke.points?.length
+    ) {
+      return;
+    }
+
+    const w =
+      canvas.clientWidth;
+
+    const h =
+      canvas.clientHeight;
+
+    const points =
+      stroke.points;
+
+    targetCtx.save();
+
+    targetCtx.globalAlpha =
+      stroke.tool === "highlighter"
+        ? .24
+        : stroke.tool === "pencil"
+        ? .72
+        : 1;
+
+    targetCtx.strokeStyle =
+      stroke.color ||
+      color;
+
+    targetCtx.lineCap =
+      "round";
+
+    targetCtx.lineJoin =
+      "round";
+
+    /*
+     * A single point must still
+     * produce a visible dot.
+     *
+     * This is important for:
+     * - dots above i
+     * - periods
+     * - tiny Pencil taps
+     */
+    if (
+      points.length === 1
+    ) {
+      const p =
+        points[0];
+
+      const pressure =
+        Number(p[2]) || 1;
+
+      targetCtx.fillStyle =
+        stroke.color ||
+        color;
+
+      const radius =
+        Math.max(
+          .75,
+          stroke.width *
+            pressure *
+            .5
+        ) * dpr;
+
+      targetCtx.beginPath();
+
+      targetCtx.arc(
+        p[0] * w * dpr,
+        p[1] * h * dpr,
+        radius,
+        0,
+        Math.PI * 2
+      );
+
+      targetCtx.fill();
+
+      targetCtx.restore();
+
+      return;
+    }
+
+    for (
+      let i = 1;
+      i < points.length;
+      i++
+    ) {
+      const a =
+        points[i - 1];
+
+      const b =
+        points[i];
+
+      const next =
+        points[i + 1];
+
+      const pressure =
+        (
+          (Number(a[2]) || 1) +
+          (Number(b[2]) || 1)
+        ) / 2;
+
+      targetCtx.lineWidth =
+        Math.max(
+          .75,
+          stroke.width *
+            pressure
+        ) * dpr;
+
+      targetCtx.beginPath();
+
+      targetCtx.moveTo(
+        a[0] * w * dpr,
+        a[1] * h * dpr
+      );
+
+      /*
+       * Light causal smoothing.
+       *
+       * It smooths Pencil jitter
+       * without waiting for future
+       * samples and without turning
+       * letters into geometric shapes.
+       */
+      if (next) {
+        targetCtx.quadraticCurveTo(
+          b[0] * w * dpr,
+          b[1] * h * dpr,
+          (
+            (b[0] + next[0]) *
+            w *
+            dpr
+          ) / 2,
+          (
+            (b[1] + next[1]) *
+            h *
+            dpr
+          ) / 2
+        );
+      } else {
+        targetCtx.lineTo(
+          b[0] * w * dpr,
+          b[1] * h * dpr
+        );
+      }
+
+      targetCtx.stroke();
+    }
+
+    targetCtx.restore();
+  }
+
+  function renderStrokes() {
+    if (!ctx) {
+      return;
+    }
+
+    const page =
+      currentPage();
+
+    if (!page) {
+      return;
+    }
+
+    const dpr =
+      Math.min(
+        global.devicePixelRatio || 1,
+        2
+      );
+
+    for (
+      const stroke of
+      page.strokes || []
+    ) {
+      drawStroke(
+        ctx,
+        stroke,
+        dpr
+      );
+    }
+  }
+
+  function renderElements() {
+    const page =
+      currentPage();
+
+    if (
+      !ctx ||
+      !page
+    ) {
+      return;
+    }
+
+    const w =
+      canvas.clientWidth;
+
+    const h =
+      canvas.clientHeight;
+
+    for (
+      const element of
+      page.elements || []
+    ) {
+      if (
+        element.kind ===
+        "text"
+      ) {
+        drawTextElement(
+          element,
+          w,
+          h
+        );
+      }
+
+      if (
+        element.kind ===
+        "shape"
+      ) {
+        drawShapeElement(
+          element,
+          w,
+          h
+        );
+      }
+
+      if (
+        element.kind ===
+        "image"
+      ) {
+        drawImageElement(
+          element,
+          w,
+          h
+        );
+      }
+    }
+  }
+
+  function renderCanvas() {
+    if (!ctx || !canvas) {
+      return;
+    }
+
+    setupCanvas();
+
+    drawPageBackground();
+
+    renderElements();
+
+    renderStrokes();
+
+    clearInk();
+
+    updatePageLabel();
+  }
+
+  /*
+   * ---------------------------------------------------------
+   * TEXT
+   * ---------------------------------------------------------
+   */
+
+  function drawTextElement(
+    element,
+    w,
+    h
+  ) {
+    if (!element.text) {
+      return;
+    }
+
+    ctx.save();
+
+    ctx.fillStyle =
+      element.color ||
+      color;
+
+    ctx.font =
+      `${element.size || 22}px ` +
+      `system-ui, -apple-system, ` +
+      `BlinkMacSystemFont, sans-serif`;
+
+    ctx.textBaseline =
+      "top";
+
+    ctx.fillText(
+      element.text,
+      element.x * w,
+      element.y * h
+    );
+
+    ctx.restore();
+  }
+
+  /*
+   * ---------------------------------------------------------
+   * SHAPES
+   * ---------------------------------------------------------
+   */
+
+  function drawShapeElement(
+    element,
+    w,
+    h
+  ) {
+    const x =
+      element.x * w;
+
+    const y =
+      element.y * h;
+
+    const width =
+      element.width * w;
+
+    const height =
+      element.height * h;
+
+    ctx.save();
+
+    ctx.strokeStyle =
+      element.color ||
+      color;
+
+    ctx.lineWidth =
+      element.lineWidth ||
+      width;
+
+    ctx.lineCap =
+      "round";
+
+    ctx.lineJoin =
+      "round";
+
+    ctx.beginPath();
+
+    if (
+      element.shape ===
+      "line"
+    ) {
+      ctx.moveTo(
+        x,
+        y
+      );
+
+      ctx.lineTo(
+        x + width,
+        y + height
+      );
+    }
+
+    if (
+      element.shape ===
+      "arrow"
+    ) {
+      drawArrow(
+        ctx,
+        x,
+        y,
+        x + width,
+        y + height
+      );
+    }
+
+    if (
+      element.shape ===
+      "rectangle"
+    ) {
+      ctx.rect(
+        x,
+        y,
+        width,
+        height
+      );
+    }
+
+    if (
+      element.shape ===
+      "ellipse"
+    ) {
+      ctx.ellipse(
+        x + width / 2,
+        y + height / 2,
+        Math.abs(width / 2),
+        Math.abs(height / 2),
+        0,
+        0,
+        Math.PI * 2
+      );
+    }
+
+    if (
+      element.shape ===
+      "triangle"
+    ) {
+      ctx.moveTo(
+        x + width / 2,
+        y
+      );
+
+      ctx.lineTo(
+        x + width,
+        y + height
+      );
+
+      ctx.lineTo(
+        x,
+        y + height
+      );
+
+      ctx.closePath();
+    }
+
+    ctx.stroke();
+
+    ctx.restore();
+  }
+
+  function drawArrow(
+    targetCtx,
+    x1,
+    y1,
+    x2,
+    y2
+  ) {
+    const angle =
+      Math.atan2(
+        y2 - y1,
+        x2 - x1
+      );
+
+    const head =
+      12;
+
+    targetCtx.moveTo(
+      x1,
+      y1
+    );
+
+    targetCtx.lineTo(
+      x2,
+      y2
+    );
+
+    targetCtx.moveTo(
+      x2,
+      y2
+    );
+
+    targetCtx.lineTo(
+      x2 -
+        head *
+        Math.cos(
+          angle - Math.PI / 6
+        ),
+      y2 -
+        head *
+        Math.sin(
+          angle - Math.PI / 6
+        )
+    );
+
+    targetCtx.moveTo(
+      x2,
+      y2
+    );
+
+    targetCtx.lineTo(
+      x2 -
+        head *
+        Math.cos(
+          angle + Math.PI / 6
+        ),
+      y2 -
+        head *
+        Math.sin(
+          angle + Math.PI / 6
+        )
+    );
+  }
+
+  /*
+   * ---------------------------------------------------------
+   * IMAGES
+   * ---------------------------------------------------------
+   */
+
+  function drawImageElement(
+    element,
+    w,
+    h
+  ) {
+    if (!element.src) {
+      return;
+    }
+
+    let image =
+      imageCache.get(
+        element.src
+      );
+
+    if (!image) {
+      image =
+        new Image();
+
+      image.onload =
+        () => {
+          imageCache.set(
+            element.src,
+            image
+          );
+
+          renderCanvas();
+        };
+
+      image.src =
+        element.src;
+
+      imageCache.set(
+        element.src,
+        image
+      );
+
+      return;
+    }
+
+    if (!image.complete) {
+      return;
+    }
+
+    ctx.drawImage(
+      image,
+      element.x * w,
+      element.y * h,
+      element.width * w,
+      element.height * h
+    );
+  } 
+              aria-label="Refă"
           >
             ${icons.redo}
           </button>
@@ -1516,9 +2330,7 @@
             class="notebook-zoom"
             data-zoom
           >
-            ${Math.round(
-              zoom * 100
-            )}%
+            100%
           </span>
 
           <button
@@ -1529,83 +2341,20 @@
             ${icons.zoomIn}
           </button>
 
-          <input
-            data-color
-            type="color"
-            value="${color}"
-            title="Culoare"
-            aria-label="Culoare"
-          />
-
-          <span
-            class="notebook-swatches"
-          >
-            ${palette
-              .map(
-                (c) => `
-                  <button
-                    type="button"
-                    data-swatch="${c}"
-                    style="background:${c}"
-                    aria-label="Culoare ${c}"
-                  ></button>
-                `
-              )
-              .join("")}
-          </span>
-
-          <input
-            data-width
-            type="range"
-            min="1"
-            max="12"
-            step=".5"
-            value="${width}"
-            title="Grosime"
-          />
-
-          <select
-            data-shape
-            title="Formă"
-          >
-            <option value="">
-              Liber
-            </option>
-
-            <option value="line">
-              Linie
-            </option>
-
-            <option value="arrow">
-              Săgeată
-            </option>
-
-            <option value="rectangle">
-              Dreptunghi
-            </option>
-
-            <option value="ellipse">
-              Elipsă
-            </option>
-
-            <option value="triangle">
-              Triunghi
-            </option>
-          </select>
-
           <select
             data-template
-            title="Pagină"
+            title="Fundal"
+            aria-label="Fundal"
           >
             ${Object.entries(
               templates
             )
               .map(
-                ([id, label]) => `
+                ([value, label]) => `
                   <option
-                    value="${id}"
+                    value="${value}"
                     ${
-                      page.template === id
+                      page.template === value
                         ? "selected"
                         : ""
                     }
@@ -1620,6 +2369,7 @@
           <select
             data-orientation
             title="Orientare"
+            aria-label="Orientare"
           >
             <option
               value="portrait"
@@ -1630,7 +2380,7 @@
                   : ""
               }
             >
-              A4 portret
+              Portret
             </option>
 
             <option
@@ -1642,53 +2392,110 @@
                   : ""
               }
             >
-              A4 peisaj
+              Landscape
             </option>
           </select>
+
+          <input
+            data-width
+            type="range"
+            min="1"
+            max="12"
+            step=".5"
+            value="${width}"
+            title="Grosime"
+            aria-label="Grosime"
+          />
+
+          <input
+            data-color
+            type="color"
+            value="${color}"
+            title="Culoare"
+            aria-label="Culoare"
+          />
+
+          <div
+            class="notebook-swatches"
+            data-swatches
+          >
+            ${palette
+              .map(
+                (swatch) => `
+                  <button
+                    type="button"
+                    data-swatch="${swatch}"
+                    title="${swatch}"
+                    aria-label="Culoare ${swatch}"
+                    class="${
+                      color === swatch
+                        ? "notebook-swatch-selected"
+                        : ""
+                    }"
+                    style="
+                      background:${swatch};
+                    "
+                  ></button>
+                `
+              )
+              .join("")}
+          </div>
 
           <button
             data-fullscreen
             class="notebook-fullscreen-button"
-            title="Focus Mode"
-            aria-label="Focus Mode"
+            title="${
+              fullscreen
+                ? "Ieșire din ecran complet"
+                : "Ecran complet"
+            }"
+            aria-label="${
+              fullscreen
+                ? "Ieșire din ecran complet"
+                : "Ecran complet"
+            }"
           >
-            ${icons.fullscreen}
+            ${
+              fullscreen
+                ? icons.exitFullscreen
+                : icons.fullscreen
+            }
           </button>
-
-          <input
-            data-image-input
-            type="file"
-            accept="image/*"
-            hidden
-          />
 
         </div>
 
         <div
           class="notebook-stage"
-          data-notebook-stage
+          data-stage
         >
+
           <div
             class="notebook-sheet"
-            data-notebook-sheet
+            data-sheet
           >
+
             <canvas
               class="notebook-base-canvas"
-              data-notebook-canvas
+              data-canvas
             ></canvas>
 
             <canvas
               class="notebook-ink-canvas"
-              data-notebook-ink
+              data-ink-canvas
             ></canvas>
+
           </div>
+
         </div>
 
         <div
           class="notebook-page-controls"
         >
+
           <button
-            data-prev
+            type="button"
+            data-prev-page
+            title="Pagina anterioară"
             aria-label="Pagina anterioară"
           >
             ‹
@@ -1697,26 +2504,56 @@
           <span
             data-page-label
           >
-            Pagina ${
-              activePage + 1
-            }
+            Pagina
+            ${activePage + 1}
             /
             ${notebook.pages.length}
           </span>
 
           <button
-            data-next
+            type="button"
+            data-next-page
+            title="Pagina următoare"
             aria-label="Pagina următoare"
           >
             ›
           </button>
 
           <button
+            type="button"
             data-add-page
+            title="Pagină nouă"
             aria-label="Pagină nouă"
           >
-            ＋
+            +
           </button>
+
+        </div>
+
+        <div
+          class="notebook-page-strip"
+          data-page-strip
+        >
+          ${notebook.pages
+            .map(
+              (_, index) => `
+                <button
+                  type="button"
+                  class="notebook-page-thumb ${
+                    index === activePage
+                      ? "active"
+                      : ""
+                  }"
+                  data-page="${index}"
+                  aria-label="Pagina ${
+                    index + 1
+                  }"
+                >
+                  <canvas></canvas>
+                </button>
+              `
+            )
+            .join("")}
         </div>
 
       </section>
@@ -1724,173 +2561,1010 @@
 
     canvas =
       root.querySelector(
-        "[data-notebook-canvas]"
+        "[data-canvas]"
       );
 
     inkCanvas =
       root.querySelector(
-        "[data-notebook-ink]"
+        "[data-ink-canvas]"
       );
 
     ctx =
-      canvas.getContext(
-        "2d",
-        {
-          alpha: false,
-          desynchronized: true,
-        }
+      canvas?.getContext(
+        "2d"
       );
 
     inkCtx =
-      inkCanvas.getContext(
-        "2d",
-        {
-          alpha: true,
-          desynchronized: true,
-        }
+      inkCanvas?.getContext(
+        "2d"
       );
 
-    bind();
+    setupCanvas();
 
-    resizeCanvas();
+    bindToolbar();
+
+    bindCanvas();
 
     renderCanvas();
 
-    updateSwatches();
+    renderPageThumbs();
 
-    setZoom(zoom);
+    updateTransform();
+
+    updateZoomLabel();
+
+    updateWidthUi();
   }
 
+  /*
+   * ---------------------------------------------------------
+   * TOOL BUTTON
+   * ---------------------------------------------------------
+   */
+
   function toolButton(
-    id,
-    icon,
-    title
+    name,
+    svg,
+    label
   ) {
     return `
       <button
-        data-tool="${id}"
+        type="button"
+        data-tool="${name}"
         class="${
-          tool === id
+          tool === name
             ? "active"
             : ""
         }"
-        title="${title}"
-        aria-label="${title}"
+        title="${label}"
+        aria-label="${label}"
       >
-        ${icon}
+        ${svg}
       </button>
     `;
   }
 
   /*
    * ---------------------------------------------------------
-   * CANVAS SIZE
+   * TOOLBAR
    * ---------------------------------------------------------
    */
 
-  function pageAspect() {
-    return currentPage()
-      .orientation ===
+  function bindToolbar() {
+    if (!root) {
+      return;
+    }
+
+    root
+      .querySelectorAll(
+        "[data-tool]"
+      )
+      .forEach(
+        (button) => {
+          button.addEventListener(
+            "click",
+            () => {
+              const nextTool =
+                button.dataset.tool;
+
+              tool =
+                nextTool;
+
+              shapeTool = "";
+
+              updateToolbar();
+
+              wakeToolbar();
+            }
+          );
+        }
+      );
+
+    root
+      .querySelectorAll(
+        "[data-swatch]"
+      )
+      .forEach(
+        (button) => {
+          button.addEventListener(
+            "click",
+            () => {
+              color =
+                button.dataset.swatch;
+
+              updateToolbar();
+
+              wakeToolbar();
+            }
+          );
+        }
+      );
+
+    const colorInput =
+      root.querySelector(
+        "[data-color]"
+      );
+
+    colorInput?.addEventListener(
+      "input",
+      (event) => {
+        color =
+          event.target.value;
+
+        updateToolbar();
+      }
+    );
+
+    const widthInput =
+      root.querySelector(
+        "[data-width]"
+      );
+
+    widthInput?.addEventListener(
+      "input",
+      (event) => {
+        width =
+          Number(
+            event.target.value
+          ) || 3;
+
+        updateWidthUi();
+
+        wakeToolbar();
+      }
+    );
+
+    root
+      .querySelector(
+        "[data-auto-shapes]"
+      )
+      ?.addEventListener(
+        "click",
+        () => {
+          autoShapes =
+            !autoShapes;
+
+          updateToolbar();
+
+          wakeToolbar();
+        }
+      );
+
+    root
+      .querySelector(
+        "[data-undo]"
+      )
+      ?.addEventListener(
+        "click",
+        undo
+      );
+
+    root
+      .querySelector(
+        "[data-redo]"
+      )
+      ?.addEventListener(
+        "click",
+        redoAction
+      );
+
+    root
+      .querySelector(
+        "[data-zoom-in]"
+      )
+      ?.addEventListener(
+        "click",
+        () => {
+          setZoom(
+            zoom + .1
+          );
+        }
+      );
+
+    root
+      .querySelector(
+        "[data-zoom-out]"
+      )
+      ?.addEventListener(
+        "click",
+        () => {
+          setZoom(
+            zoom - .1
+          );
+        }
+      );
+
+    root
+      .querySelector(
+        "[data-template]"
+      )
+      ?.addEventListener(
+        "change",
+        (event) => {
+          const page =
+            currentPage();
+
+          if (!page) {
+            return;
+          }
+
+          page.template =
+            event.target.value;
+
+          renderCanvas();
+
+          localSave();
+        }
+      );
+
+    root
+      .querySelector(
+        "[data-orientation]"
+      )
+      ?.addEventListener(
+        "change",
+        (event) => {
+          const page =
+            currentPage();
+
+          if (!page) {
+            return;
+          }
+
+          page.orientation =
+            event.target.value;
+
+          render();
+
+          localSave();
+        }
+      );
+
+    root
+      .querySelector(
+        "[data-fullscreen]"
+      )
+      ?.addEventListener(
+        "click",
+        toggleFullscreen
+      );
+
+    root
+      .querySelector(
+        "[data-add-image]"
+      )
+      ?.addEventListener(
+        "click",
+        addImage
+      );
+
+    root
+      .querySelector(
+        "[data-prev-page]"
+      )
+      ?.addEventListener(
+        "click",
+        previousPage
+      );
+
+    root
+      .querySelector(
+        "[data-next-page]"
+      )
+      ?.addEventListener(
+        "click",
+        nextPage
+      );
+
+    root
+      .querySelector(
+        "[data-add-page]"
+      )
+      ?.addEventListener(
+        "click",
+        addPage
+      );
+
+    root
+      .querySelector(
+        "[data-page-strip]"
+      )
+      ?.querySelectorAll(
+        "[data-page]"
+      )
+      .forEach(
+        (button) => {
+          button.addEventListener(
+            "click",
+            () => {
+              activePage =
+                Number(
+                  button.dataset.page
+                );
+
+              notebook.activePage =
+                activePage;
+
+              render();
+
+              localSave();
+            }
+          );
+        }
+      );
+
+    /*
+     * Width control for fullscreen.
+     */
+
+    const widthControl =
+      root.querySelector(
+        "[data-width-control]"
+      );
+
+    const widthToggle =
+      root.querySelector(
+        "[data-width-toggle]"
+      );
+
+    const widthPopover =
+      root.querySelector(
+        "[data-width-popover]"
+      );
+
+    const widthValue =
+      root.querySelector(
+        "[data-width-value]"
+      );
+
+    const widthPreview =
+      root.querySelector(
+        "[data-width-preview]"
+      );
+
+    if (
+      widthControl &&
+      widthToggle
+    ) {
+      widthToggle.addEventListener(
+        "click",
+        (event) => {
+          event.stopPropagation();
+
+          const open =
+            widthControl.classList.toggle(
+              "open"
+            );
+
+          widthToggle.setAttribute(
+            "aria-expanded",
+            String(open)
+          );
+
+          updateWidthUi();
+        }
+      );
+
+      widthPopover?.addEventListener(
+        "pointerdown",
+        (event) => {
+          event.stopPropagation();
+        }
+      );
+
+      root.addEventListener(
+        "pointerdown",
+        (event) => {
+          if (
+            !widthControl.contains(
+              event.target
+            )
+          ) {
+            widthControl.classList.remove(
+              "open"
+            );
+
+            widthToggle.setAttribute(
+              "aria-expanded",
+              "false"
+            );
+          }
+        },
+        {
+          passive: true,
+        }
+      );
+    }
+
+    function updateWidthUi() {
+      if (widthValue) {
+        widthValue.textContent =
+          String(width);
+      }
+
+      if (widthPreview) {
+        const size =
+          Math.max(
+            4,
+            Math.min(
+              20,
+              3 +
+                width *
+                  .85
+            )
+          );
+
+        widthPreview.style.width =
+          size + "px";
+
+        widthPreview.style.height =
+          size + "px";
+      }
+    }
+
+    /*
+     * Keep the original range
+     * in sync too.
+     */
+
+    updateWidthUi();
+  }
+
+  function updateToolbar() {
+    if (!root) {
+      return;
+    }
+
+    root
+      .querySelectorAll(
+        "[data-tool]"
+      )
+      .forEach(
+        (button) => {
+          button.classList.toggle(
+            "active",
+            button.dataset.tool ===
+              tool
+          );
+        }
+      );
+
+    const autoShapeButton =
+      root.querySelector(
+        "[data-auto-shapes]"
+      );
+
+    if (autoShapeButton) {
+      autoShapeButton.classList.toggle(
+        "active",
+        autoShapes
+      );
+
+      autoShapeButton.setAttribute(
+        "aria-pressed",
+        String(autoShapes)
+      );
+    }
+
+    root
+      .querySelectorAll(
+        "[data-swatch]"
+      )
+      .forEach(
+        (button) => {
+          button.classList.toggle(
+            "notebook-swatch-selected",
+            button.dataset.swatch ===
+              color
+          );
+        }
+      );
+
+    const colorInput =
+      root.querySelector(
+        "[data-color]"
+      );
+
+    if (
+      colorInput &&
+      colorInput.value !== color
+    ) {
+      colorInput.value =
+        color;
+    }
+
+    updateWidthUi();
+  }
+
+  function updateWidthUi() {
+    const widthInput =
+      root?.querySelector(
+        "[data-width]"
+      );
+
+    if (widthInput) {
+      widthInput.value =
+        String(width);
+    }
+
+    const widthValue =
+      root?.querySelector(
+        "[data-width-value]"
+      );
+
+    if (widthValue) {
+      widthValue.textContent =
+        String(width);
+    }
+
+    const widthPreview =
+      root?.querySelector(
+        "[data-width-preview]"
+      );
+
+    if (widthPreview) {
+      const size =
+        Math.max(
+          4,
+          Math.min(
+            20,
+            3 +
+              width *
+                .85
+          )
+        );
+
+      widthPreview.style.width =
+        size + "px";
+
+      widthPreview.style.height =
+        size + "px";
+    }
+  }
+    /*
+   * ---------------------------------------------------------
+   * PAGE HELPERS
+   * ---------------------------------------------------------
+   */
+
+  function currentPage() {
+    if (!notebook || !Array.isArray(notebook.pages)) {
+      return null;
+    }
+
+    return notebook.pages[activePage] || notebook.pages[0];
+  }
+
+  function storageKey() {
+    return (
+      "itera-notebook-" +
+      String(subject?.id || "unknown")
+    );
+  }
+
+  function cloneNotebook(value) {
+    try {
+      return JSON.parse(
+        JSON.stringify(value)
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function normalizeNotebook() {
+    if (!notebook || typeof notebook !== "object") {
+      notebook = freshNotebook();
+      return;
+    }
+
+    if (!Array.isArray(notebook.pages) || !notebook.pages.length) {
+      notebook.pages = freshNotebook().pages;
+    }
+
+    notebook.pages.forEach((page) => {
+      if (!page || typeof page !== "object") {
+        return;
+      }
+
+      if (!templates[page.template]) {
+        page.template = "lined";
+      }
+
+      if (
+        page.orientation !== "landscape" &&
+        page.orientation !== "portrait"
+      ) {
+        page.orientation = "portrait";
+      }
+
+      if (
+        typeof page.background !== "string" ||
+        !page.background
+      ) {
+        page.background = "#fffdf9";
+      }
+
+      if (!Array.isArray(page.strokes)) {
+        page.strokes = [];
+      }
+
+      if (!Array.isArray(page.elements)) {
+        page.elements = [];
+      }
+
+      page.strokes = page.strokes.filter(
+        (stroke) =>
+          stroke &&
+          Array.isArray(stroke.points) &&
+          stroke.points.length
+      );
+
+      page.elements = page.elements.filter(
+        Boolean
+      );
+    });
+  }
+
+  function loadLocal() {
+    try {
+      const raw = localStorage.getItem(
+        storageKey()
+      );
+
+      if (!raw) {
+        return freshNotebook();
+      }
+
+      const parsed = JSON.parse(raw);
+
+      if (
+        !parsed ||
+        typeof parsed !== "object"
+      ) {
+        return freshNotebook();
+      }
+
+      return parsed;
+    } catch (_) {
+      return freshNotebook();
+    }
+  }
+
+  /*
+   * ---------------------------------------------------------
+   * CLOUD LOADING
+   * ---------------------------------------------------------
+   */
+
+  async function loadCloud() {
+    if (!mounted || !user || !subject?.id) {
+      return;
+    }
+
+    try {
+      const {
+        data,
+        error,
+      } = await supabaseClient
+        .from("notebooks")
+        .select("*")
+        .eq("user_id", user.id)
+        .eq("subject_id", subject.id)
+        .maybeSingle();
+
+      if (!mounted || error || !data) {
+        return;
+      }
+
+      const remoteNotebook =
+        data.notebook ||
+        data.content ||
+        data.data;
+
+      if (
+        !remoteNotebook ||
+        typeof remoteNotebook !== "object"
+      ) {
+        return;
+      }
+
+      /*
+       * Local edits may have happened while
+       * the cloud request was in flight.
+       *
+       * Only replace the local notebook when
+       * the remote copy is newer.
+       */
+      const remoteUpdatedAt =
+        Number(
+          data.updated_at ||
+            remoteNotebook.updatedAt ||
+            0
+        );
+
+      const localUpdatedAt =
+        Number(
+          notebook?.updatedAt ||
+            0
+        );
+
+      if (
+        remoteUpdatedAt &&
+        localUpdatedAt &&
+        localUpdatedAt > remoteUpdatedAt
+      ) {
+        return;
+      }
+
+      notebook =
+        cloneNotebook(
+          remoteNotebook
+        ) ||
+        freshNotebook();
+
+      normalizeNotebook();
+
+      activePage = Math.min(
+        activePage,
+        notebook.pages.length - 1
+      );
+
+      redo = [];
+
+      render();
+
+      try {
+        localStorage.setItem(
+          storageKey(),
+          JSON.stringify(notebook)
+        );
+      } catch (_) {}
+    } catch (_) {
+      /*
+       * Local notebook remains usable even
+       * when cloud loading fails.
+       */
+    }
+  }
+
+  /*
+   * ---------------------------------------------------------
+   * LOCAL + CLOUD SAVE
+   * ---------------------------------------------------------
+   */
+
+  function scheduleSave() {
+    clearTimeout(saveTimer);
+
+    saveTimer = setTimeout(() => {
+      if (
+        drawing ||
+        pointers.size
+      ) {
+        scheduleSave();
+        return;
+      }
+
+      void persist();
+    }, 1200);
+  }
+
+  function localSave() {
+    /*
+     * Do not serialize the entire notebook while
+     * Apple Pencil is drawing.
+     *
+     * The previous synchronous localStorage write
+     * could briefly freeze Safari/iPadOS exactly
+     * when a stroke ended.
+     */
+    scheduleSave();
+
+    clearTimeout(localCacheTimer);
+
+    const flush = () => {
+      if (
+        !mounted ||
+        drawing ||
+        pointers.size
+      ) {
+        localCacheTimer =
+          setTimeout(
+            flush,
+            220
+          );
+
+        return;
+      }
+
+      try {
+        notebook.updatedAt =
+          Date.now();
+
+        localStorage.setItem(
+          storageKey(),
+          JSON.stringify(
+            notebook
+          )
+        );
+      } catch (_) {}
+    };
+
+    localCacheTimer =
+      setTimeout(
+        flush,
+        900
+      );
+  }
+
+  async function persist() {
+    if (
+      !mounted ||
+      !user ||
+      !subject?.id ||
+      !notebook
+    ) {
+      return;
+    }
+
+    /*
+     * Never start a cloud serialization/upload
+     * while the pencil is actively producing
+     * samples.
+     */
+    if (
+      drawing ||
+      pointers.size
+    ) {
+      scheduleSave();
+      return;
+    }
+
+    if (saving) {
+      saveQueued = true;
+      return;
+    }
+
+    saving = true;
+    saveQueued = false;
+
+    const version =
+      ++saveVersion;
+
+    const snapshot =
+      cloneNotebook(
+        notebook
+      );
+
+    if (!snapshot) {
+      saving = false;
+      return;
+    }
+
+    snapshot.updatedAt =
+      Date.now();
+
+    try {
+      const {
+        error,
+      } = await supabaseClient
+        .from("notebooks")
+        .upsert(
+          {
+            user_id:
+              user.id,
+
+            subject_id:
+              subject.id,
+
+            notebook:
+              snapshot,
+
+            updated_at:
+              new Date(
+                snapshot.updatedAt
+              ).toISOString(),
+          },
+          {
+            onConflict:
+              "user_id,subject_id",
+          }
+        );
+
+      if (
+        error
+      ) {
+        throw error;
+      }
+
+      /*
+       * If another save was scheduled while
+       * this upload was running, let it run
+       * after the current request finishes.
+       */
+      if (
+        version !==
+        saveVersion
+      ) {
+        saveQueued = true;
+      }
+    } catch (_) {
+      /*
+       * The local copy is still available.
+       * Retry through the normal save queue.
+       */
+    } finally {
+      saving = false;
+
+      if (
+        saveQueued ||
+        version !== saveVersion
+      ) {
+        saveQueued = false;
+        scheduleSave();
+      }
+    }
+  }
+
+  /*
+   * ---------------------------------------------------------
+   * CANVAS SIZE / GEOMETRY
+   * ---------------------------------------------------------
+   */
+
+  function pageAspectRatio() {
+    const page =
+      currentPage();
+
+    if (
+      page?.orientation ===
       "landscape"
-      ? 297 / 210
-      : 210 / 297;
+    ) {
+      return 297 / 210;
+    }
+
+    return 210 / 297;
   }
 
   function resizeCanvas() {
     if (
       !canvas ||
       !inkCanvas ||
-      !root
+      !ctx ||
+      !inkCtx
     ) {
       return;
     }
 
-    const stage =
-      root.querySelector(
-        "[data-notebook-stage]"
-      );
-
     const sheet =
-      root.querySelector(
+      root?.querySelector(
         "[data-notebook-sheet]"
       );
 
-    if (
-      !stage ||
-      !sheet
-    ) {
+    if (!sheet) {
       return;
     }
 
-    const stageWidth =
-      stage.clientWidth;
+    const widthPx =
+      Math.max(
+        1,
+        Math.round(
+          sheet.clientWidth
+        )
+      );
 
-    const stageHeight =
-      stage.clientHeight;
-
-    const aspect =
-      pageAspect();
-
-    let widthPx =
-      stageWidth * 0.72;
-
-    let heightPx =
-      widthPx / aspect;
-
-    if (
-      heightPx >
-      stageHeight * 0.90
-    ) {
-      heightPx =
-        stageHeight * 0.90;
-
-      widthPx =
-        heightPx * aspect;
-    }
-
-    if (
-      widthPx < 280 &&
-      stageWidth >= 280
-    ) {
-      widthPx = 280;
-      heightPx =
-        widthPx / aspect;
-    }
-
-    /*
-     * Fullscreen:
-     *
-     * Fit the whole A4 page into the viewport,
-     * leaving comfortable space around it.
-     */
-
-    if (fullscreen) {
-      const safeWidth =
-        stageWidth * 0.92;
-
-      const safeHeight =
-        stageHeight * 0.92;
-
-      widthPx =
-        Math.min(
-          safeWidth,
-          safeHeight * aspect
-        );
-
-      heightPx =
-        widthPx / aspect;
-    }
-
-    sheet.style.width =
-      `${widthPx}px`;
-
-    sheet.style.height =
-      `${heightPx}px`;
+    const heightPx =
+      Math.max(
+        1,
+        Math.round(
+          sheet.clientHeight
+        )
+      );
 
     const dpr =
       Math.min(
-        global.devicePixelRatio ||
-          1,
+        global.devicePixelRatio || 1,
         2
       );
 
@@ -1910,71 +3584,70 @@
         )
       );
 
-    /*
-     * Avoid resetting the canvas if its
-     * backing dimensions have not changed.
-     *
-     * This is important for Pencil latency.
-     */
-
-    const changed =
+    if (
       canvas.width !==
         pixelWidth ||
       canvas.height !==
-        pixelHeight;
-
-    if (changed) {
+        pixelHeight
+    ) {
       canvas.width =
         pixelWidth;
 
       canvas.height =
         pixelHeight;
+    }
 
+    if (
+      inkCanvas.width !==
+        pixelWidth ||
+      inkCanvas.height !==
+        pixelHeight
+    ) {
       inkCanvas.width =
         pixelWidth;
 
       inkCanvas.height =
         pixelHeight;
-
-      canvas.style.width =
-        `${widthPx}px`;
-
-      canvas.style.height =
-        `${heightPx}px`;
-
-      inkCanvas.style.width =
-        `${widthPx}px`;
-
-      inkCanvas.style.height =
-        `${heightPx}px`;
-
-      renderCanvas();
-
-      clearInk();
-    } else {
-      canvas.style.width =
-        `${widthPx}px`;
-
-      canvas.style.height =
-        `${heightPx}px`;
-
-      inkCanvas.style.width =
-        `${widthPx}px`;
-
-      inkCanvas.style.height =
-        `${heightPx}px`;
     }
 
-    setZoom(zoom);
+    ctx.setTransform(
+      dpr,
+      0,
+      0,
+      dpr,
+      0,
+      0
+    );
+
+    inkCtx.setTransform(
+      dpr,
+      0,
+      0,
+      dpr,
+      0,
+      0
+    );
+
+    renderCanvas();
   }
 
-  /*
-   * ---------------------------------------------------------
-   * PAPER
-   * ---------------------------------------------------------
-   */
+  function clearInk() {
+    if (
+      !inkCtx ||
+      !inkCanvas
+    ) {
+      return;
+    }
 
-  function paintPaper() {
+    inkCtx.clearRect(
+      0,
+      0,
+      inkCanvas.width,
+      inkCanvas.height
+    );
+  }
+
+  function clearCanvas() {
     if (
       !ctx ||
       !canvas
@@ -1982,79 +3655,137 @@
       return;
     }
 
-    const w =
-      canvas.width;
-
-    const h =
-      canvas.height;
-
-    const dpr =
-      Math.min(
-        global.devicePixelRatio ||
-          1,
-        2
-      );
-
-    ctx.setTransform(
-      1,
-      0,
-      0,
-      1,
-      0,
-      0
-    );
-
     ctx.clearRect(
       0,
       0,
-      w,
-      h
+      canvas.width,
+      canvas.height
     );
+  }
+
+  /*
+   * ---------------------------------------------------------
+   * PAGE BACKGROUND
+   * ---------------------------------------------------------
+   */
+
+  function drawPageBackground() {
+    const page =
+      currentPage();
+
+    if (
+      !ctx ||
+      !canvas ||
+      !page
+    ) {
+      return;
+    }
+
+    const widthPx =
+      canvas.clientWidth;
+
+    const heightPx =
+      canvas.clientHeight;
+
+    ctx.save();
 
     ctx.fillStyle =
-      currentPage()
-        .background ||
+      page.background ||
       "#fffdf9";
 
     ctx.fillRect(
       0,
       0,
-      w,
-      h
+      widthPx,
+      heightPx
     );
 
-    const template =
-      currentPage()
-        .template;
+    ctx.restore();
+  }
+
+  function drawTemplate() {
+    const page =
+      currentPage();
 
     if (
-      template ===
-      "blank"
+      !ctx ||
+      !canvas ||
+      !page
     ) {
       return;
     }
 
+    const widthPx =
+      canvas.clientWidth;
+
+    const heightPx =
+      canvas.clientHeight;
+
     ctx.save();
 
-    ctx.strokeStyle =
-      template === "grid"
-        ? "rgba(110,130,160,.12)"
-        : "rgba(100,120,160,.18)";
-
-    ctx.lineWidth =
-      1 * dpr;
-
     if (
-      template ===
-      "grid"
+      page.template ===
+      "lined"
     ) {
-      const gap =
-        22 * dpr;
+      const spacing =
+        Math.max(
+          20,
+          Math.min(
+            34,
+            widthPx / 27
+          )
+        );
+
+      ctx.strokeStyle =
+        "rgba(120,120,120,.18)";
+
+      ctx.lineWidth =
+        1;
 
       for (
-        let x = gap;
-        x < w;
-        x += gap
+        let y = spacing;
+        y < heightPx;
+        y += spacing
+      ) {
+        ctx.beginPath();
+
+        ctx.moveTo(
+          0,
+          y
+        );
+
+        ctx.lineTo(
+          widthPx,
+          y
+        );
+
+        ctx.stroke();
+      }
+    }
+
+    if (
+      page.template ===
+      "grid"
+    ) {
+      const spacing =
+        Math.max(
+          18,
+          Math.min(
+            30,
+            widthPx / 30
+          )
+        );
+
+      ctx.strokeStyle =
+        "rgba(120,120,120,.14)";
+
+      ctx.lineWidth =
+        1;
+
+      for (
+        let x = 0;
+        x < widthPx;
+        x += spacing
       ) {
         ctx.beginPath();
 
@@ -2065,16 +3796,16 @@
 
         ctx.lineTo(
           x,
-          h
+          heightPx
         );
 
         ctx.stroke();
       }
 
       for (
-        let y = gap;
-        y < h;
-        y += gap
+        let y = 0;
+        y < heightPx;
+        y += spacing
       ) {
         ctx.beginPath();
 
@@ -2084,64 +3815,847 @@
         );
 
         ctx.lineTo(
-          w,
+          widthPx,
           y
         );
 
         ctx.stroke();
       }
-    } else {
-      const gap =
-        31 * dpr;
-
-      for (
-        let y = gap;
-        y < h;
-        y += gap
-      ) {
-        ctx.beginPath();
-
-        ctx.moveTo(
-          0,
-          y
-        );
-
-        ctx.lineTo(
-          w,
-          y
-        );
-
-        ctx.stroke();
-      }
-
-      ctx.strokeStyle =
-        "rgba(230,100,130,.16)";
-
-      ctx.beginPath();
-
-      ctx.moveTo(
-        58 * dpr,
-        0
-      );
-
-      ctx.lineTo(
-        58 * dpr,
-        h
-      );
-
-      ctx.stroke();
     }
 
     ctx.restore();
   }
-
-  /*
+    /*
    * ---------------------------------------------------------
-   * STATIC RENDER
+   * STROKE RENDERING
    * ---------------------------------------------------------
    */
 
-  function renderCanvas() {
+  function drawStroke(
+    targetCtx,
+    stroke,
+    dpr = 1
+  ) {
+    if (
+      !targetCtx ||
+      !stroke ||
+      !Array.isArray(stroke.points) ||
+      !stroke.points.length
+    ) {
+      return;
+    }
+
+    const points =
+      stroke.points;
+
+    const widthPx =
+      canvas.clientWidth;
+
+    const heightPx =
+      canvas.clientHeight;
+
+    targetCtx.save();
+
+    const alpha =
+      stroke.tool ===
+      "highlighter"
+        ? 0.24
+        : stroke.tool ===
+          "pencil"
+          ? 0.72
+          : 1;
+
+    targetCtx.globalAlpha =
+      alpha;
+
+    targetCtx.strokeStyle =
+      stroke.color ||
+      color;
+
+    targetCtx.fillStyle =
+      stroke.color ||
+      color;
+
+    targetCtx.lineCap =
+      "round";
+
+    targetCtx.lineJoin =
+      "round";
+
+    /*
+     * A single Apple Pencil tap is a real
+     * dot, not an empty stroke.
+     */
+    if (
+      points.length === 1
+    ) {
+      const point =
+        points[0];
+
+      const pressure =
+        Number(point[2]) || 1;
+
+      const radius =
+        Math.max(
+          0.7,
+          (
+            Math.max(
+              0.75,
+              Number(
+                stroke.width
+              ) || 1
+            ) *
+            pressure
+          ) *
+            0.48
+        ) *
+        dpr;
+
+      targetCtx.beginPath();
+
+      targetCtx.arc(
+        point[0] *
+          widthPx *
+          dpr,
+
+        point[1] *
+          heightPx *
+          dpr,
+
+        radius,
+
+        0,
+        Math.PI * 2
+      );
+
+      targetCtx.fill();
+
+      targetCtx.restore();
+
+      return;
+    }
+
+    targetCtx.lineWidth =
+      Math.max(
+        0.75,
+        (
+          Number(
+            stroke.width
+          ) || 1
+        ) *
+          (
+            Number(
+              points[0][2]
+            ) || 1
+          )
+      ) *
+        dpr;
+
+    targetCtx.beginPath();
+
+    const first =
+      points[0];
+
+    targetCtx.moveTo(
+      first[0] *
+        widthPx *
+        dpr,
+
+      first[1] *
+        heightPx *
+        dpr
+    );
+
+    /*
+     * Light causal smoothing.
+     *
+     * We only look one point ahead,
+     * so handwriting does not feel
+     * like it is following the Pencil
+     * with a visible delay.
+     */
+    for (
+      let i = 1;
+      i < points.length;
+      i++
+    ) {
+      const previous =
+        points[i - 1];
+
+      const current =
+        points[i];
+
+      const pressure =
+        (
+          Number(
+            previous[2]
+          ) || 1
+        ) +
+        (
+          Number(
+            current[2]
+          ) || 1
+        );
+
+      const averagedPressure =
+        pressure / 2;
+
+      targetCtx.lineWidth =
+        Math.max(
+          0.75,
+          (
+            Number(
+              stroke.width
+            ) || 1
+          ) *
+            averagedPressure
+        ) *
+          dpr;
+
+      const px =
+        previous[0] *
+        widthPx *
+        dpr;
+
+      const py =
+        previous[1] *
+        heightPx *
+        dpr;
+
+      const cx =
+        current[0] *
+        widthPx *
+        dpr;
+
+      const cy =
+        current[1] *
+        heightPx *
+        dpr;
+
+      /*
+       * A midpoint keeps the curve soft
+       * without introducing future-looking
+       * interpolation.
+       */
+      const midX =
+        (
+          px + cx
+        ) / 2;
+
+      const midY =
+        (
+          py + cy
+        ) / 2;
+
+      targetCtx.quadraticCurveTo(
+        px,
+        py,
+        midX,
+        midY
+      );
+    }
+
+    const last =
+      points[
+        points.length - 1
+      ];
+
+    targetCtx.lineTo(
+      last[0] *
+        widthPx *
+        dpr,
+
+      last[1] *
+        heightPx *
+        dpr
+    );
+
+    targetCtx.stroke();
+
+    targetCtx.restore();
+  }
+
+  /*
+   * ---------------------------------------------------------
+   * LIVE PENCIL RENDERING
+   * ---------------------------------------------------------
+   */
+
+  function liveStrokeWidth(
+    stroke,
+    pressure
+  ) {
+    return Math.max(
+      0.75,
+      (
+        Number(
+          stroke?.width
+        ) || 1
+      ) *
+        (
+          Number(
+            pressure
+          ) || 1
+        )
+    );
+  }
+
+  function drawLiveDot(
+    point
+  ) {
+    if (
+      !inkCtx ||
+      !drawing ||
+      !point
+    ) {
+      return;
+    }
+
+    const dpr =
+      Math.min(
+        global.devicePixelRatio ||
+          1,
+        2
+      );
+
+    const widthPx =
+      canvas.clientWidth;
+
+    const heightPx =
+      canvas.clientHeight;
+
+    const radius =
+      Math.max(
+        0.9,
+        liveStrokeWidth(
+          drawing,
+          point[2]
+        ) *
+          0.48
+      ) *
+      dpr;
+
+    inkCtx.save();
+
+    inkCtx.globalAlpha =
+      drawing.tool ===
+      "highlighter"
+        ? 0.24
+        : drawing.tool ===
+          "pencil"
+          ? 0.72
+          : 1;
+
+    inkCtx.fillStyle =
+      drawing.color ||
+      color;
+
+    inkCtx.beginPath();
+
+    inkCtx.arc(
+      point[0] *
+        widthPx *
+        dpr,
+
+      point[1] *
+        heightPx *
+        dpr,
+
+      radius,
+
+      0,
+      Math.PI * 2
+    );
+
+    inkCtx.fill();
+
+    inkCtx.restore();
+  }
+
+  function drawLiveSegment(
+    previous,
+    point
+  ) {
+    if (
+      !inkCtx ||
+      !drawing ||
+      !previous ||
+      !point
+    ) {
+      return;
+    }
+
+    const dpr =
+      Math.min(
+        global.devicePixelRatio ||
+          1,
+        2
+      );
+
+    const widthPx =
+      canvas.clientWidth;
+
+    const heightPx =
+      canvas.clientHeight;
+
+    const pressure =
+      (
+        Number(
+          previous[2]
+        ) || 1
+      ) +
+      (
+        Number(
+          point[2]
+        ) || 1
+      );
+
+    const averagedPressure =
+      pressure / 2;
+
+    inkCtx.save();
+
+    inkCtx.globalAlpha =
+      drawing.tool ===
+      "highlighter"
+        ? 0.24
+        : drawing.tool ===
+          "pencil"
+          ? 0.72
+          : 1;
+
+    inkCtx.strokeStyle =
+      drawing.color ||
+      color;
+
+    inkCtx.lineCap =
+      "round";
+
+    inkCtx.lineJoin =
+      "round";
+
+    inkCtx.lineWidth =
+      liveStrokeWidth(
+        drawing,
+        averagedPressure
+      ) *
+      dpr;
+
+    inkCtx.beginPath();
+
+    inkCtx.moveTo(
+      previous[0] *
+        widthPx *
+        dpr,
+
+      previous[1] *
+        heightPx *
+        dpr
+    );
+
+    inkCtx.lineTo(
+      point[0] *
+        widthPx *
+        dpr,
+
+      point[1] *
+        heightPx *
+        dpr
+    );
+
+    inkCtx.stroke();
+
+    inkCtx.restore();
+  }
+
+  function drawLive() {
+    if (
+      !drawing ||
+      !inkCtx
+    ) {
+      return;
+    }
+
+    clearInk();
+
+    const dpr =
+      Math.min(
+        global.devicePixelRatio ||
+          1,
+        2
+      );
+
+    drawStroke(
+      inkCtx,
+      drawing,
+      dpr
+    );
+  }
+
+  function addSamples(
+    events
+  ) {
+    if (!drawing) {
+      return;
+    }
+
+    for (
+      const event of
+        events || []
+    ) {
+      if (
+        !event ||
+        !Number.isFinite(
+          event.clientX
+        ) ||
+        !Number.isFinite(
+          event.clientY
+        )
+      ) {
+        continue;
+      }
+
+      const point =
+        pointFromEvent(
+          event
+        );
+
+      const last =
+        drawing.points[
+          drawing.points.length - 1
+        ];
+
+      /*
+       * Do not throw away tiny movements.
+       * Apple Pencil handwriting contains many
+       * intentionally tiny samples.
+       */
+      if (
+        last &&
+        point[0] ===
+          last[0] &&
+        point[1] ===
+          last[1] &&
+        point[2] ===
+          last[2]
+      ) {
+        continue;
+      }
+
+      drawing.points.push(
+        point
+      );
+
+      if (!last) {
+        drawLiveDot(
+          point
+        );
+      } else {
+        drawLiveSegment(
+          last,
+          point
+        );
+      }
+    }
+  }
+
+  /*
+   * ---------------------------------------------------------
+   * POINT CONVERSION
+   * ---------------------------------------------------------
+   */
+
+  function pointFromEvent(
+    event
+  ) {
+    const rect =
+      inkCanvas.getBoundingClientRect();
+
+    const x =
+      (
+        event.clientX -
+        rect.left
+      ) /
+      rect.width;
+
+    const y =
+      (
+        event.clientY -
+        rect.top
+      ) /
+      rect.height;
+
+    let pressure = 1;
+
+    if (
+      event.pointerType ===
+        "pen" &&
+      Number.isFinite(
+        event.pressure
+      ) &&
+      event.pressure > 0
+    ) {
+      pressure =
+        Math.max(
+          0.28,
+          Math.min(
+            1.65,
+            event.pressure *
+              1.35
+          )
+        );
+    }
+
+    return [
+      Math.max(
+        0,
+        Math.min(
+          1,
+          x
+        )
+      ),
+
+      Math.max(
+        0,
+        Math.min(
+          1,
+          y
+        )
+      ),
+
+      pressure,
+    ];
+  }
+
+  /*
+   * ---------------------------------------------------------
+   * CONTINUOUS ERASER
+   * ---------------------------------------------------------
+   */
+
+  function distancePointToSegment(
+    px,
+    py,
+    ax,
+    ay,
+    bx,
+    by
+  ) {
+    const dx =
+      bx - ax;
+
+    const dy =
+      by - ay;
+
+    if (
+      dx === 0 &&
+      dy === 0
+    ) {
+      return Math.hypot(
+        px - ax,
+        py - ay
+      );
+    }
+
+    const t =
+      Math.max(
+        0,
+        Math.min(
+          1,
+          (
+            (
+              px - ax
+            ) *
+              dx +
+            (
+              py - ay
+            ) *
+              dy
+          ) /
+            (
+              dx * dx +
+              dy * dy
+            )
+        )
+      );
+
+    const closestX =
+      ax +
+      t * dx;
+
+    const closestY =
+      ay +
+      t * dy;
+
+    return Math.hypot(
+      px - closestX,
+      py - closestY
+    );
+  }
+
+  function eraseAt(
+    at
+  ) {
+    const page =
+      currentPage();
+
+    if (
+      !page ||
+      !Array.isArray(
+        page.strokes
+      )
+    ) {
+      return false;
+    }
+
+    const radius =
+      Math.max(
+        0.008,
+        width /
+          Math.max(
+            canvas.clientWidth,
+            canvas.clientHeight
+          ) *
+          2.5
+      );
+
+    let changed =
+      false;
+
+    const nextStrokes =
+      [];
+
+    page.strokes.forEach(
+      (stroke) => {
+        const points =
+          stroke.points ||
+          [];
+
+        if (
+          !points.length
+        ) {
+          return;
+        }
+
+        /*
+         * A dot is either kept or erased
+         * as a whole.
+         */
+        if (
+          points.length === 1
+        ) {
+          const point =
+            points[0];
+
+          if (
+            Math.hypot(
+              point[0] -
+                at[0],
+              point[1] -
+                at[1]
+            ) <=
+            radius
+          ) {
+            changed = true;
+          } else {
+            nextStrokes.push(
+              stroke
+            );
+          }
+
+          return;
+        }
+
+        let part = [];
+        let hit = false;
+
+        const flush =
+          () => {
+            if (
+              part.length
+            ) {
+              nextStrokes.push({
+                ...stroke,
+                points: part,
+              });
+            }
+
+            part = [];
+          };
+
+        for (
+          let i = 0;
+          i < points.length;
+          i++
+        ) {
+          const point =
+            points[i];
+
+          const pointHit =
+            Math.hypot(
+              point[0] -
+                at[0],
+              point[1] -
+                at[1]
+            ) <=
+            radius;
+
+          const segmentHit =
+            i > 0 &&
+            distancePointToSegment(
+              at[0],
+              at[1],
+
+              points[
+                i - 1
+              ][0],
+
+              points[
+                i - 1
+              ][1],
+
+              point[0],
+              point[1]
+            ) <=
+            radius;
+
+          if (
+            pointHit ||
+            segmentHit
+          ) {
+            flush();
+
+            hit = true;
+            changed = true;
+          } else {
+            part.push(
+              point
+            );
+          }
+        }
+
+        flush();
+
+        if (!hit) {
+          nextStrokes.push(
+            stroke
+          );
+        }
+      }
+    );
+
+    if (!changed) {
+      return false;
+    }
+
+    page.strokes =
+      nextStrokes;
+
+    renderCanvas();
+
+    return true;
+  }
+    function renderCanvas() {
     if (
       !ctx ||
       !canvas
@@ -2207,341 +4721,6 @@
       inkCanvas.width,
       inkCanvas.height
     );
-  }
-
-  /*
-   * ---------------------------------------------------------
-   * HANDWRITING SMOOTHING
-   * ---------------------------------------------------------
-   *
-   * The old version moved points toward their neighbours.
-   * That is mathematically nice but can make the visible
-   * stroke feel delayed because the next point is needed.
-   *
-   * We therefore use a very light smoothing pass for the
-   * already received points only.
-   *
-   * During the live stroke, we don't wait for future samples.
-   */
-
-  function smoothForDisplay(
-    points
-  ) {
-    if (
-      !points ||
-      points.length < 3
-    ) {
-      return points || [];
-    }
-
-    const result = [
-      points[0],
-    ];
-
-    /*
-     * Small value on purpose.
-     *
-     * This removes jitter without
-     * making handwriting feel "rubbery".
-     */
-
-    const amount = 0.12;
-
-    for (
-      let i = 1;
-      i <
-        points.length - 1;
-      i++
-    ) {
-      const prev =
-        points[i - 1];
-
-      const current =
-        points[i];
-
-      const next =
-        points[i + 1];
-
-      result.push([
-        current[0] +
-          (
-            (
-              prev[0] +
-              next[0]
-            ) /
-              2 -
-            current[0]
-          ) *
-            amount,
-
-        current[1] +
-          (
-            (
-              prev[1] +
-              next[1]
-            ) /
-              2 -
-            current[1]
-          ) *
-            amount,
-
-        current[2],
-      ]);
-    }
-
-    result.push(
-      points[
-        points.length - 1
-      ]
-    );
-
-    return result;
-  }
-
-  /*
-   * ---------------------------------------------------------
-   * DRAW STROKE
-   * ---------------------------------------------------------
-   */
-
-  function drawStroke(
-    target,
-    stroke,
-    dpr
-  ) {
-    const points =
-      stroke.points || [];
-
-    if (!points.length) {
-      return;
-    }
-
-    const w =
-      canvas.clientWidth;
-
-    const h =
-      canvas.clientHeight;
-
-    const smooth =
-      smoothForDisplay(
-        points
-      );
-
-    const alpha =
-      stroke.tool ===
-      "highlighter"
-        ? 0.24
-        : stroke.tool ===
-          "pencil"
-        ? 0.72
-        : 1;
-
-    target.save();
-
-    target.globalAlpha =
-      alpha;
-
-    target.strokeStyle =
-      stroke.color ||
-      color;
-
-    target.fillStyle =
-      stroke.color ||
-      color;
-
-    target.lineCap =
-      "round";
-
-    target.lineJoin =
-      "round";
-
-    /*
-     * Tiny stroke / dot.
-     */
-
-    if (
-      smooth.length === 1
-    ) {
-      const p =
-        smooth[0];
-
-      const pressure =
-        Number(p[2]) || 1;
-
-      const radius =
-        Math.max(
-          0.7,
-          stroke.width *
-            pressure *
-            0.48
-        ) * dpr;
-
-      target.beginPath();
-
-      target.arc(
-        p[0] * w * dpr,
-        p[1] * h * dpr,
-        radius,
-        0,
-        Math.PI * 2
-      );
-
-      target.fill();
-
-      target.restore();
-
-      return;
-    }
-
-    /*
-     * Two-point strokes are rendered directly.
-     * This makes tiny i/t/punctuation strokes
-     * appear without waiting for a third point.
-     */
-
-    if (
-      smooth.length === 2
-    ) {
-      const a =
-        smooth[0];
-
-      const b =
-        smooth[1];
-
-      const pressure =
-        (
-          Number(a[2]) || 1
-        ) +
-        (
-          Number(b[2]) || 1
-        );
-
-      target.lineWidth =
-        stroke.width *
-        (pressure / 2) *
-        dpr;
-
-      target.beginPath();
-
-      target.moveTo(
-        a[0] * w * dpr,
-        a[1] * h * dpr
-      );
-
-      target.lineTo(
-        b[0] * w * dpr,
-        b[1] * h * dpr
-      );
-
-      target.stroke();
-
-      target.restore();
-
-      return;
-    }
-
-    /*
-     * Normal handwriting.
-     */
-
-    for (
-      let i = 1;
-      i < smooth.length;
-      i++
-    ) {
-      const a =
-        smooth[i - 1];
-
-      const b =
-        smooth[i];
-
-      const next =
-        smooth[i + 1] ||
-        b;
-
-      const pressure =
-        (
-          Number(a[2]) || 1
-        ) +
-        (
-          Number(b[2]) || 1
-        );
-
-      target.lineWidth =
-        stroke.width *
-        (pressure / 2) *
-        dpr;
-
-      const ax =
-        a[0] *
-        w *
-        dpr;
-
-      const ay =
-        a[1] *
-        h *
-        dpr;
-
-      const bx =
-        b[0] *
-        w *
-        dpr;
-
-      const by =
-        b[1] *
-        h *
-        dpr;
-
-      target.beginPath();
-
-      target.moveTo(
-        ax,
-        ay
-      );
-
-      if (
-        i <
-        smooth.length - 1
-      ) {
-        const nx =
-          (
-            (
-              b[0] +
-              next[0]
-            ) /
-              2
-          ) *
-          w *
-          dpr;
-
-        const ny =
-          (
-            (
-              b[1] +
-              next[1]
-            ) /
-              2
-          ) *
-          h *
-          dpr;
-
-        target.quadraticCurveTo(
-          bx,
-          by,
-          nx,
-          ny
-        );
-      } else {
-        target.lineTo(
-          bx,
-          by
-        );
-      }
-
-      target.stroke();
-    }
-
-    target.restore();
   }
 
   /*
@@ -2717,8 +4896,12 @@
       target.ellipse(
         x + sw / 2,
         y + sh / 2,
-        Math.abs(sw / 2),
-        Math.abs(sh / 2),
+        Math.abs(
+          sw / 2
+        ),
+        Math.abs(
+          sh / 2
+        ),
         0,
         0,
         Math.PI * 2
@@ -2881,157 +5064,389 @@
    * ---------------------------------------------------------
    */
 
-  function pointFromEvent(
+  function canvasPoint(
     event
   ) {
     const rect =
-      inkCanvas.getBoundingClientRect();
+      canvas.getBoundingClientRect();
 
-    const x =
-      (
-        event.clientX -
-        rect.left
-      ) / rect.width;
+    return {
+      x:
+        (event.clientX -
+          rect.left) /
+        rect.width,
 
-    const y =
-      (
-        event.clientY -
-        rect.top
-      ) / rect.height;
+      y:
+        (event.clientY -
+          rect.top) /
+        rect.height,
+    };
+  }
 
-    /*
-     * Pencil pressure:
-     *
-     * We don't exaggerate pressure too much.
-     * Very light Pencil strokes remain visible.
-     */
+  function clamp01(
+    value
+  ) {
+    return Math.max(
+      0,
+      Math.min(
+        1,
+        value
+      )
+    );
+  }
 
-    let pressure = 1;
-
-    if (
-      event.pointerType ===
-        "pen" &&
-      Number.isFinite(
-        event.pressure
-      ) &&
-      event.pressure > 0
-    ) {
-      pressure =
-        Math.max(
-          0.28,
-          Math.min(
-            1.65,
-            event.pressure *
-              1.35
-          )
-        );
-    }
+  function normalizedPoint(
+    event
+  ) {
+    const rect =
+      canvas.getBoundingClientRect();
 
     return [
-      Math.max(
-        0,
-        Math.min(
-          1,
-          x
-        )
+      clamp01(
+        (event.clientX -
+          rect.left) /
+          rect.width
       ),
 
-      Math.max(
-        0,
-        Math.min(
-          1,
-          y
-        )
+      clamp01(
+        (event.clientY -
+          rect.top) /
+          rect.height
       ),
-
-      pressure,
     ];
   }
 
   /*
    * ---------------------------------------------------------
-   * LIVE INK
+   * UNDO / REDO
    * ---------------------------------------------------------
    */
 
-  function drawLive() {
+  function snapshotPage() {
+    const page =
+      currentPage();
+
+    return JSON.stringify({
+      strokes:
+        page.strokes || [],
+      elements:
+        page.elements || [],
+    });
+  }
+
+  function restoreSnapshot(
+    snapshot
+  ) {
+    if (!snapshot) {
+      return;
+    }
+
+    const page =
+      currentPage();
+
+    page.strokes =
+      snapshot.strokes || [];
+
+    page.elements =
+      snapshot.elements || [];
+
+    renderCanvas();
+  }
+
+  function pushUndo() {
+    const page =
+      currentPage();
+
+    if (!page) {
+      return;
+    }
+
+    undoStack.push(
+      JSON.parse(
+        JSON.stringify({
+          strokes:
+            page.strokes || [],
+          elements:
+            page.elements || [],
+        })
+      )
+    );
+
     if (
-      !drawing ||
-      !inkCtx
+      undoStack.length >
+      80
+    ) {
+      undoStack.shift();
+    }
+
+    redoStack.length = 0;
+  }
+
+  function undo() {
+    if (
+      !undoStack.length
     ) {
       return;
     }
 
-    clearInk();
+    const page =
+      currentPage();
 
-    const dpr =
+    redoStack.push(
+      JSON.parse(
+        JSON.stringify({
+          strokes:
+            page.strokes || [],
+          elements:
+            page.elements || [],
+        })
+      )
+    );
+
+    const snapshot =
+      undoStack.pop();
+
+    page.strokes =
+      snapshot.strokes || [];
+
+    page.elements =
+      snapshot.elements || [];
+
+    renderCanvas();
+
+    localSave();
+  }
+
+  function redo() {
+    if (
+      !redoStack.length
+    ) {
+      return;
+    }
+
+    const page =
+      currentPage();
+
+    undoStack.push(
+      JSON.parse(
+        JSON.stringify({
+          strokes:
+            page.strokes || [],
+          elements:
+            page.elements || [],
+        })
+      )
+    );
+
+    const snapshot =
+      redoStack.pop();
+
+    page.strokes =
+      snapshot.strokes || [];
+
+    page.elements =
+      snapshot.elements || [];
+
+    renderCanvas();
+
+    localSave();
+  }
+    /*
+   * ---------------------------------------------------------
+   * POINTER MAPPING
+   * ---------------------------------------------------------
+   */
+
+  function canvasPoint(
+    event
+  ) {
+    const rect =
+      canvas.getBoundingClientRect();
+
+    return {
+      x:
+        (event.clientX -
+          rect.left) /
+        rect.width,
+
+      y:
+        (event.clientY -
+          rect.top) /
+        rect.height,
+    };
+  }
+
+  function clamp01(
+    value
+  ) {
+    return Math.max(
+      0,
       Math.min(
-        global.devicePixelRatio ||
-          1,
-        2
-      );
-
-    drawStroke(
-      inkCtx,
-      drawing,
-      dpr
+        1,
+        value
+      )
     );
   }
 
+  function normalizedPoint(
+    event
+  ) {
+    const rect =
+      canvas.getBoundingClientRect();
+
+    return [
+      clamp01(
+        (event.clientX -
+          rect.left) /
+          rect.width
+      ),
+
+      clamp01(
+        (event.clientY -
+          rect.top) /
+          rect.height
+      ),
+    ];
+  }
+
   /*
-   * Add every useful sample.
-   *
-   * The only sample we remove is an EXACT duplicate.
+   * ---------------------------------------------------------
+   * UNDO / REDO
+   * ---------------------------------------------------------
    */
 
-  function addSamples(
-    events
+  function snapshotPage() {
+    const page =
+      currentPage();
+
+    return JSON.stringify({
+      strokes:
+        page.strokes || [],
+
+      elements:
+        page.elements || [],
+    });
+  }
+
+  function restoreSnapshot(
+    snapshot
   ) {
-    if (!drawing) {
+    if (!snapshot) {
       return;
     }
 
-    for (
-      const event of events
-    ) {
-      if (
-        !event ||
-        !Number.isFinite(
-          event.clientX
-        ) ||
-        !Number.isFinite(
-          event.clientY
-        )
-      ) {
-        continue;
-      }
+    const page =
+      currentPage();
 
-      const p =
-        pointFromEvent(
-          event
-        );
+    page.strokes =
+      snapshot.strokes || [];
 
-      const last =
-        drawing.points[
-          drawing.points.length -
-            1
-        ];
+    page.elements =
+      snapshot.elements || [];
 
-      if (
-        last &&
-        p[0] === last[0] &&
-        p[1] === last[1] &&
-        p[2] === last[2]
-      ) {
-        continue;
-      }
+    renderCanvas();
+  }
 
-      drawing.points.push(
-        p
-      );
+  function pushUndo() {
+    const page =
+      currentPage();
+
+    if (!page) {
+      return;
     }
 
-    drawLive();
+    undoStack.push(
+      JSON.parse(
+        JSON.stringify({
+          strokes:
+            page.strokes || [],
+
+          elements:
+            page.elements || [],
+        })
+      )
+    );
+
+    if (
+      undoStack.length >
+      80
+    ) {
+      undoStack.shift();
+    }
+
+    redoStack.length = 0;
+  }
+
+  function undo() {
+    if (
+      !undoStack.length
+    ) {
+      return;
+    }
+
+    const page =
+      currentPage();
+
+    redoStack.push(
+      JSON.parse(
+        JSON.stringify({
+          strokes:
+            page.strokes || [],
+
+          elements:
+            page.elements || [],
+        })
+      )
+    );
+
+    const snapshot =
+      undoStack.pop();
+
+    page.strokes =
+      snapshot.strokes || [];
+
+    page.elements =
+      snapshot.elements || [];
+
+    renderCanvas();
+
+    localSave();
+  }
+
+  function redo() {
+    if (
+      !redoStack.length
+    ) {
+      return;
+    }
+
+    const page =
+      currentPage();
+
+    undoStack.push(
+      JSON.parse(
+        JSON.stringify({
+          strokes:
+            page.strokes || [],
+
+          elements:
+            page.elements || [],
+        })
+      )
+    );
+
+    const snapshot =
+      redoStack.pop();
+
+    page.strokes =
+      snapshot.strokes || [];
+
+    page.elements =
+      snapshot.elements || [];
+
+    renderCanvas();
+
+    localSave();
   }
 
   /*
@@ -3057,10 +5472,6 @@
 
     event.preventDefault();
 
-    /*
-     * Touch is navigation.
-     */
-
     pointers.set(
       event.pointerId,
       {
@@ -3072,6 +5483,10 @@
       }
     );
 
+    /*
+     * Touch is navigation.
+     */
+
     if (
       event.pointerType ===
       "touch"
@@ -3080,7 +5495,7 @@
     }
 
     /*
-     * Pencil / mouse.
+     * Pencil / mouse only.
      */
 
     if (
@@ -3117,17 +5532,18 @@
     if (
       tool === "eraser"
     ) {
-      eraseAt(
-        pointFromEvent(
-          event
-        )
-      );
+      eraserChanged =
+        eraseAt(
+          pointFromEvent(
+            event
+          )
+        );
 
       return;
     }
 
     /*
-     * A new drawing invalidates redo.
+     * New drawing invalidates redo.
      */
 
     redo = [];
@@ -3158,8 +5574,7 @@
       );
 
     /*
-     * FIRST POINT:
-     * immediately.
+     * First point immediately.
      */
 
     addSamples([
@@ -3209,6 +5624,47 @@
     }
 
     /*
+     * Continuous eraser.
+     */
+
+    if (
+      tool === "eraser" &&
+      (
+        event.pointerType ===
+          "pen" ||
+        event.pointerType ===
+          "mouse"
+      )
+    ) {
+      const samples =
+        typeof event.getCoalescedEvents ===
+          "function"
+          ? (
+              event.getCoalescedEvents() ||
+              [event]
+            )
+          : [event];
+
+      for (
+        const sample of
+          samples
+      ) {
+        if (
+          eraseAt(
+            pointFromEvent(
+              sample
+            )
+          )
+        ) {
+          eraserChanged =
+            true;
+        }
+      }
+
+      return;
+    }
+
+    /*
      * Pencil / mouse.
      */
 
@@ -3222,8 +5678,8 @@
 
     /*
      * getCoalescedEvents()
-     * gives us all Pencil samples
-     * between browser frames.
+     * gives us the Pencil
+     * samples between frames.
      */
 
     let events;
@@ -3259,14 +5715,15 @@
    * TOUCH PAN
    * ---------------------------------------------------------
    *
-   * One finger touch:
+   * One finger:
    * pan.
    *
-   * Two finger touch:
+   * Two fingers:
    * pinch zoom + pan.
    *
-   * Apple Pencil always has priority because
-   * Pencil events are not touch events.
+   * Apple Pencil has priority
+   * because Pencil events are
+   * not touch events.
    */
 
   function handleTouchPan() {
@@ -3385,9 +5842,7 @@
 
   function finish(event) {
     /*
-     * Process the final Pencil sample FIRST.
-     *
-     * This fixes tiny missing endings.
+     * Final Pencil sample first.
      */
 
     if (
@@ -3407,11 +5862,6 @@
 
       applyShapeRecognition();
 
-      /*
-       * Render the finished stroke
-       * onto the static layer immediately.
-       */
-
       renderCanvas();
 
       drawing = null;
@@ -3420,8 +5870,24 @@
     }
 
     /*
-     * Remove pointer.
+     * Finish erasing.
      */
+
+    if (
+      tool === "eraser" &&
+      (
+        event.pointerType ===
+          "pen" ||
+        event.pointerType ===
+          "mouse"
+      ) &&
+      eraserChanged
+    ) {
+      eraserChanged =
+        false;
+
+      localSave();
+    }
 
     pointers.delete(
       event.pointerId
@@ -3432,11 +5898,6 @@
         event.pointerId
       );
     } catch (_) {}
-
-    /*
-     * Prepare touch gesture state
-     * for the next gesture.
-     */
 
     if (
       event.pointerType ===
@@ -3494,6 +5955,61 @@
    * ---------------------------------------------------------
    */
 
+  function distancePointToSegment(
+    px,
+    py,
+    ax,
+    ay,
+    bx,
+    by
+  ) {
+    const dx =
+      bx - ax;
+
+    const dy =
+      by - ay;
+
+    if (
+      dx === 0 &&
+      dy === 0
+    ) {
+      return Math.hypot(
+        px - ax,
+        py - ay
+      );
+    }
+
+    const t =
+      Math.max(
+        0,
+        Math.min(
+          1,
+          (
+            (px - ax) * dx +
+            (py - ay) * dy
+          ) /
+            (
+              dx * dx +
+              dy * dy
+            )
+        )
+      );
+
+    return Math.hypot(
+      px -
+        (
+          ax +
+          t * dx
+        ),
+
+      py -
+        (
+          ay +
+          t * dy
+        )
+    );
+  }
+
   function eraseAt(
     at
   ) {
@@ -3512,50 +6028,143 @@
           2.5
       );
 
-    let changed = false;
+    let changed =
+      false;
 
-    page.strokes =
-      page.strokes.filter(
-        (stroke) => {
-          const hit =
-            stroke.points.some(
-              (point) =>
-                Math.hypot(
-                  point[0] -
-                    at[0],
+    const nextStrokes =
+      [];
 
-                  point[1] -
-                    at[1]
-                ) <
-                radius
+    page.strokes.forEach(
+      (stroke) => {
+        const points =
+          stroke.points ||
+          [];
+
+        if (
+          !points.length
+        ) {
+          return;
+        }
+
+        /*
+         * Single-point stroke.
+         */
+
+        if (
+          points.length === 1
+        ) {
+          const p =
+            points[0];
+
+          if (
+            Math.hypot(
+              p[0] -
+                at[0],
+
+              p[1] -
+                at[1]
+            ) <= radius
+          ) {
+            changed =
+              true;
+          } else {
+            nextStrokes.push(
+              stroke
             );
-
-          if (hit) {
-            redo.push({
-              kind:
-                "stroke",
-
-              item:
-                stroke,
-            });
-
-            changed = true;
           }
 
-          return !hit;
+          return;
         }
-      );
+
+        let part = [];
+
+        let hit =
+          false;
+
+        const flush =
+          () => {
+            if (
+              part.length
+            ) {
+              nextStrokes.push({
+                ...stroke,
+                points:
+                  part,
+              });
+            }
+
+            part = [];
+          };
+
+        for (
+          let i = 0;
+          i < points.length;
+          i++
+        ) {
+          const p =
+            points[i];
+
+          const pointHit =
+            Math.hypot(
+              p[0] -
+                at[0],
+
+              p[1] -
+                at[1]
+            ) <= radius;
+
+          const segmentHit =
+            i > 0 &&
+            distancePointToSegment(
+              at[0],
+              at[1],
+
+              points[i - 1][0],
+              points[i - 1][1],
+
+              p[0],
+              p[1]
+            ) <= radius;
+
+          if (
+            pointHit ||
+            segmentHit
+          ) {
+            flush();
+
+            hit =
+              true;
+
+            changed =
+              true;
+          } else {
+            part.push(
+              p
+            );
+          }
+        }
+
+        flush();
+
+        if (!hit) {
+          nextStrokes.push(
+            stroke
+          );
+        }
+      }
+    );
 
     if (!changed) {
-      return;
+      return false;
     }
+
+    page.strokes =
+      nextStrokes;
 
     renderCanvas();
 
-    localSave();
-  }
-
-  /*
+    return true;
+  }  /*
    * ---------------------------------------------------------
    * AUTO SHAPE RECOGNITION
    * ---------------------------------------------------------
@@ -3652,9 +6261,10 @@
 
       const triangle =
         near(
-          (minX +
-            maxX) /
-            2,
+          (
+            minX +
+            maxX
+          ) / 2,
 
           minY
         ) &&
@@ -3678,8 +6288,11 @@
             ? "triangle"
             : "ellipse",
 
-        x: minX,
-        y: minY,
+        x:
+          minX,
+
+        y:
+          minY,
 
         w:
           Math.max(
@@ -3746,7 +6359,8 @@
           );
         },
         0
-      ) / points.length;
+      ) /
+      points.length;
 
     if (
       deviation < 0.01
@@ -3955,7 +6569,8 @@
           return;
         }
 
-        finished = true;
+        finished =
+          true;
 
         const value =
           input.value.trim();
@@ -4202,8 +6817,7 @@
         )}%`;
     }
   }
-
-  /*
+    /*
    * ---------------------------------------------------------
    * FULLSCREEN
    * ---------------------------------------------------------
@@ -4324,11 +6938,6 @@
       const success =
         await enterBrowserFullscreen();
 
-      /*
-       * Even if browser fullscreen is unavailable,
-       * CSS Focus Mode still works.
-       */
-
       applyFullscreenUi(
         true
       );
@@ -4347,9 +6956,6 @@
     ) {
       await exitBrowserFullscreen();
 
-      /*
-       * fullscreenchange will update UI.
-       */
       return;
     }
 
@@ -4686,19 +7292,123 @@
      * Width.
      */
 
-    root
-      .querySelector(
-        "[data-width]"
-      )
-      .addEventListener(
-        "input",
-        (event) => {
-          width =
-            Number(
-              event.target.value
-            );
-        }
+    const widthControl =
+      root.querySelector(
+        "[data-width-control]"
       );
+
+    const widthToggle =
+      root.querySelector(
+        "[data-width-toggle]"
+      );
+
+    const widthInput =
+      root.querySelector(
+        "[data-width]"
+      );
+
+    const widthValue =
+      root.querySelector(
+        "[data-width-value]"
+      );
+
+    const widthPreview =
+      root.querySelector(
+        "[data-width-preview]"
+      );
+
+    const updateWidthUi =
+      () => {
+        if (widthInput) {
+          widthInput.value =
+            String(width);
+        }
+
+        if (widthValue) {
+          widthValue.textContent =
+            String(width);
+        }
+
+        if (widthPreview) {
+          const size =
+            Math.max(
+              4,
+              Math.min(
+                20,
+                3 +
+                  width *
+                    0.85
+              )
+            );
+
+          widthPreview.style.width =
+            size + "px";
+
+          widthPreview.style.height =
+            size + "px";
+        }
+      };
+
+    widthInput?.addEventListener(
+      "input",
+      (event) => {
+        width =
+          Number(
+            event.target.value
+          );
+
+        updateWidthUi();
+
+        wakeToolbar();
+      }
+    );
+
+    widthToggle?.addEventListener(
+      "click",
+      (event) => {
+        event.stopPropagation();
+
+        const open =
+          widthControl.classList.toggle(
+            "open"
+          );
+
+        widthToggle.setAttribute(
+          "aria-expanded",
+          String(open)
+        );
+
+        updateWidthUi();
+
+        wakeToolbar();
+      }
+    );
+
+    root.addEventListener(
+      "pointerdown",
+      (event) => {
+        if (
+          widthControl &&
+          !widthControl.contains(
+            event.target
+          )
+        ) {
+          widthControl.classList.remove(
+            "open"
+          );
+
+          widthToggle?.setAttribute(
+            "aria-expanded",
+            "false"
+          );
+        }
+      },
+      {
+        passive: true,
+      }
+    );
+
+    updateWidthUi();
 
     /*
      * Template.
@@ -5010,10 +7720,6 @@
             }
           );
 
-          /*
-           * Save initial gesture state.
-           */
-
           if (
             pointers.size >=
             2
@@ -5103,11 +7809,9 @@
       "pointerleave",
       () => {
         /*
-         * Do nothing.
-         *
-         * Apple Pencil can leave the CSS
-         * bounds for a tiny moment while
-         * pointer capture remains active.
+         * Pointer capture keeps Pencil
+         * drawing alive when it briefly
+         * leaves the canvas bounds.
          */
       }
     );
@@ -5140,7 +7844,7 @@
     );
 
     /*
-     * Fullscreen state from browser.
+     * Fullscreen state.
      */
 
     document.addEventListener(
@@ -5189,12 +7893,6 @@
    */
 
   function handleFullscreenChange() {
-    /*
-     * If the browser exited fullscreen
-     * using its own UI, synchronize our
-     * Focus Mode state.
-     */
-
     if (
       !document.fullscreenElement &&
       fullscreen
@@ -5442,6 +8140,10 @@
       toolbarHideTimer
     );
 
+    clearTimeout(
+      localCacheTimer
+    );
+
     if (
       notebook
     ) {
@@ -5516,3 +8218,4 @@
       unmount,
     });
 })(window);
+  
