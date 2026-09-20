@@ -116,31 +116,87 @@
     );
   }
 
-  function saveSoon() {
-    cancelScheduledSave();
-    saveQueued = true;
-    updateStatus("Se salvează…");
-    saveTimer = global.setTimeout(() => {
-      saveTimer = 0;
+  let saveIdleHandle = 0;
+let saveQuietTimer = 0;
+
+function cancelScheduledSave() {
+  clearTimeout(saveTimer);
+  saveTimer = 0;
+
+  clearTimeout(saveQuietTimer);
+  saveQuietTimer = 0;
+
+  if (
+    saveIdleHandle &&
+    typeof global.cancelIdleCallback === "function"
+  ) {
+    global.cancelIdleCallback(saveIdleHandle);
+    saveIdleHandle = 0;
+  }
+}
+
+function isUserInteracting() {
+  return (
+    pointers.size > 0 ||
+    drawing !== null ||
+    penPointerId !== null
+  );
+}
+
+/*
+ * IMPORTANT:
+ * Pencil-ul nu declanșează salvarea imediat după pointerup.
+ * Așteptăm să existe o perioadă reală fără input.
+ */
+function scheduleNotebookSave() {
+  cancelScheduledSave();
+
+  saveQueued = true;
+
+  saveQuietTimer = global.setTimeout(() => {
+    saveQuietTimer = 0;
+
+    if (isUserInteracting()) {
+      return;
+    }
+
+    const run = () => {
+      saveIdleHandle = 0;
+
+      /*
+       * Dacă utilizatorul a început din nou să scrie
+       * înainte ca browserul să ne dea timp liber,
+       * NU salvăm.
+       */
       if (isUserInteracting()) {
-        saveSoon();
         return;
       }
-      const run = () => {
-        saveIdleHandle = 0;
-        if (isUserInteracting()) {
-          saveSoon();
-          return;
-        }
-        void persist();
-      };
-      if (typeof global.requestIdleCallback === "function") {
-        saveIdleHandle = global.requestIdleCallback(run, { timeout: 5000 });
-      } else {
-        global.setTimeout(run, 0);
-      }
-    }, 900);
-  }
+
+      void persist();
+    };
+
+    if (
+      typeof global.requestIdleCallback ===
+      "function"
+    ) {
+      saveIdleHandle =
+        global.requestIdleCallback(
+          run,
+          { timeout: 4000 }
+        );
+    } else {
+      saveIdleHandle =
+        global.setTimeout(
+          run,
+          0
+        );
+    }
+  }, 1800);
+}
+
+function saveSoon() {
+  scheduleNotebookSave();
+}
 
   async function persist() {
     if (!notebook || !user || !subject) return;
@@ -1612,12 +1668,25 @@
      * pointerup wait for a complete canvas redraw.
      */
     queueRedraw();
-
     /*
-     * Persistence is completely separate from Pencil input.
-     * It is debounced and never disables the canvas.
+
+     * Așteptăm puțin înainte să programăm salvarea.
+
+     * Dacă utilizatorul începe următorul stroke,
+
+     * begin() va anula salvarea.
+
      */
-    saveSoon();
+
+    global.setTimeout(() => {
+
+      if (!isUserInteracting()) {
+
+        scheduleNotebookSave();
+
+      }
+
+    }, 50);
   }
 
   function eraseAt(at) {
